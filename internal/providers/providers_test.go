@@ -25,7 +25,7 @@ func TestRegisterBuiltins(t *testing.T) {
 	reg := provider.NewRegistry()
 	RegisterBuiltins(reg)
 
-	for _, id := range []string{"xlsx", "ts_tm", "google_web", "openai_compat"} {
+	for _, id := range []string{"xlsx", "ts_tm", "google_web", "bing_web", "deepl", "mymemory", "libretranslate", "baidu_api", "niutrans", "openai_compat"} {
 		if _, ok := reg.Get(id); !ok {
 			t.Fatalf("expected built-in provider %q to be registered", id)
 		}

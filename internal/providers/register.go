@@ -14,5 +14,11 @@ func RegisterBuiltins(reg *provider.Registry) {
 	reg.Register(NewXLSXProvider())
 	reg.Register(NewTSTMProvider())
 	reg.Register(NewGoogleWebProvider())
+	reg.Register(NewBingWebProvider())
+	reg.Register(NewDeepLProvider())
+	reg.Register(NewMyMemoryProvider())
+	reg.Register(NewLibreTranslateProvider())
+	reg.Register(NewBaiduProvider())
+	reg.Register(NewNiutransProvider())
 	reg.Register(NewOpenAICompatProvider())
 }

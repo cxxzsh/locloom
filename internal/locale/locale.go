@@ -153,10 +153,103 @@ func ResolveEngineCode(spec LocaleSpec, providerID string) string {
 			return strings.TrimSpace(code)
 		}
 	}
+	if code := deriveProviderEngineCode(spec.ID, providerID); code != "" {
+		return code
+	}
 	if strings.TrimSpace(spec.EngineCode) != "" {
 		return strings.TrimSpace(spec.EngineCode)
 	}
 	return deriveEngineCode(spec.ID)
+}
+
+func deriveProviderEngineCode(localeID, providerID string) string {
+	if providerID == "" {
+		return ""
+	}
+	norm := strings.ReplaceAll(strings.TrimSpace(localeID), "-", "_")
+	lower := strings.ToLower(norm)
+	base := lower
+	if idx := strings.IndexByte(lower, '_'); idx > 0 {
+		base = lower[:idx]
+	}
+
+	switch providerID {
+	case "bing_web":
+		switch lower {
+		case "zh_cn", "zh_hans", "zh":
+			return "zh-Hans"
+		case "zh_tw", "zh_hk", "zh_hant":
+			return "zh-Hant"
+		case "pt_pt":
+			return "pt-pt"
+		case "pt_br":
+			return "pt"
+		}
+		return base
+	case "deepl":
+		switch lower {
+		case "zh_cn", "zh_hans", "zh":
+			return "ZH"
+		case "zh_tw", "zh_hk", "zh_hant":
+			return "ZH-HANT"
+		case "en_us":
+			return "EN-US"
+		case "en_gb":
+			return "EN-GB"
+		case "pt_br":
+			return "PT-BR"
+		case "pt_pt":
+			return "PT-PT"
+		}
+		return strings.ToUpper(base)
+	case "baidu_api":
+		switch lower {
+		case "zh_cn", "zh_hans", "zh":
+			return "zh"
+		case "zh_tw", "zh_hk", "zh_hant":
+			return "cht"
+		}
+		switch base {
+		case "ja":
+			return "jp"
+		case "ko":
+			return "kor"
+		case "fr":
+			return "fra"
+		case "es":
+			return "spa"
+		case "ar":
+			return "ara"
+		case "vi":
+			return "vie"
+		case "uk":
+			return "ukr"
+		}
+		return base
+	case "niutrans":
+		switch lower {
+		case "zh_cn", "zh_hans", "zh":
+			return "zh"
+		case "zh_tw", "zh_hk", "zh_hant":
+			return "cht"
+		}
+		return base
+	case "mymemory":
+		if strings.Contains(norm, "_") {
+			parts := strings.SplitN(norm, "_", 2)
+			return strings.ToLower(parts[0]) + "-" + strings.ToUpper(parts[1])
+		}
+		return base
+	case "libretranslate":
+		switch lower {
+		case "zh_cn", "zh_hans", "zh":
+			return "zh"
+		case "zh_tw", "zh_hk", "zh_hant":
+			return "zt"
+		}
+		return base
+	}
+	return ""
 }
 
 func deriveEngineCode(id string) string {

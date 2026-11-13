@@ -41,7 +41,7 @@ func TestDefaultValues(t *testing.T) {
 	if cfg.Proxy.ProxyURL != "" {
 		t.Fatalf("expected empty ProxyURL, got %q", cfg.Proxy.ProxyURL)
 	}
-	wantOrder := []string{"xlsx", "ts_tm", "google_web", "openai_compat"}
+	wantOrder := []string{"xlsx", "ts_tm", "google_web", "bing_web", "deepl", "mymemory", "libretranslate", "baidu_api", "niutrans", "openai_compat"}
 	if !slices.Equal(cfg.ProviderOrder, wantOrder) {
 		t.Fatalf("unexpected ProviderOrder: %v", cfg.ProviderOrder)
 	}

@@ -183,3 +183,34 @@ func TestDisplayNameAndEnglishNames(t *testing.T) {
 		t.Fatalf("MergeDiscovered did not preserve EnglishName: %+v", merged)
 	}
 }
+
+func TestResolveEngineCodeByProvider(t *testing.T) {
+	zhCN := LocaleSpec{ID: "zh_CN", EngineCode: "zh-CN"}
+	zhTW := LocaleSpec{ID: "zh_TW", EngineCode: "zh-TW"}
+	jaJP := LocaleSpec{ID: "ja_JP", EngineCode: "ja"}
+	frFR := LocaleSpec{ID: "fr_FR", EngineCode: "fr"}
+	ptBR := LocaleSpec{ID: "pt_BR", EngineCode: "pt"}
+
+	cases := []struct {
+		spec       LocaleSpec
+		providerID string
+		want       string
+	}{
+		{zhCN, "bing_web", "zh-Hans"},
+		{zhTW, "bing_web", "zh-Hant"},
+		{zhCN, "deepl", "ZH"},
+		{zhTW, "deepl", "ZH-HANT"},
+		{ptBR, "deepl", "PT-BR"},
+		{jaJP, "baidu_api", "jp"},
+		{frFR, "baidu_api", "fra"},
+		{zhTW, "baidu_api", "cht"},
+		{zhTW, "niutrans", "cht"},
+		{jaJP, "mymemory", "ja-JP"},
+		{zhTW, "libretranslate", "zt"},
+	}
+	for _, tc := range cases {
+		if got := ResolveEngineCode(tc.spec, tc.providerID); got != tc.want {
+			t.Errorf("ResolveEngineCode(%s, %s) = %q, want %q", tc.spec.ID, tc.providerID, got, tc.want)
+		}
+	}
+}

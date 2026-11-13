@@ -61,19 +61,25 @@ func (a PatchActionType) Mutates() bool {
 
 // Origin identifies where a workspace translation value came from.
 const (
-	OriginTS     = "ts"
-	OriginXLSX   = "xlsx"
-	OriginTM     = "ts_tm"
-	OriginGoogle = "google_web"
-	OriginLLM    = "openai_compat"
-	OriginManual = "manual"
-	OriginCache  = "cache"
+	OriginTS       = "ts"
+	OriginXLSX     = "xlsx"
+	OriginTM       = "ts_tm"
+	OriginGoogle   = "google_web"
+	OriginBing     = "bing_web"
+	OriginDeepL    = "deepl"
+	OriginMyMemory = "mymemory"
+	OriginLibre    = "libretranslate"
+	OriginBaidu    = "baidu_api"
+	OriginNiutrans = "niutrans"
+	OriginLLM      = "openai_compat"
+	OriginManual   = "manual"
+	OriginCache    = "cache"
 )
 
 // IsMachineOrigin reports whether an origin came from an automated MT/LLM engine or cache.
 func IsMachineOrigin(origin string) bool {
 	switch origin {
-	case OriginGoogle, OriginLLM, OriginCache:
+	case OriginGoogle, OriginBing, OriginDeepL, OriginMyMemory, OriginLibre, OriginBaidu, OriginNiutrans, OriginLLM, OriginCache:
 		return true
 	default:
 		return false
