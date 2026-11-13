@@ -128,11 +128,14 @@ func (a *App) viewFocusedMatrixTable(c *ui.Context) {
 			}
 			cell := r.Cells[targetLoc]
 			txt := cell.Effective
+			if r.Numerus && txt != "" {
+				txt = domain.FormatNumerusPreview(txt)
+			}
 			el := ui.Text(c, txt).FontSize(12).SingleLine()
 			if txt == "" {
 				el = mutedOrSel(ui.Text(c, tr.EmptyCell).FontSize(12).SingleLine())
 			}
-			el.Tooltip(cell.Effective)
+			el.Tooltip(txt)
 		case 5:
 			if targetLoc == "" {
 				return
@@ -257,6 +260,9 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(tagFg).SingleLine()
 				}
 				txt := cell.Effective
+				if r.Numerus && txt != "" {
+					txt = domain.FormatNumerusPreview(txt)
+				}
 				if txt == "" {
 					txt = "-"
 				}

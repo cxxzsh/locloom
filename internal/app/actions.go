@@ -166,6 +166,7 @@ func (a *App) syncEditorFromSelection() {
 		a.editBoundRowKey = domain.EntryKey{}
 		a.editBoundLocale = ""
 		a.editBuf = ""
+		a.pluralEditBufs = nil
 		return
 	}
 	a.selectedKey = row.Key
@@ -177,11 +178,32 @@ func (a *App) syncEditorFromSelection() {
 	}
 	a.editBoundRowKey = row.Key
 	a.editBoundLocale = a.activeEditLocale
-	if cell, ok := row.Cells[a.activeEditLocale]; ok {
-		a.editBuf = cell.Effective
-	} else {
-		a.editBuf = ""
+	cell := row.Cells[a.activeEditLocale]
+	a.editBuf = cell.Effective
+	a.syncPluralBufs(row, cell)
+}
+
+func (a *App) syncPluralBufs(row *planner.MatrixRow, cell planner.CellPlan) {
+	if row == nil || !row.Numerus {
+		a.pluralEditBufs = nil
+		return
 	}
+	labels := locale.PluralFormLabels(a.activeEditLocale, a.UILang(), cell.PluralCount)
+	parts := domain.SplitNumerus(cell.Effective)
+	n := max(len(labels), len(parts))
+	bufs := make([]string, n)
+	copy(bufs, parts)
+	a.pluralEditBufs = bufs
+}
+
+func (a *App) onEditPluralForm(idx int, val string) {
+	if idx < 0 || idx >= len(a.pluralEditBufs) {
+		return
+	}
+	a.pluralEditBufs[idx] = val
+	joined := domain.JoinNumerus(a.pluralEditBufs)
+	a.editBuf = joined
+	a.onEditCell(joined)
 }
 
 // onEditCell performs an O(1) cell update without rebuilding the entire MatrixPlan.
@@ -201,11 +223,9 @@ func (a *App) resetActiveCell() {
 	}
 	a.catalog.Delete(a.activeEditLocale, row.Key)
 	planner.UpdateCell(a.plan, rowIdx, a.activeEditLocale, a.catalog)
-	if cell, ok := row.Cells[a.activeEditLocale]; ok {
-		a.editBuf = cell.Effective
-	} else {
-		a.editBuf = ""
-	}
+	cell := row.Cells[a.activeEditLocale]
+	a.editBuf = cell.Effective
+	a.syncPluralBufs(row, cell)
 }
 
 func (a *App) isProviderActive(id string) bool {
@@ -924,7 +944,14 @@ func (a *App) useSourceAsTranslation() {
 	if row == nil || a.activeEditLocale == "" {
 		return
 	}
-	a.editBuf = row.Key.Source
+	if row.Numerus && len(a.pluralEditBufs) > 0 {
+		for i := range a.pluralEditBufs {
+			a.pluralEditBufs[i] = row.Key.Source
+		}
+		a.editBuf = domain.JoinNumerus(a.pluralEditBufs)
+	} else {
+		a.editBuf = row.Key.Source
+	}
 	a.onEditCell(a.editBuf)
 }
 
@@ -933,7 +960,7 @@ func (a *App) translateCurrentRowAsync() {
 		return
 	}
 	_, row := a.currentMatrixRow()
-	if row == nil || strings.TrimSpace(row.RefText) == "" {
+	if row == nil || (strings.TrimSpace(row.Key.Source) == "" && strings.TrimSpace(row.RefText) == "") {
 		return
 	}
 	cfg := a.cfg.Clone()

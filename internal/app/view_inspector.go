@@ -8,6 +8,7 @@ import (
 
 	"locloom/internal/domain"
 	"locloom/internal/format"
+	"locloom/internal/locale"
 )
 
 func (a *App) viewInspector(c *ui.Context) {
@@ -152,16 +153,34 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 				})
 
 				if row.Numerus {
-					ui.Text(c, tr.HintNumerus).FontSize(11).TextColor(t.Warning)
+					labels := locale.PluralFormLabels(a.activeEditLocale, a.UILang(), max(cell.PluralCount, len(a.pluralEditBufs)))
+					if len(a.pluralEditBufs) < len(labels) {
+						grown := make([]string, len(labels))
+						copy(grown, a.pluralEditBufs)
+						a.pluralEditBufs = grown
+					}
+					ui.Column(c).Gap(t.Space(1)).Children(func() {
+						for fi, formLabel := range labels {
+							idx := fi
+							ui.Column(c).Gap(t.Space(0.5)).Children(func() {
+								ui.Text(c, formLabel).FontSize(11).FontWeight(600).TextColor(t.Accent)
+								if ui.TextInput(c.Key(fmt.Sprintf("plural_%s_%s_%d", row.Key.Canonical(), a.activeEditLocale, idx)), &a.pluralEditBufs[idx]).
+									Placeholder(tr.PlaceholderEditor).
+									MinWidth(0).
+									Changed() {
+									a.onEditPluralForm(idx, a.pluralEditBufs[idx])
+								}
+							})
+						}
+					})
+				} else {
+					if ui.TextArea(c, &a.editBuf).
+						Placeholder(tr.PlaceholderEditor).
+						Lines(2, 5).
+						Changed() {
+						a.onEditCell(a.editBuf)
+					}
 				}
-
-				if ui.TextArea(c, &a.editBuf).
-					Placeholder(tr.PlaceholderEditor).
-					Lines(2, 5).
-					Changed() {
-					a.onEditCell(a.editBuf)
-				}
-
 				if len(cell.Warnings) > 0 {
 					ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
 						for _, w := range cell.Warnings {

@@ -20,8 +20,9 @@ type CellPlan struct {
 	Origin    string
 	Status    domain.TransStatus
 	Action    domain.PatchActionType
-	Numerus   bool
-	Warnings  []string
+	Numerus     bool
+	PluralCount int
+	Warnings    []string
 }
 
 // MatrixRow represents a single unique (Context, Source, Comment) entry across all locales.
@@ -305,8 +306,12 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 				status = domain.StatusEmpty
 			}
 			numerus := row.Numerus
+			pluralCount := 0
 			if entryPtr != nil {
 				oldText = entryPtr.Text
+				if len(entryPtr.PluralForms) > 0 {
+					pluralCount = len(entryPtr.PluralForms)
+				}
 				if oldText == "" && entryPtr.Numerus && len(entryPtr.PluralForms) > 0 {
 					oldText = domain.JoinNumerus(entryPtr.PluralForms)
 				}
@@ -316,6 +321,7 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 				}
 			}
 			cp := evalCellPlan(row.Key, oldText, status, numerus, locID, in.Catalog, in.WriteMode, in.UILang)
+			cp.PluralCount = pluralCount
 			row.Cells[locID] = cp
 			applyCellToStats(plan, locID, cp, +1)
 		}
@@ -480,6 +486,7 @@ func UpdateCell(plan *MatrixPlan, rowIdx int, localeID string, cat *domain.Catal
 
 	applyCellToStats(plan, localeID, oldCell, -1)
 	newCell := evalCellPlan(row.Key, oldCell.OldText, oldCell.Status, oldCell.Numerus, localeID, cat, plan.WriteMode, plan.UILang)
+	newCell.PluralCount = oldCell.PluralCount
 	row.Cells[localeID] = newCell
 	applyCellToStats(plan, localeID, newCell, +1)
 

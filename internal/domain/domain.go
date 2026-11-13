@@ -98,12 +98,45 @@ func IsMachineOrigin(origin string) bool {
 // PluralSeparator separates multiple <numerusform> values when viewed/edited as plain text.
 const PluralSeparator = "\n---\n"
 
-// JoinNumerus combines plural forms into a single editable representation.
+// JoinNumerus combines plural forms into a single internal representation.
+// Returns "" when all forms are empty so untranslated plural skeletons stay genuinely empty.
 func JoinNumerus(forms []string) string {
-	if len(forms) == 0 {
+	hasContent := false
+	for _, f := range forms {
+		if f != "" {
+			hasContent = true
+			break
+		}
+	}
+	if !hasContent {
 		return ""
 	}
 	return strings.Join(forms, PluralSeparator)
+}
+
+// FormatNumerusPreview formats a plural string cleanly for single-line table cells without raw --- separators.
+func FormatNumerusPreview(text string) string {
+	forms := SplitNumerus(text)
+	if len(forms) == 0 {
+		return ""
+	}
+	if len(forms) == 1 {
+		return forms[0]
+	}
+	if len(forms) == 2 {
+		return "[1] " + forms[0] + " · [n] " + forms[1]
+	}
+	var b strings.Builder
+	for i, f := range forms {
+		if i > 0 {
+			b.WriteString(" · ")
+		}
+		b.WriteByte('[')
+		b.WriteByte(byte('1' + min(i, 8)))
+		b.WriteString("] ")
+		b.WriteString(f)
+	}
+	return b.String()
 }
 
 // SplitNumerus splits a combined plural string back into individual <numerusform> values.

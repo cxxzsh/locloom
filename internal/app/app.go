@@ -50,6 +50,7 @@ type App struct {
 	selectedKey      domain.EntryKey
 	activeEditLocale string
 	editBuf          string
+	pluralEditBufs   []string
 	editBoundRowKey  domain.EntryKey
 	editBoundLocale  string
 

@@ -3,6 +3,7 @@ package locale
 import (
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -555,4 +556,84 @@ func MergeDiscovered(existing []LocaleSpec, discoveredIDs []string) (merged []Lo
 	}
 
 	return merged, added
+}
+
+// PluralFormLabels returns human-readable plural form input labels for localeID in uiLang ("en" or "zh").
+// If countHint > 0, the returned slice length matches countHint so existing file skeletons preserve form count.
+func PluralFormLabels(localeID, uiLang string, countHint int) []string {
+	norm := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(localeID), "-", "_"))
+	base := norm
+	if idx := strings.IndexByte(norm, '_'); idx > 0 {
+		base = norm[:idx]
+	}
+	isEn := uiLang == "en"
+
+	var labels []string
+	switch base {
+	case "zh", "ja", "ko", "vi", "th", "id", "ms":
+		if isEn {
+			labels = []string{"Plural Form (all quantities, e.g. %n items)"}
+		} else {
+			labels = []string{"通用数量形式（该语种不区分单复数，如：已选择 %n 项）"}
+		}
+	case "ru", "uk", "sr", "hr", "bs", "be":
+		if isEn {
+			labels = []string{"Form 1 — Singular (1, 21, 31…)", "Form 2 — Few (2–4, 22–24…)", "Form 3 — Many (0, 5–20…)"}
+		} else {
+			labels = []string{"形式 1 — 单数 (1, 21, 31…)", "形式 2 — 少量复数 (2–4, 22–24…)", "形式 3 — 多数复数 (0, 5–20…)"}
+		}
+	case "pl":
+		if isEn {
+			labels = []string{"Form 1 — Singular (1)", "Form 2 — Few (2–4, 22–24…)", "Form 3 — Many (0, 5–21…)"}
+		} else {
+			labels = []string{"形式 1 — 单数 (1)", "形式 2 — 少量复数 (2–4, 22–24…)", "形式 3 — 多数复数 (0, 5–21…)"}
+		}
+	case "cs", "sk":
+		if isEn {
+			labels = []string{"Form 1 — Singular (1)", "Form 2 — Few (2–4)", "Form 3 — Many (0, 5+)"}
+		} else {
+			labels = []string{"形式 1 — 单数 (1)", "形式 2 — 少量复数 (2–4)", "形式 3 — 多数复数 (0, 5+)"}
+		}
+	case "ar":
+		if isEn {
+			labels = []string{"Zero (0)", "Singular (1)", "Dual (2)", "Few (3–10)", "Many (11–99)", "Other (100+)"}
+		} else {
+			labels = []string{"零 (0)", "单数 (1)", "双数 (2)", "少量 (3–10)", "多数 (11–99)", "其他 (100+)"}
+		}
+	default:
+		if isEn {
+			labels = []string{"Singular Form (n = 1)", "Plural Form (n ≠ 1)"}
+		} else {
+			labels = []string{"单数形式 (数量 = 1)", "复数形式 (数量 ≠ 1)"}
+		}
+	}
+
+	if countHint > 0 && countHint != len(labels) {
+		if countHint == 1 {
+			if isEn {
+				return []string{"Plural Form (all quantities)"}
+			}
+			return []string{"通用数量形式"}
+		}
+		if countHint == 2 {
+			if isEn {
+				return []string{"Singular Form (n = 1)", "Plural Form (n ≠ 1)"}
+			}
+			return []string{"单数形式 (数量 = 1)", "复数形式 (数量 ≠ 1)"}
+		}
+		if countHint < len(labels) {
+			return labels[:countHint]
+		}
+		out := make([]string, countHint)
+		copy(out, labels)
+		for i := len(labels); i < countHint; i++ {
+			if isEn {
+				out[i] = "Plural Form #" + strconv.Itoa(i+1)
+			} else {
+				out[i] = "复数形式 #" + strconv.Itoa(i+1)
+			}
+		}
+		return out
+	}
+	return labels
 }
