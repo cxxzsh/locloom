@@ -19,6 +19,7 @@ var embeddedReadme string
 func main() {
 	headlessRender := flag.String("headless-render", "", "Render UI to a PNG file and exit (for smoke verification)")
 	openHelp := flag.Bool("open-help", false, "Open usage documentation modal on startup")
+	langFlag := flag.String("lang", "", "Optional UI language override: auto, zh, en")
 	themeFlag := flag.String("theme", "", "Optional theme override: system, light, dark")
 	srcDir := flag.String("src", "", "Optional initial localization directory or .zip archive path")
 	tsDir := flag.String("ts", "", "Alias for -src: optional initial .ts directory or .zip path")
@@ -28,6 +29,9 @@ func main() {
 	flag.Parse()
 
 	application := app.New()
+	if *langFlag != "" {
+		application.SetUILang(*langFlag)
+	}
 	application.SetHelpMarkdown(embeddedReadme)
 	if *openHelp {
 		application.SetShowHelp(true)
@@ -73,7 +77,7 @@ func main() {
 	})
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:    "LocLoom — Cross-Platform Localization Workbench",
+			Title:    application.WindowTitle(),
 			Width:    *width,
 			Height:   *height,
 			StateKey: "locloom-main",

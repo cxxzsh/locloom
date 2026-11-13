@@ -350,3 +350,39 @@ func TestOpenAICompatProviderPromptRetryAndDiscovery(t *testing.T) {
 		t.Fatalf("unexpected Ollama models: %v", ollamaModels)
 	}
 }
+
+func TestBuiltinsLocalizedProvider(t *testing.T) {
+	reg := provider.NewRegistry()
+	RegisterBuiltins(reg)
+
+	for _, p := range reg.All() {
+		nameEn := provider.ProviderName(p, "en")
+		nameZh := provider.ProviderName(p, "zh")
+		if nameEn == "" || nameZh == "" {
+			t.Fatalf("provider %s returned empty localized name: en=%q zh=%q", p.ID(), nameEn, nameZh)
+		}
+		if nameEn == nameZh {
+			t.Fatalf("provider %s en and zh names are identical: %q", p.ID(), nameEn)
+		}
+
+		descEn := provider.ProviderDescription(p, "en")
+		descZh := provider.ProviderDescription(p, "zh")
+		if descEn == "" || descZh == "" || descEn == descZh {
+			t.Fatalf("provider %s localized descriptions invalid: en=%q zh=%q", p.ID(), descEn, descZh)
+		}
+
+		schemaEn := provider.ProviderSchema(p, "en")
+		schemaZh := provider.ProviderSchema(p, "zh")
+		if len(schemaEn) == 0 || len(schemaEn) != len(schemaZh) {
+			t.Fatalf("provider %s schema length mismatch: en=%d zh=%d", p.ID(), len(schemaEn), len(schemaZh))
+		}
+		for i := range schemaEn {
+			if schemaEn[i].Key != schemaZh[i].Key {
+				t.Fatalf("provider %s field %d key mismatch: %q vs %q", p.ID(), i, schemaEn[i].Key, schemaZh[i].Key)
+			}
+			if schemaEn[i].Label == "" || schemaZh[i].Label == "" {
+				t.Fatalf("provider %s field %s has empty label", p.ID(), schemaEn[i].Key)
+			}
+		}
+	}
+}

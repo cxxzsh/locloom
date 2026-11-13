@@ -73,6 +73,7 @@ type PlanInput struct {
 	Locales       []locale.LocaleSpec
 	WriteMode     domain.WriteMode
 	AppendMissing bool
+	UILang        string
 }
 
 // MatrixPlan contains the computed translation matrix and summary statistics.
@@ -82,6 +83,7 @@ type MatrixPlan struct {
 	WriteMode   domain.WriteMode
 	RefLocaleID string
 	EnabledIDs  []string
+	UILang      string
 }
 
 // BuildPlan constructs a MatrixPlan by merging all .ts bundle entries, optional extra entries
@@ -89,6 +91,7 @@ type MatrixPlan struct {
 func BuildPlan(in PlanInput) *MatrixPlan {
 	plan := &MatrixPlan{
 		WriteMode: in.WriteMode,
+		UILang:    in.UILang,
 		Summary: PlanSummary{
 			ContextCounts: make(map[string]int),
 			LocaleStats:   make(map[string]LocaleStats),
@@ -258,7 +261,7 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 				}
 			}
 
-			cp := evalCellPlan(row.Key, oldText, status, numerus, locID, in.Catalog, in.WriteMode)
+			cp := evalCellPlan(row.Key, oldText, status, numerus, locID, in.Catalog, in.WriteMode, in.UILang)
 			row.Cells[locID] = cp
 			applyCellToStats(plan, locID, cp, +1)
 		}
@@ -288,6 +291,7 @@ func evalCellPlan(
 	localeID string,
 	cat *domain.Catalog,
 	mode domain.WriteMode,
+	uiLang string,
 ) CellPlan {
 	cp := CellPlan{
 		LocaleID:  localeID,
@@ -339,7 +343,7 @@ func evalCellPlan(
 	}
 
 	if cp.Effective != "" {
-		cp.Warnings = domain.ValidateTranslation(key.Source, cp.Effective, numerus)
+		cp.Warnings = domain.ValidateTranslationLang(key.Source, cp.Effective, numerus, uiLang)
 	}
 	return cp
 }
@@ -421,7 +425,7 @@ func UpdateCell(plan *MatrixPlan, rowIdx int, localeID string, cat *domain.Catal
 	}
 
 	applyCellToStats(plan, localeID, oldCell, -1)
-	newCell := evalCellPlan(row.Key, oldCell.OldText, oldCell.Status, oldCell.Numerus, localeID, cat, plan.WriteMode)
+	newCell := evalCellPlan(row.Key, oldCell.OldText, oldCell.Status, oldCell.Numerus, localeID, cat, plan.WriteMode, plan.UILang)
 	row.Cells[localeID] = newCell
 	applyCellToStats(plan, localeID, newCell, +1)
 

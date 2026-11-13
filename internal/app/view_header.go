@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"locloom/internal/i18n"
 	"github.com/egoist/mygo/ui"
 )
 
 func (a *App) viewHeader(c *ui.Context) {
 	t := c.Theme()
-
+	tr := a.tr()
 	ui.Row(c).
 		Padding(t.Space(2), t.Space(3)).
 		Gap(t.Space(2)).
@@ -20,7 +21,7 @@ func (a *App) viewHeader(c *ui.Context) {
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Shrink(0).Children(func() {
 				ui.Text(c, "LocLoom").FontSize(15).FontWeight(700).TextColor(t.Text).SingleLine()
 
-				sourceLabel := "未加载项目"
+				sourceLabel := tr.SourceUnloaded
 				if a.bundle != nil {
 					sourceLabel = filepath.Base(a.bundle.SourcePath)
 				}
@@ -43,22 +44,22 @@ func (a *App) viewHeader(c *ui.Context) {
 						}
 					}
 				}
-				badgeText := fmt.Sprintf("%s · %d 条 · %.0f%%", sourceLabel, rows, pct*100)
+				badgeText := fmt.Sprintf(tr.HeaderSummaryFmt, sourceLabel, rows, pct*100)
 				ui.Badge(c, badgeText)
 			})
 
 			// File & Excel Action Group
 			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Shrink(0).Children(func() {
-				if headerBtn(c, iconFolder, "打开目录", "打开 Qt .ts 目录 (Cmd/Ctrl+O)").Clicked() {
+				if headerBtn(c, iconFolder, tr.BtnOpenDir, tr.TipOpenDir).Clicked() {
 					a.openTSDirAsync()
 				}
-				if headerBtn(c, iconZip, "打开 ZIP", "打开包含 .ts 的 ZIP 压缩包").Clicked() {
+				if headerBtn(c, iconZip, tr.BtnOpenZip, tr.TipOpenZip).Clicked() {
 					a.openZipAsync()
 				}
-				if headerBtn(c, iconImport, "导入 Excel", "导入 .xlsx 翻译词表").Clicked() {
+				if headerBtn(c, iconImport, tr.BtnImportExcel, tr.TipImportExcel).Clicked() {
 					a.importExcelAsync()
 				}
-				if headerBtn(c, iconExport, "导出 Excel", "导出 .xlsx 词表 (Cmd/Ctrl+E)").Clicked() {
+				if headerBtn(c, iconExport, tr.BtnExportExcel, tr.TipExportExcel).Clicked() {
 					a.showExportModal = true
 				}
 			})
@@ -68,7 +69,7 @@ func (a *App) viewHeader(c *ui.Context) {
 			// Primary CTA Group
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Shrink(0).Children(func() {
 				if a.translating {
-					ui.Spinner(c).Label("正在并发翻译")
+					ui.Spinner(c).Label(tr.StatusTranslating)
 					frac := 0.0
 					if a.translateTotalCount > 0 {
 						frac = float64(a.translateDoneCount) / float64(a.translateTotalCount)
@@ -78,7 +79,7 @@ func (a *App) viewHeader(c *ui.Context) {
 							FontSize(11).TextColor(t.TextMuted).SingleLine()
 						ui.Progress(c, frac)
 					})
-					if ui.Button(c, "停止翻译").
+					if ui.Button(c, tr.BtnStopTranslate).
 						Background(t.Danger).
 						TextColor(t.AccentText).
 						Padding(t.Space(1.5), t.Space(3)).
@@ -90,7 +91,7 @@ func (a *App) viewHeader(c *ui.Context) {
 					btn.Children(func() {
 						ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 							ui.Icon(c, iconPlay).Size(14, 14)
-							ui.Text(c, "开始并发翻译").FontSize(13).FontWeight(600).SingleLine()
+							ui.Text(c, tr.BtnStartTranslate).FontSize(13).FontWeight(600).SingleLine()
 						})
 					})
 					if btn.Clicked() {
@@ -101,11 +102,11 @@ func (a *App) viewHeader(c *ui.Context) {
 				writeBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(3)).
 					Disabled(a.translating || a.bundle == nil).
-					Tooltip("无损回填写回 .ts 文件 (Cmd/Ctrl+S)")
+					Tooltip(tr.TipWriteTS)
 				writeBtn.Children(func() {
 					ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, iconSave).Size(14, 14)
-						ui.Text(c, "写回 .ts").FontSize(13).SingleLine()
+						ui.Text(c, tr.BtnWriteTS).FontSize(13).SingleLine()
 					})
 				})
 				if writeBtn.Clicked() {
@@ -115,21 +116,32 @@ func (a *App) viewHeader(c *ui.Context) {
 
 			// Utility Buttons
 			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Shrink(0).Children(func() {
-				themeLabels := []string{"系统", "浅色", "深色"}
+				themeLabels := []string{tr.ThemeSystem, tr.ThemeLight, tr.ThemeDark}
 				lbl := themeLabels[a.cfg.ThemeMode%3]
-				if headerBtn(c, iconTheme, lbl, "切换外观主题 (跟随系统 / 浅色 / 深色)").Clicked() {
+				if headerBtn(c, iconTheme, lbl, tr.TipTheme).Clicked() {
 					a.SetThemeMode((a.cfg.ThemeMode + 1) % 3)
 				}
 
-				logLabel := fmt.Sprintf("日志(%d)", len(a.logs))
-				if headerBtn(c, iconLogs, logLabel, "查看运行日志与诊断").Clicked() {
+				if ui.Button(c, tr.BtnLangToggle).
+					Padding(t.Space(1.5), t.Space(2)).
+					Tooltip(tr.TipLangToggle).
+					Clicked() {
+					if a.UILang() == i18n.LangEN {
+						a.SetUILang(i18n.LangZH)
+					} else {
+						a.SetUILang(i18n.LangEN)
+					}
+				}
+
+				logLabel := fmt.Sprintf(tr.HeaderLogsFmt, len(a.logs))
+				if headerBtn(c, iconLogs, logLabel, tr.TipLogs).Clicked() {
 					a.bottomTab = 1
 				}
 
 				helpBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(2)).
-					Label("帮助").
-					Tooltip("打开使用指南")
+					Label(tr.BtnHelp).
+					Tooltip(tr.TipHelp)
 				helpBtn.Children(func() {
 					ui.Icon(c, iconHelp).Size(15, 15)
 				})

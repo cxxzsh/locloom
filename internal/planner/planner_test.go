@@ -125,3 +125,56 @@ func TestBuildPlanPhantomProtectionAndUpdateCell(t *testing.T) {
 		t.Fatalf("BuildExportRows(ExportChanged) = %d rows, want 2", len(exportOpts.Rows))
 	}
 }
+
+func TestBuildPlanAndUpdateCellUILang(t *testing.T) {
+	jaTS := makeTestTSFile(t, "ja_JP", `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="ja_JP">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Save %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>`)
+
+	bundle := &tsxml.Bundle{Files: []*tsxml.TSFile{jaTS}}
+	locales := []locale.LocaleSpec{{ID: "ja_JP", Enabled: true}}
+
+	cat := domain.NewCatalog()
+	cat.Set("ja_JP", domain.EntryKey{Context: "MainWindow", Source: "Save %1"}, "保存", domain.OriginXLSX)
+
+	planEn := BuildPlan(PlanInput{
+		Bundle:    bundle,
+		Catalog:   cat,
+		Locales:   locales,
+		WriteMode: domain.ModeFillUnfinished,
+		UILang:    "en",
+	})
+	wEn := planEn.Rows[0].Cells["ja_JP"].Warnings
+	if len(wEn) != 1 || wEn[0] != "Missing placeholder(s): %1" {
+		t.Fatalf("en warnings = %v, want [Missing placeholder(s): %%1]", wEn)
+	}
+
+	// UpdateCell preserves plan.UILang ("en")
+	cat.Set("ja_JP", domain.EntryKey{Context: "MainWindow", Source: "Save %1"}, "保存 %2", domain.OriginManual)
+	if !UpdateCell(planEn, 0, "ja_JP", cat) {
+		t.Fatal("UpdateCell returned false")
+	}
+	wEn2 := planEn.Rows[0].Cells["ja_JP"].Warnings
+	if len(wEn2) != 2 || wEn2[0] != "Missing placeholder(s): %1" || wEn2[1] != "Unexpected placeholder(s): %2" {
+		t.Fatalf("en warnings after UpdateCell = %v", wEn2)
+	}
+
+	planZh := BuildPlan(PlanInput{
+		Bundle:    bundle,
+		Catalog:   cat,
+		Locales:   locales,
+		WriteMode: domain.ModeFillUnfinished,
+		UILang:    "zh",
+	})
+	wZh := planZh.Rows[0].Cells["ja_JP"].Warnings
+	if len(wZh) != 2 || wZh[0] != "缺失占位符: %1" {
+		t.Fatalf("zh warnings = %v", wZh)
+	}
+}

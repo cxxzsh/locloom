@@ -43,6 +43,20 @@ func (p *xlsxProvider) Name() string { return "Excel 词条表 (.xlsx)" }
 func (p *xlsxProvider) Description() string {
 	return "从本地 Excel 多语言词条表中精确匹配并回填译文（多语言并发时仅解析一次）"
 }
+
+func (p *xlsxProvider) LocalizedName(lang string) string {
+	if lang == "en" {
+		return "Excel Glossary (.xlsx)"
+	}
+	return p.Name()
+}
+
+func (p *xlsxProvider) LocalizedDescription(lang string) string {
+	if lang == "en" {
+		return "Exact-match and backfill translations from a local multilingual Excel workbook (parsed once across concurrent locales)"
+	}
+	return p.Description()
+}
 func (p *xlsxProvider) Kind() provider.Kind { return provider.KindLocal }
 
 func (p *xlsxProvider) ConfigSchema() []provider.ConfigField {
@@ -70,6 +84,34 @@ func (p *xlsxProvider) ConfigSchema() []provider.ConfigField {
 	}
 }
 
+func (p *xlsxProvider) LocalizedConfigSchema(lang string) []provider.ConfigField {
+	if lang != "en" {
+		return p.ConfigSchema()
+	}
+	return []provider.ConfigField{
+		{
+			Key:         "file_path",
+			Label:       "Excel File",
+			Type:        provider.FieldFile,
+			Placeholder: "Select .xlsx / .xls multilingual glossary",
+			Extensions:  []string{"xlsx", "xls"},
+		},
+		{
+			Key:         "sheet",
+			Label:       "Sheet Name",
+			Type:        provider.FieldText,
+			Placeholder: "Leave empty to use the first sheet",
+		},
+		{
+			Key:     "skip_ref",
+			Label:   "Skip Reference Column",
+			Type:    provider.FieldBool,
+			Default: "true",
+			Help:    "When enabled, reference language columns (e.g. Chinese) are not written as target translations",
+		},
+	}
+}
+
 func (p *xlsxProvider) Configure(values map[string]string, _ *netpool.Pool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -85,7 +127,7 @@ func (p *xlsxProvider) loadWorkbookCached() (*sheet.WorkbookData, error) {
 	p.mu.RUnlock()
 
 	if fp == "" {
-		return nil, fmt.Errorf("未配置 Excel 文件路径")
+		return nil, fmt.Errorf("excel file path is not configured")
 	}
 	info, err := os.Stat(fp)
 	if err != nil {

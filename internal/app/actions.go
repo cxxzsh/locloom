@@ -48,6 +48,7 @@ func (a *App) rebuildPlan() {
 		Locales:       a.cfg.Locales,
 		WriteMode:     a.cfg.WriteMode,
 		AppendMissing: a.cfg.AppendMissing,
+		UILang:        a.UILang(),
 	}
 	a.plan = planner.BuildPlan(in)
 
@@ -248,11 +249,12 @@ func (a *App) openTSDirAsync() {
 	defaultPath := a.cfg.LastTSPath
 	filePattern := a.cfg.FilePattern
 	locales := slices.Clone(a.cfg.Locales)
+	tr := a.tr()
 
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      win,
-			Title:       "选择包含 Qt .ts 文件的目录",
+			Title:       tr.DialogOpenTSDir,
 			DefaultPath: defaultPath,
 			Directory:   true,
 		})
@@ -262,8 +264,9 @@ func (a *App) openTSDirAsync() {
 		bundle, err := tsxml.LoadBundle(paths[0], filePattern, locales)
 		a.dispatchUI(func() {
 			if err != nil {
-				a.setStatus("加载 .ts 目录失败: "+err.Error(), true)
-				a.appendLog("error", "", "", "加载 .ts 目录失败: "+err.Error())
+				msg := fmt.Sprintf(a.tr().ErrLoadTSDirFmt, err)
+				a.setStatus(msg, true)
+				a.appendLog("error", "", "", msg)
 				return
 			}
 			a.applyLoadedBundle(bundle)
@@ -276,13 +279,14 @@ func (a *App) openZipAsync() {
 	defaultPath := a.cfg.LastTSPath
 	filePattern := a.cfg.FilePattern
 	locales := slices.Clone(a.cfg.Locales)
+	tr := a.tr()
 
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      win,
-			Title:       "选择包含 .ts 的 ZIP 压缩包",
+			Title:       tr.DialogOpenZip,
 			DefaultPath: defaultPath,
-			Filters:     []mygo.FileFilter{{Name: "ZIP 压缩包", Extensions: []string{"zip"}}},
+			Filters:     []mygo.FileFilter{{Name: tr.FilterZipName, Extensions: []string{"zip"}}},
 		})
 		if err != nil || len(paths) == 0 {
 			return
@@ -290,8 +294,9 @@ func (a *App) openZipAsync() {
 		bundle, err := tsxml.LoadBundle(paths[0], filePattern, locales)
 		a.dispatchUI(func() {
 			if err != nil {
-				a.setStatus("加载 ZIP 失败: "+err.Error(), true)
-				a.appendLog("error", "", "", "加载 ZIP 失败: "+err.Error())
+				msg := fmt.Sprintf(a.tr().ErrLoadZipFmt, err)
+				a.setStatus(msg, true)
+				a.appendLog("error", "", "", msg)
 				return
 			}
 			a.applyLoadedBundle(bundle)
@@ -303,13 +308,14 @@ func (a *App) importExcelAsync() {
 	win := a.win
 	defaultPath := a.cfg.LastXLSXPath
 	locales := slices.Clone(a.cfg.Locales)
+	tr := a.tr()
 
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      win,
-			Title:       "导入 Excel 翻译词表 (.xlsx)",
+			Title:       tr.DialogImportExcel,
 			DefaultPath: defaultPath,
-			Filters:     []mygo.FileFilter{{Name: "Excel 工作簿", Extensions: []string{"xlsx"}}},
+			Filters:     []mygo.FileFilter{{Name: tr.FilterExcelName, Extensions: []string{"xlsx"}}},
 		})
 		if err != nil || len(paths) == 0 {
 			return
@@ -317,8 +323,9 @@ func (a *App) importExcelAsync() {
 		wb, err := sheet.LoadExcel(paths[0], "", locales, true)
 		a.dispatchUI(func() {
 			if err != nil {
-				a.setStatus("导入 Excel 失败: "+err.Error(), true)
-				a.appendLog("error", "", "", "导入 Excel 失败: "+err.Error())
+				msg := fmt.Sprintf(a.tr().ErrImportExcelFmt, err)
+				a.setStatus(msg, true)
+				a.appendLog("error", "", "", msg)
 				return
 			}
 			a.applyLoadedWorkbook(wb, true)
@@ -328,11 +335,12 @@ func (a *App) importExcelAsync() {
 
 func (a *App) exportExcelAsync(scope sheet.ExportScope) {
 	if a.plan == nil {
-		a.setStatus("没有可导出的词条数据", true)
+		a.setStatus(a.tr().ErrNoExportData, true)
 		return
 	}
 	opts := planner.BuildExportRows(a.plan, scope, a.cfg.Locales)
 	win := a.win
+	tr := a.tr()
 	defaultName := "translations_export.xlsx"
 	if a.bundle != nil {
 		base := filepath.Base(a.bundle.SourcePath)
@@ -345,9 +353,9 @@ func (a *App) exportExcelAsync(scope sheet.ExportScope) {
 	go func() {
 		p, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 			Parent:      win,
-			Title:       "导出 Excel 词条表",
+			Title:       tr.DialogExportExcel,
 			DefaultPath: defaultName,
-			Filters:     []mygo.FileFilter{{Name: "Excel 工作簿", Extensions: []string{"xlsx"}}},
+			Filters:     []mygo.FileFilter{{Name: tr.FilterExcelName, Extensions: []string{"xlsx"}}},
 		})
 		if err != nil || p == "" {
 			return
@@ -355,11 +363,12 @@ func (a *App) exportExcelAsync(scope sheet.ExportScope) {
 		err = sheet.ExportExcel(p, opts)
 		a.dispatchUI(func() {
 			if err != nil {
-				a.setStatus("导出 Excel 失败: "+err.Error(), true)
-				a.appendLog("error", "", "", "导出 Excel 失败: "+err.Error())
+				msg := fmt.Sprintf(a.tr().ErrExportExcelFmt, err)
+				a.setStatus(msg, true)
+				a.appendLog("error", "", "", msg)
 				return
 			}
-			msg := fmt.Sprintf("已导出 %d 行到 %s", len(opts.Rows), filepath.Base(p))
+			msg := fmt.Sprintf(a.tr().StatusExportedExcelFmt, len(opts.Rows), filepath.Base(p))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)
 		})
@@ -394,7 +403,7 @@ func (a *App) testProviderAsync(provID string) {
 	values := cfg.ProviderConfigs[provID]
 
 	a.providerTesting[provID] = true
-	a.providerTestMsg[provID] = "正在测试连通性..."
+	a.providerTestMsg[provID] = a.tr().StatusTestingConn
 	a.providerTestErr[provID] = false
 
 	go func() {
@@ -408,13 +417,13 @@ func (a *App) testProviderAsync(provID string) {
 		a.dispatchUI(func() {
 			a.providerTesting[provID] = false
 			if err != nil {
-				a.providerTestMsg[provID] = "失败: " + err.Error()
+				a.providerTestMsg[provID] = fmt.Sprintf(a.tr().StatusConnFailedFmt, err)
 				a.providerTestErr[provID] = true
-				a.appendLog("error", provID, "", "连通测试失败: "+err.Error())
+				a.appendLog("error", provID, "", fmt.Sprintf(a.tr().LogConnFailedFmt, err))
 			} else {
-				a.providerTestMsg[provID] = "连通正常"
+				a.providerTestMsg[provID] = a.tr().StatusConnOK
 				a.providerTestErr[provID] = false
-				a.appendLog("info", provID, "", "连通测试通过")
+				a.appendLog("info", provID, "", a.tr().LogConnOK)
 			}
 		})
 	}()
@@ -447,15 +456,15 @@ func (a *App) discoverModelsAsync(provID string) {
 		a.dispatchUI(func() {
 			a.discoveringModels[provID] = false
 			if err != nil {
-				a.providerTestMsg[provID] = "发现模型失败: " + err.Error()
+				a.providerTestMsg[provID] = fmt.Sprintf(a.tr().StatusDiscoverFailedFmt, err)
 				a.providerTestErr[provID] = true
-				a.appendLog("error", provID, "", "发现模型失败: "+err.Error())
+				a.appendLog("error", provID, "", fmt.Sprintf(a.tr().LogDiscoverFailedFmt, err))
 				return
 			}
 			a.discoveredModels[provID] = models
-			a.providerTestMsg[provID] = fmt.Sprintf("已发现 %d 个模型", len(models))
+			a.providerTestMsg[provID] = fmt.Sprintf(a.tr().StatusDiscoveredModelsFmt, len(models))
 			a.providerTestErr[provID] = false
-			a.appendLog("info", provID, "", fmt.Sprintf("发现 %d 个可用模型", len(models)))
+			a.appendLog("info", provID, "", fmt.Sprintf(a.tr().LogDiscoveredModelsFmt, len(models)))
 		})
 	}()
 }
@@ -473,20 +482,20 @@ func (a *App) startTranslation() {
 	for _, p := range ordered {
 		if slices.Contains(cfg.ActiveProviders, p.ID()) {
 			if err := p.Configure(cfg.ProviderConfigs[p.ID()], a.netPool); err != nil {
-				a.appendLog("warn", p.ID(), "", "配置跳过: "+err.Error())
+				a.appendLog("warn", p.ID(), "", fmt.Sprintf(a.tr().LogConfigSkippedFmt, err))
 				continue
 			}
 			activeIDs = append(activeIDs, p.ID())
 		}
 	}
 	if len(activeIDs) == 0 {
-		a.setStatus("请先在「管线」选项卡中启用至少一个翻译提供者", true)
+		a.setStatus(a.tr().ErrNoActiveProvider, true)
 		return
 	}
 
 	targetLocales := a.enabledNonRefLocales()
 	if len(targetLocales) == 0 {
-		a.setStatus("请先在「语种」选项卡中启用至少一个目标语种", true)
+		a.setStatus(a.tr().ErrNoTargetLocale, true)
 		return
 	}
 
@@ -523,7 +532,7 @@ func (a *App) startTranslation() {
 	}
 
 	if totalItems == 0 {
-		a.setStatus("当前没有需要翻译的空缺词条", false)
+		a.setStatus(a.tr().StatusNoGapsToTranslate, false)
 		return
 	}
 
@@ -533,7 +542,7 @@ func (a *App) startTranslation() {
 	a.translateDoneCount = 0
 	a.translateTotalCount = totalItems
 	a.translateStatuses = make(map[string]provider.LocaleStatus)
-	a.appendLog("info", "", "", fmt.Sprintf("开始并发翻译：%d 个语种，共 %d 条待译词条（并发度 %d）", len(tasks), totalItems, cfg.Concurrency))
+	a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), totalItems, cfg.Concurrency))
 
 	go func() {
 		opts := provider.DispatchOptions{
@@ -571,7 +580,7 @@ func (a *App) startTranslation() {
 			a.translating = false
 			a.cancelTranslate = nil
 			a.translateStatuses = res.Statuses
-			msg := fmt.Sprintf("并发翻译完成：新增 %d 条译文，耗时 %s", len(res.Cells), res.Duration.Round(time.Millisecond))
+			msg := fmt.Sprintf(a.tr().StatusTranslateDoneFmt, len(res.Cells), res.Duration.Round(time.Millisecond))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)
 			a.rebuildPlan()
@@ -582,13 +591,13 @@ func (a *App) startTranslation() {
 func (a *App) stopTranslation() {
 	if a.cancelTranslate != nil {
 		a.cancelTranslate()
-		a.appendLog("warn", "", "", "正在取消并发翻译任务...")
+		a.appendLog("warn", "", "", a.tr().LogStoppingTranslate)
 	}
 }
 
 func (a *App) writeTSAsync() {
 	if a.bundle == nil || a.plan == nil {
-		a.setStatus("请先加载 Qt .ts 目录或 .zip 压缩包", true)
+		a.setStatus(a.tr().ErrLoadTSFirst, true)
 		return
 	}
 	bundle := a.bundle
@@ -613,8 +622,8 @@ func (a *App) writeTSAsync() {
 			res, err := tsxml.ApplyPatches(tf, patches)
 			if err != nil {
 				a.dispatchUI(func() {
-					a.setStatus("生成补丁失败 ("+tf.RelPath+"): "+err.Error(), true)
-					a.appendLog("error", "", tf.LocaleID, "生成补丁失败: "+err.Error())
+					a.setStatus(fmt.Sprintf(a.tr().ErrBuildPatchFmt, tf.RelPath, err), true)
+					a.appendLog("error", "", tf.LocaleID, fmt.Sprintf(a.tr().LogBuildPatchErrFmt, err))
 				})
 				return
 			}
@@ -627,7 +636,7 @@ func (a *App) writeTSAsync() {
 
 		if len(patched) == 0 {
 			a.dispatchUI(func() {
-				a.setStatus("没有需要写回 .ts 文件的变更", false)
+				a.setStatus(a.tr().StatusNoTSChanges, false)
 			})
 			return
 		}
@@ -635,8 +644,9 @@ func (a *App) writeTSAsync() {
 		report, err := tsxml.SaveBundle(bundle, patched, opts)
 		if err != nil {
 			a.dispatchUI(func() {
-				a.setStatus("写回 .ts 失败: "+err.Error(), true)
-				a.appendLog("error", "", "", "写回 .ts 失败: "+err.Error())
+				msg := fmt.Sprintf(a.tr().ErrWriteTSFmt, err)
+				a.setStatus(msg, true)
+				a.appendLog("error", "", "", msg)
 			})
 			return
 		}
@@ -645,7 +655,7 @@ func (a *App) writeTSAsync() {
 		reloaded, reloadErr := tsxml.LoadBundle(report.OutputPath, a.cfg.FilePattern, a.cfg.Locales)
 
 		a.dispatchUI(func() {
-			msg := fmt.Sprintf("写回完成：%d 个文件（更新 %d 条，追加 %d 条）-> %s",
+			msg := fmt.Sprintf(a.tr().StatusWriteTSDoneFmt,
 				report.FilesWritten, totalApplied, totalAppended, filepath.Base(report.OutputPath))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)
@@ -662,18 +672,18 @@ func (a *App) clearMachineTranslations() {
 		return domain.IsMachineOrigin(entry.Origin)
 	})
 	a.rebuildPlan()
-	a.setStatus(fmt.Sprintf("已清空 %d 条机翻暂存译文", n), false)
+	a.setStatus(fmt.Sprintf(a.tr().StatusClearedMachineFmt, n), false)
 }
 
 func (a *App) clearAllTranslations() {
 	a.catalog.ClearAll()
 	a.rebuildPlan()
-	a.setStatus("已清空全部工作区暂存译文", false)
+	a.setStatus(a.tr().StatusClearedAll, false)
 }
 
 func (a *App) scaffoldMissingTSFiles() {
 	if a.bundle == nil {
-		a.setStatus("请先加载 .ts 目录或 .zip 再补全骨架文件", true)
+		a.setStatus(a.tr().ErrScaffoldLoadFirst, true)
 		return
 	}
 	existing := make(map[string]bool)
@@ -701,7 +711,7 @@ func (a *App) scaffoldMissingTSFiles() {
 			newTF = tsxml.NewEmptyTSFile(loc, relPath, "\n")
 		}
 		if err != nil {
-			a.appendLog("error", "", loc.ID, "生成骨架失败: "+err.Error())
+			a.appendLog("error", "", loc.ID, fmt.Sprintf(a.tr().LogScaffoldErrFmt, err))
 			continue
 		}
 		if !a.bundle.IsZip {
@@ -712,11 +722,11 @@ func (a *App) scaffoldMissingTSFiles() {
 	}
 
 	if created == 0 {
-		a.setStatus("所有已启用语种均已有对应的 .ts 文件", false)
+		a.setStatus(a.tr().StatusAllLocalesHaveTS, false)
 		return
 	}
 	a.rebuildPlan()
-	msg := fmt.Sprintf("已为 %d 个缺失语种生成空白 .ts 骨架（写回 .ts 时将一并保存）", created)
+	msg := fmt.Sprintf(a.tr().StatusScaffoldDoneFmt, created)
 	a.setStatus(msg, false)
 	a.appendLog("info", "", "", msg)
 }
@@ -765,12 +775,12 @@ func (a *App) addCustomLocale() {
 	name := strings.TrimSpace(a.newLocName)
 	code := strings.TrimSpace(a.newLocCode)
 	if id == "" {
-		a.setStatus("请输入语种 ID（例如 nl_NL）", true)
+		a.setStatus(a.tr().ErrEnterLocaleID, true)
 		return
 	}
 	for _, loc := range a.cfg.Locales {
 		if loc.ID == id {
-			a.setStatus("语种 ID 已存在: "+id, true)
+			a.setStatus(fmt.Sprintf(a.tr().ErrLocaleExistsFmt, id), true)
 			return
 		}
 	}
@@ -837,5 +847,5 @@ func (a *App) copyLogsToClipboard() {
 		sb.WriteByte('\n')
 	}
 	_ = mygo.Clipboard.Write(transfer.TextData(sb.String()))
-	a.setStatus("已复制运行日志到剪贴板", false)
+	a.setStatus(a.tr().StatusCopiedLogs, false)
 }

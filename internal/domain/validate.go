@@ -30,12 +30,19 @@ func ExtractQtArgs(s string) []string {
 	return out
 }
 
-// ValidateTranslation checks Qt placeholder parity, leaked guard tokens, and structural whitespace mismatches.
-// Returns nil when valid.
+// ValidateTranslation checks Qt placeholder parity, leaked guard tokens, and structural whitespace mismatches
+// using Chinese warning messages. Returns nil when valid.
 func ValidateTranslation(source, target string, numerus bool) []string {
+	return ValidateTranslationLang(source, target, numerus, "zh")
+}
+
+// ValidateTranslationLang checks Qt placeholder parity, leaked guard tokens, and structural whitespace mismatches.
+// Warning messages are returned in English when lang == "en", and in Chinese otherwise. Returns nil when valid.
+func ValidateTranslationLang(source, target string, numerus bool, lang string) []string {
 	if source == "" || target == "" {
 		return nil
 	}
+	isEn := lang == "en"
 	var warnings []string
 
 	srcArgs := ExtractQtArgs(source)
@@ -62,10 +69,18 @@ func ValidateTranslation(source, target string, numerus bool) []string {
 		}
 	}
 	if len(missing) > 0 {
-		warnings = append(warnings, fmt.Sprintf("缺失占位符: %s", strings.Join(missing, ", ")))
+		if isEn {
+			warnings = append(warnings, fmt.Sprintf("Missing placeholder(s): %s", strings.Join(missing, ", ")))
+		} else {
+			warnings = append(warnings, fmt.Sprintf("缺失占位符: %s", strings.Join(missing, ", ")))
+		}
 	}
 	if len(extra) > 0 {
-		warnings = append(warnings, fmt.Sprintf("多余占位符: %s", strings.Join(extra, ", ")))
+		if isEn {
+			warnings = append(warnings, fmt.Sprintf("Unexpected placeholder(s): %s", strings.Join(extra, ", ")))
+		} else {
+			warnings = append(warnings, fmt.Sprintf("多余占位符: %s", strings.Join(extra, ", ")))
+		}
 	}
 
 	// Non-numerus %n parity check.
@@ -73,18 +88,34 @@ func ValidateTranslation(source, target string, numerus bool) []string {
 		srcHasN := strings.Contains(source, "%n")
 		tgtHasN := strings.Contains(target, "%n")
 		if srcHasN && !tgtHasN {
-			warnings = append(warnings, "缺失复数占位符 %n")
+			if isEn {
+				warnings = append(warnings, "Missing plural placeholder %n")
+			} else {
+				warnings = append(warnings, "缺失复数占位符 %n")
+			}
 		} else if !srcHasN && tgtHasN {
-			warnings = append(warnings, "多余复数占位符 %n")
+			if isEn {
+				warnings = append(warnings, "Unexpected plural placeholder %n")
+			} else {
+				warnings = append(warnings, "多余复数占位符 %n")
+			}
 		}
 	}
 
 	if reLeakMaskToken.MatchString(target) {
-		warnings = append(warnings, "疑似残留未还原的掩码标记 [[N]]")
+		if isEn {
+			warnings = append(warnings, "Unrestored mask token [[N]] detected")
+		} else {
+			warnings = append(warnings, "疑似残留未还原的掩码标记 [[N]]")
+		}
 	}
 
 	if strings.HasSuffix(source, "\t") != strings.HasSuffix(target, "\t") {
-		warnings = append(warnings, "末尾制表符 \\t 与原文不一致")
+		if isEn {
+			warnings = append(warnings, "Trailing tab \\t differs from source")
+		} else {
+			warnings = append(warnings, "末尾制表符 \\t 与原文不一致")
+		}
 	}
 
 	return warnings

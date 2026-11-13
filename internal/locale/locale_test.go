@@ -143,3 +143,43 @@ func TestMergeDiscovered(t *testing.T) {
 		t.Fatalf("expected ca_ES derived EngineCode 'ca', got %q", merged[2].EngineCode)
 	}
 }
+
+func TestDisplayNameAndEnglishNames(t *testing.T) {
+	for _, l := range DefaultLocales() {
+		if l.EnglishName == "" {
+			t.Fatalf("locale %s missing EnglishName", l.ID)
+		}
+		if got := l.DisplayName("en"); got != l.EnglishName {
+			t.Fatalf("locale %s DisplayName(en) = %q, want %q", l.ID, got, l.EnglishName)
+		}
+		if got := l.DisplayName("zh"); got != l.Name {
+			t.Fatalf("locale %s DisplayName(zh) = %q, want %q", l.ID, got, l.Name)
+		}
+	}
+
+	fallbackLoc := LocaleSpec{ID: "xx_XX", Name: "Custom"}
+	if got := fallbackLoc.DisplayName("en"); got != "Custom" {
+		t.Fatalf("fallback DisplayName(en) = %q, want Custom", got)
+	}
+	idFallback := LocaleSpec{ID: "yy_YY"}
+	if got := idFallback.DisplayName("zh"); got != "yy_YY" {
+		t.Fatalf("id fallback DisplayName(zh) = %q, want yy_YY", got)
+	}
+
+	for _, p := range DefaultProfiles() {
+		if p.EnglishName == "" {
+			t.Fatalf("profile %s missing EnglishName", p.ID)
+		}
+		if got := p.DisplayName("en"); got != p.EnglishName {
+			t.Fatalf("profile %s DisplayName(en) = %q, want %q", p.ID, got, p.EnglishName)
+		}
+		if got := p.DisplayName("zh"); got != p.Name {
+			t.Fatalf("profile %s DisplayName(zh) = %q, want %q", p.ID, got, p.Name)
+		}
+	}
+
+	merged, added := MergeDiscovered(nil, []string{"zh_CN"})
+	if len(added) != 1 || len(merged) != 1 || merged[0].EnglishName != "Simplified Chinese" {
+		t.Fatalf("MergeDiscovered did not preserve EnglishName: %+v", merged)
+	}
+}

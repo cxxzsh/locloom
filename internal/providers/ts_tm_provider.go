@@ -41,6 +41,20 @@ func (p *tsTMProvider) Name() string { return "本地 .ts 翻译记忆库 (TM)" 
 func (p *tsTMProvider) Description() string {
 	return "从历史 .ts 目录、.zip 归档或单个 .ts 文件提取已完成译文（多语言并发时仅解析一次）"
 }
+
+func (p *tsTMProvider) LocalizedName(lang string) string {
+	if lang == "en" {
+		return "Local .ts Translation Memory (TM)"
+	}
+	return p.Name()
+}
+
+func (p *tsTMProvider) LocalizedDescription(lang string) string {
+	if lang == "en" {
+		return "Extract finished translations from historical .ts folders, .zip archives, or single .ts files (parsed once across concurrent locales)"
+	}
+	return p.Description()
+}
 func (p *tsTMProvider) Kind() provider.Kind { return provider.KindLocal }
 
 func (p *tsTMProvider) ConfigSchema() []provider.ConfigField {
@@ -50,6 +64,21 @@ func (p *tsTMProvider) ConfigSchema() []provider.ConfigField {
 			Label:       "参考 .ts / .zip 路径",
 			Type:        provider.FieldFile,
 			Placeholder: "选择历史 .ts 翻译目录、.zip 归档或单个 .ts 文件",
+			Extensions:  []string{"zip", "ts"},
+		},
+	}
+}
+
+func (p *tsTMProvider) LocalizedConfigSchema(lang string) []provider.ConfigField {
+	if lang != "en" {
+		return p.ConfigSchema()
+	}
+	return []provider.ConfigField{
+		{
+			Key:         "tm_path",
+			Label:       "Reference .ts / .zip Path",
+			Type:        provider.FieldFile,
+			Placeholder: "Select historical .ts folder, .zip archive, or single .ts file",
 			Extensions:  []string{"zip", "ts"},
 		},
 	}
@@ -68,7 +97,7 @@ func (p *tsTMProvider) loadBundleCached() (*tsxml.Bundle, error) {
 	p.mu.RUnlock()
 
 	if tmPath == "" {
-		return nil, fmt.Errorf("未配置参考 .ts 记忆库路径")
+		return nil, fmt.Errorf("translation memory (.ts/.zip) path is not configured")
 	}
 
 	info, err := os.Stat(tmPath)

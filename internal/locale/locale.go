@@ -10,11 +10,23 @@ import (
 type LocaleSpec struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
+	EnglishName string            `json:"english_name,omitempty"`
 	NativeName  string            `json:"native_name,omitempty"`
 	Enabled     bool              `json:"enabled"`
 	IsRef       bool              `json:"is_ref"`
 	EngineCode  string            `json:"engine_code"`
 	EngineCodes map[string]string `json:"engine_codes,omitempty"`
+}
+
+// DisplayName returns the locale name appropriate for the given UI language ("en" or "zh").
+func (l LocaleSpec) DisplayName(lang string) string {
+	if lang == "en" && l.EnglishName != "" {
+		return l.EnglishName
+	}
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.ID
 }
 
 // FileName returns the resolved .ts filename for this locale.
@@ -44,9 +56,21 @@ func (l LocaleSpec) Clone() LocaleSpec {
 
 // Profile stores a named selection of locale IDs for quick switching.
 type Profile struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	LocaleIDs []string `json:"locale_ids"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	EnglishName string   `json:"english_name,omitempty"`
+	LocaleIDs   []string `json:"locale_ids"`
+}
+
+// DisplayName returns the profile name appropriate for the given UI language ("en" or "zh").
+func (p Profile) DisplayName(lang string) string {
+	if lang == "en" && p.EnglishName != "" {
+		return p.EnglishName
+	}
+	if p.Name != "" {
+		return p.Name
+	}
+	return p.ID
 }
 
 // DefaultLocales returns the 22 standard international locales.
@@ -54,30 +78,30 @@ type Profile struct {
 func DefaultLocales() []LocaleSpec {
 	return []LocaleSpec{
 		// Tier-1 (enabled by default)
-		{ID: "zh_CN", Name: "简体中文", NativeName: "简体中文", Enabled: true, IsRef: true, EngineCode: "zh-CN"},
-		{ID: "zh_TW", Name: "繁體中文", NativeName: "繁體中文", Enabled: true, EngineCode: "zh-TW"},
-		{ID: "ja_JP", Name: "日本語", NativeName: "日本語", Enabled: true, EngineCode: "ja"},
-		{ID: "ko_KR", Name: "한국어", NativeName: "한국어", Enabled: true, EngineCode: "ko"},
-		{ID: "de_DE", Name: "Deutsch", NativeName: "Deutsch", Enabled: true, EngineCode: "de"},
-		{ID: "fr_FR", Name: "Français", NativeName: "Français", Enabled: true, EngineCode: "fr"},
-		{ID: "es_ES", Name: "Español", NativeName: "Español", Enabled: true, EngineCode: "es"},
-		{ID: "pt_BR", Name: "Português (BR)", NativeName: "Português (Brasil)", Enabled: true, EngineCode: "pt"},
-		{ID: "ru_RU", Name: "Русский", NativeName: "Русский", Enabled: true, EngineCode: "ru"},
+		{ID: "zh_CN", Name: "简体中文", EnglishName: "Simplified Chinese", NativeName: "简体中文", Enabled: true, IsRef: true, EngineCode: "zh-CN"},
+		{ID: "zh_TW", Name: "繁體中文", EnglishName: "Traditional Chinese", NativeName: "繁體中文", Enabled: true, EngineCode: "zh-TW"},
+		{ID: "ja_JP", Name: "日本語", EnglishName: "Japanese", NativeName: "日本語", Enabled: true, EngineCode: "ja"},
+		{ID: "ko_KR", Name: "한국어", EnglishName: "Korean", NativeName: "한국어", Enabled: true, EngineCode: "ko"},
+		{ID: "de_DE", Name: "Deutsch", EnglishName: "German", NativeName: "Deutsch", Enabled: true, EngineCode: "de"},
+		{ID: "fr_FR", Name: "Français", EnglishName: "French", NativeName: "Français", Enabled: true, EngineCode: "fr"},
+		{ID: "es_ES", Name: "Español", EnglishName: "Spanish", NativeName: "Español", Enabled: true, EngineCode: "es"},
+		{ID: "pt_BR", Name: "Português (BR)", EnglishName: "Portuguese (Brazil)", NativeName: "Português (Brasil)", Enabled: true, EngineCode: "pt"},
+		{ID: "ru_RU", Name: "Русский", EnglishName: "Russian", NativeName: "Русский", Enabled: true, EngineCode: "ru"},
 
 		// Additional international locales (disabled by default)
-		{ID: "en_US", Name: "English (US)", NativeName: "English", Enabled: false, EngineCode: "en"},
-		{ID: "zh_HK", Name: "繁體中文 (香港)", NativeName: "繁體中文 (香港)", Enabled: false, EngineCode: "zh-TW"},
-		{ID: "pt_PT", Name: "Português (PT)", NativeName: "Português (Portugal)", Enabled: false, EngineCode: "pt-PT"},
-		{ID: "it_IT", Name: "Italiano", NativeName: "Italiano", Enabled: false, EngineCode: "it"},
-		{ID: "nl_NL", Name: "Nederlands", NativeName: "Nederlands", Enabled: false, EngineCode: "nl"},
-		{ID: "pl_PL", Name: "Polski", NativeName: "Polski", Enabled: false, EngineCode: "pl"},
-		{ID: "tr_TR", Name: "Türkçe", NativeName: "Türkçe", Enabled: false, EngineCode: "tr"},
-		{ID: "ar_SA", Name: "العربية", NativeName: "العربية", Enabled: false, EngineCode: "ar"},
-		{ID: "vi_VN", Name: "Tiếng Việt", NativeName: "Tiếng Việt", Enabled: false, EngineCode: "vi"},
-		{ID: "th_TH", Name: "ไทย", NativeName: "ไทย", Enabled: false, EngineCode: "th"},
-		{ID: "id_ID", Name: "Bahasa Indonesia", NativeName: "Bahasa Indonesia", Enabled: false, EngineCode: "id"},
-		{ID: "cs_CZ", Name: "Čeština", NativeName: "Čeština", Enabled: false, EngineCode: "cs"},
-		{ID: "uk_UA", Name: "Українська", NativeName: "Українська", Enabled: false, EngineCode: "uk"},
+		{ID: "en_US", Name: "English (US)", EnglishName: "English (US)", NativeName: "English", Enabled: false, EngineCode: "en"},
+		{ID: "zh_HK", Name: "繁體中文 (香港)", EnglishName: "Traditional Chinese (HK)", NativeName: "繁體中文 (香港)", Enabled: false, EngineCode: "zh-TW"},
+		{ID: "pt_PT", Name: "Português (PT)", EnglishName: "Portuguese (Portugal)", NativeName: "Português (Portugal)", Enabled: false, EngineCode: "pt-PT"},
+		{ID: "it_IT", Name: "Italiano", EnglishName: "Italian", NativeName: "Italiano", Enabled: false, EngineCode: "it"},
+		{ID: "nl_NL", Name: "Nederlands", EnglishName: "Dutch", NativeName: "Nederlands", Enabled: false, EngineCode: "nl"},
+		{ID: "pl_PL", Name: "Polski", EnglishName: "Polish", NativeName: "Polski", Enabled: false, EngineCode: "pl"},
+		{ID: "tr_TR", Name: "Türkçe", EnglishName: "Turkish", NativeName: "Türkçe", Enabled: false, EngineCode: "tr"},
+		{ID: "ar_SA", Name: "العربية", EnglishName: "Arabic", NativeName: "العربية", Enabled: false, EngineCode: "ar"},
+		{ID: "vi_VN", Name: "Tiếng Việt", EnglishName: "Vietnamese", NativeName: "Tiếng Việt", Enabled: false, EngineCode: "vi"},
+		{ID: "th_TH", Name: "ไทย", EnglishName: "Thai", NativeName: "ไทย", Enabled: false, EngineCode: "th"},
+		{ID: "id_ID", Name: "Bahasa Indonesia", EnglishName: "Indonesian", NativeName: "Bahasa Indonesia", Enabled: false, EngineCode: "id"},
+		{ID: "cs_CZ", Name: "Čeština", EnglishName: "Czech", NativeName: "Čeština", Enabled: false, EngineCode: "cs"},
+		{ID: "uk_UA", Name: "Українська", EnglishName: "Ukrainian", NativeName: "Українська", Enabled: false, EngineCode: "uk"},
 	}
 }
 
@@ -90,29 +114,34 @@ func DefaultProfiles() []Profile {
 	}
 	return []Profile{
 		{
-			ID:        "tier1",
-			Name:      "主流语言 (Tier-1)",
-			LocaleIDs: []string{"zh_CN", "zh_TW", "ja_JP", "ko_KR", "de_DE", "fr_FR", "es_ES", "pt_BR", "ru_RU"},
+			ID:          "tier1",
+			Name:        "主流语言 (Tier-1)",
+			EnglishName: "Tier-1 (CJK + Western)",
+			LocaleIDs:   []string{"zh_CN", "zh_TW", "ja_JP", "ko_KR", "de_DE", "fr_FR", "es_ES", "pt_BR", "ru_RU"},
 		},
 		{
-			ID:        "cjk",
-			Name:      "东亚语言 (CJK)",
-			LocaleIDs: []string{"zh_CN", "zh_TW", "zh_HK", "ja_JP", "ko_KR"},
+			ID:          "cjk",
+			Name:        "东亚语言 (CJK)",
+			EnglishName: "East Asian (CJK)",
+			LocaleIDs:   []string{"zh_CN", "zh_TW", "zh_HK", "ja_JP", "ko_KR"},
 		},
 		{
-			ID:        "europe",
-			Name:      "欧洲语言 (Europe)",
-			LocaleIDs: []string{"de_DE", "fr_FR", "es_ES", "pt_BR", "pt_PT", "it_IT", "nl_NL", "pl_PL", "ru_RU", "cs_CZ", "uk_UA", "tr_TR"},
+			ID:          "europe",
+			Name:        "欧洲语言 (Europe)",
+			EnglishName: "European",
+			LocaleIDs:   []string{"de_DE", "fr_FR", "es_ES", "pt_BR", "pt_PT", "it_IT", "nl_NL", "pl_PL", "ru_RU", "cs_CZ", "uk_UA", "tr_TR"},
 		},
 		{
-			ID:        "sea_mena",
-			Name:      "东南亚与中东 (SEA & MENA)",
-			LocaleIDs: []string{"vi_VN", "th_TH", "id_ID", "ar_SA", "tr_TR"},
+			ID:          "sea_mena",
+			Name:        "东南亚与中东 (SEA & MENA)",
+			EnglishName: "SEA & Middle East",
+			LocaleIDs:   []string{"vi_VN", "th_TH", "id_ID", "ar_SA", "tr_TR"},
 		},
 		{
-			ID:        "all",
-			Name:      "全部语言 (All)",
-			LocaleIDs: allIDs,
+			ID:          "all",
+			Name:        "全部语言 (All)",
+			EnglishName: "All Configured",
+			LocaleIDs:   allIDs,
 		},
 	}
 }

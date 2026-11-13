@@ -41,6 +41,20 @@ func (p *openAICompatProvider) Name() string { return "OpenAI / 兼容大模型 
 func (p *openAICompatProvider) Description() string {
 	return "调用 OpenAI、Ollama、vLLM 等兼容 /chat/completions 接口的大模型进行上下文感知翻译"
 }
+
+func (p *openAICompatProvider) LocalizedName(lang string) string {
+	if lang == "en" {
+		return "OpenAI / Compatible LLM (OpenAI · Ollama · vLLM)"
+	}
+	return p.Name()
+}
+
+func (p *openAICompatProvider) LocalizedDescription(lang string) string {
+	if lang == "en" {
+		return "Context-aware translation via OpenAI, Ollama, vLLM, or any /chat/completions compatible LLM"
+	}
+	return p.Description()
+}
 func (p *openAICompatProvider) Kind() provider.Kind { return provider.KindEngine }
 
 func (p *openAICompatProvider) ConfigSchema() []provider.ConfigField {
@@ -75,6 +89,47 @@ func (p *openAICompatProvider) ConfigSchema() []provider.ConfigField {
 		{
 			Key:     "use_proxy",
 			Label:   "使用代理",
+			Type:    provider.FieldBool,
+			Default: "false",
+		},
+	}
+}
+
+func (p *openAICompatProvider) LocalizedConfigSchema(lang string) []provider.ConfigField {
+	if lang != "en" {
+		return p.ConfigSchema()
+	}
+	return []provider.ConfigField{
+		{
+			Key:         "base_url",
+			Label:       "API Base URL",
+			Type:        provider.FieldText,
+			Default:     "https://api.openai.com/v1",
+			Placeholder: "https://api.openai.com/v1 or http://127.0.0.1:11434/v1",
+		},
+		{
+			Key:         "model",
+			Label:       "Model Name",
+			Type:        provider.FieldText,
+			Default:     "gpt-4o-mini",
+			Placeholder: "gpt-4o-mini / qwen2.5:14b / deepseek-chat",
+		},
+		{
+			Key:         "api_key",
+			Label:       "API Key",
+			Type:        provider.FieldSecret,
+			Placeholder: "sk-... (optional for local Ollama)",
+		},
+		{
+			Key:         "domain_prompt",
+			Label:       "Domain Prompt",
+			Type:        provider.FieldText,
+			Default:     "",
+			Placeholder: "e.g. Desktop software UI localization; keep translations concise and preserve %1 placeholders",
+		},
+		{
+			Key:     "use_proxy",
+			Label:   "Use Proxy",
 			Type:    provider.FieldBool,
 			Default: "false",
 		},
@@ -124,7 +179,7 @@ func (p *openAICompatProvider) Check(ctx context.Context) error {
 		return err
 	}
 	if len(models) == 0 {
-		return fmt.Errorf("未发现可用模型")
+		return fmt.Errorf("no available models discovered")
 	}
 	return nil
 }
@@ -168,7 +223,7 @@ func (p *openAICompatProvider) DiscoverModels(ctx context.Context) ([]string, er
 	// Fallback: Ollama native /api/tags
 	u, parseErr := url.Parse(baseURL)
 	if parseErr != nil {
-		return nil, fmt.Errorf("查询模型列表失败: %w", parseErr)
+		return nil, fmt.Errorf("failed to query model list: %w", parseErr)
 	}
 	ollamaURL := fmt.Sprintf("%s://%s/api/tags", u.Scheme, u.Host)
 	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, ollamaURL, nil)
@@ -177,12 +232,12 @@ func (p *openAICompatProvider) DiscoverModels(ctx context.Context) ([]string, er
 	}
 	resp2, err := client.Do(req2)
 	if err != nil {
-		return nil, fmt.Errorf("查询模型列表失败 (%s): %w", baseURL, err)
+		return nil, fmt.Errorf("failed to query model list (%s): %w", baseURL, err)
 	}
 	defer resp2.Body.Close()
 	body2, _ := io.ReadAll(io.LimitReader(resp2.Body, 2<<20))
 	if resp2.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("查询模型列表返回 HTTP %d: %s", resp2.StatusCode, truncateStr(string(body2), 160))
+		return nil, fmt.Errorf("model list request returned HTTP %d: %s", resp2.StatusCode, truncateStr(string(body2), 160))
 	}
 	var tags struct {
 		Models []struct {
@@ -190,7 +245,7 @@ func (p *openAICompatProvider) DiscoverModels(ctx context.Context) ([]string, er
 		} `json:"models"`
 	}
 	if err := json.Unmarshal(body2, &tags); err != nil {
-		return nil, fmt.Errorf("解析模型列表失败: %w", err)
+		return nil, fmt.Errorf("failed to parse model list: %w", err)
 	}
 	models := make([]string, 0, len(tags.Models))
 	for _, m := range tags.Models {

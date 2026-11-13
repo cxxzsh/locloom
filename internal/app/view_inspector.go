@@ -12,10 +12,11 @@ import (
 
 func (a *App) viewInspector(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
 
 	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
-		logTabLabel := fmt.Sprintf("运行日志与诊断 (%d)", len(a.logs))
-		ui.Tabs(c, &a.bottomTab, "词条精修与 XML 对比", logTabLabel)
+		logTabLabel := fmt.Sprintf(tr.TabLogsFmt, len(a.logs))
+		ui.Tabs(c, &a.bottomTab, tr.TabInspector, logTabLabel)
 
 		switch a.bottomTab {
 		case 0:
@@ -28,10 +29,11 @@ func (a *App) viewInspector(c *ui.Context) {
 
 func (a *App) viewInspectorDetail(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
 	_, row := a.currentMatrixRow()
 	if row == nil {
 		ui.Column(c).Grow(1).Center().Children(func() {
-			ui.Text(c, "在上方表格中点击任意词条行，即可在此处精修译文并预览 XML 回填差异").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, tr.InspectorEmptyHint).FontSize(12).TextColor(t.TextMuted)
 		})
 		return
 	}
@@ -42,17 +44,17 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Wrap().Children(func() {
 				ctxName := row.Key.Context
 				if ctxName == "" {
-					ctxName = "(无上下文)"
+					ctxName = tr.NoContextLabel
 				}
-				ui.Badge(c, "上下文: "+ctxName)
+				ui.Badge(c, tr.LabelContextPrefix+ctxName)
 				if row.Location != "" {
-					ui.Text(c, "位置: "+row.Location).FontSize(11).TextColor(t.TextMuted).SingleLine()
+					ui.Text(c, tr.LabelLocationPrefix+row.Location).FontSize(11).TextColor(t.TextMuted).SingleLine()
 				}
 				if row.Key.Comment != "" {
-					ui.Text(c, "注释: "+row.Key.Comment).FontSize(11).TextColor(t.TextMuted).SingleLine()
+					ui.Text(c, tr.LabelCommentPrefix+row.Key.Comment).FontSize(11).TextColor(t.TextMuted).SingleLine()
 				}
 				if row.Numerus {
-					ui.Badge(c, "复数 Numerus (使用 --- 分隔)")
+					ui.Badge(c, tr.BadgeNumerus)
 				}
 			})
 
@@ -60,7 +62,7 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 			locs := a.enabledNonRefLocales()
 			if len(locs) > 0 {
 				ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Wrap().Children(func() {
-					ui.Text(c, "目标语种:").FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, tr.LabelTargetLocale).FontSize(12).TextColor(t.TextMuted)
 					for _, l := range locs {
 						lid := l.ID
 						active := a.activeEditLocale == lid
@@ -91,14 +93,14 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 				ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
 					ui.Row(c).Gap(t.Space(2)).Children(func() {
 						ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Padding(t.Space(1.5)).Background(t.Surface).Radius(t.Radius).Children(func() {
-							ui.Text(c, "英文原文 (Source)").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
+							ui.Text(c, tr.LabelSource).FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 							ui.Text(c, row.Key.Source).FontSize(12).Selectable()
 						})
 						ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Padding(t.Space(1.5)).Background(t.Surface).Radius(t.Radius).Children(func() {
-							ui.Text(c, "参考译文").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
+							ui.Text(c, tr.LabelRef).FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 							refTxt := row.RefText
 							if refTxt == "" {
-								refTxt = "(无)"
+								refTxt = tr.LabelNone
 							}
 							ui.Text(c, refTxt).FontSize(12).Selectable()
 						})
@@ -106,21 +108,21 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 
 					cell := row.Cells[a.activeEditLocale]
 					ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, fmt.Sprintf("译文编辑 (%s)", a.activeEditLocale)).FontSize(12).FontWeight(600)
-						badge, fg := formatCellStatusBadge(c, cell)
+						ui.Text(c, fmt.Sprintf(tr.LabelEditTargetFmt, a.activeEditLocale)).FontSize(12).FontWeight(600)
+						badge, fg := formatCellStatusBadge(c, cell, tr)
 						ui.Text(c, badge).FontSize(11).TextColor(fg)
 						ui.Spacer(c)
-						if ui.Button(c, "重置该格").Padding(t.Space(0.5), t.Space(2)).Clicked() {
+						if ui.Button(c, tr.BtnResetCell).Padding(t.Space(0.5), t.Space(2)).Clicked() {
 							a.resetActiveCell()
 						}
 					})
 
 					if row.Numerus {
-						ui.Text(c, "提示：此词条包含复数形式，请使用单独一行 --- 分隔各个复数译文。").FontSize(11).TextColor(t.Warning)
+						ui.Text(c, tr.HintNumerus).FontSize(11).TextColor(t.Warning)
 					}
 
 					if ui.TextArea(c, &a.editBuf).
-						Placeholder("输入译文（实时保存，O(1) 刷新单元格）...").
+						Placeholder(tr.PlaceholderEditor).
 						Lines(3, 6).
 						Changed() {
 						a.onEditCell(a.editBuf)
@@ -160,12 +162,12 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 						row.Numerus,
 					)
 
-					ui.Text(c, "修改前 XML (Before)").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
+					ui.Text(c, tr.LabelBeforeXML).FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 					ui.Box(c).Padding(t.Space(1.5)).Background(t.Surface).Border(1, t.Border).Radius(t.Radius).Children(func() {
 						ui.Text(c, beforeXML).Font("SF Mono, Menlo, monospace").FontSize(11).TextColor(t.TextMuted).Selectable()
 					})
 
-					ui.Text(c, "回填后 XML (After)").FontSize(11).FontWeight(600).TextColor(t.Accent)
+					ui.Text(c, tr.LabelAfterXML).FontSize(11).FontWeight(600).TextColor(t.Accent)
 					ui.Box(c).Padding(t.Space(1.5)).Background(t.Surface).Border(1, t.Accent.Alpha(0.5)).Radius(t.Radius).Children(func() {
 						ui.Text(c, afterXML).Font("SF Mono, Menlo, monospace").FontSize(11).Selectable()
 					})
@@ -177,13 +179,14 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 
 func (a *App) viewDiagnosticsLogs(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
 
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, fmt.Sprintf("共 %d 条运行日志", len(a.logs))).FontSize(12).TextColor(t.TextMuted).Grow(1)
-		if ui.Button(c, "复制日志").Padding(t.Space(1), t.Space(2)).Clicked() {
+		ui.Text(c, fmt.Sprintf(tr.LogCountFmt, len(a.logs))).FontSize(12).TextColor(t.TextMuted).Grow(1)
+		if ui.Button(c, tr.BtnCopyLogs).Padding(t.Space(1), t.Space(2)).Clicked() {
 			a.copyLogsToClipboard()
 		}
-		if ui.Button(c, "清空日志").Padding(t.Space(1), t.Space(2)).Clicked() {
+		if ui.Button(c, tr.BtnClearLogs).Padding(t.Space(1), t.Space(2)).Clicked() {
 			a.logs = nil
 		}
 	})

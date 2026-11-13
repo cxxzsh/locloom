@@ -205,3 +205,73 @@ func TestThemeSwitchingAndModals(t *testing.T) {
 		t.Fatal("expected export modal to open")
 	}
 }
+
+func TestUILanguageSwitchENAndZH(t *testing.T) {
+	a := newTestApp()
+	a.SetHelpMarkdown("# English Guide\n\nEnglish body.\n\n---\n\n<a id=\"简体中文\"></a>\n\n# 中文指南\n\n中文正文。")
+	tsDir := writeHermeticTSBundle(t)
+	if err := a.LoadTSTarget(tsDir); err != nil {
+		t.Fatalf("LoadTSTarget failed: %v", err)
+	}
+
+	tt := ui.NewTester(a.View, 1280, 820)
+
+	// Toggle to English via header button
+	if err := tt.Click("EN"); err != nil {
+		t.Fatalf("click EN toggle failed: %v", err)
+	}
+	if a.UILang() != "en" {
+		t.Fatalf("expected UILang to be en, got %q", a.UILang())
+	}
+	for _, want := range []string{"Start Translate", "Project", "Pipeline", "Locales", "Focus Locale"} {
+		if !tt.HasText(want) {
+			t.Fatalf("expected %q in English UI", want)
+		}
+	}
+
+	// Trigger a validation warning in English mode
+	if err := tt.Click("Save changes to %1?"); err != nil {
+		t.Fatalf("click row failed: %v", err)
+	}
+	a.onEditCell("変更を保存しますか？")
+	tt.Frame()
+	_, row := a.currentMatrixRow()
+	if row == nil || len(row.Cells["ja_JP"].Warnings) == 0 {
+		t.Fatal("expected validation warning when dropping %1 placeholder")
+	}
+	warn := row.Cells["ja_JP"].Warnings[0]
+	if !tt.HasText("⚠ " + warn) {
+		t.Fatalf("expected English validation warning %q to render in inspector", warn)
+	}
+
+	// Verify Help modal slices to English section
+	a.SetShowHelp(true)
+	tt.Frame()
+	if !tt.HasText("LocLoom User Guide") || !tt.HasText("English Guide") {
+		t.Fatal("expected English help modal content")
+	}
+	if tt.HasText("中文指南") {
+		t.Fatal("did not expect Chinese help section in English mode")
+	}
+	if err := tt.Click("Close"); err != nil {
+		t.Fatalf("click Close help failed: %v", err)
+	}
+
+	// Render full frame in English mode
+	if img := ui.Render(a.View, 1280, 820, 1.0); img == nil {
+		t.Fatal("expected non-nil rendered image in English mode")
+	}
+
+	// Toggle back to Chinese via header button
+	if err := tt.Click("中文"); err != nil {
+		t.Fatalf("click 中文 toggle failed: %v", err)
+	}
+	if a.UILang() != "zh" {
+		t.Fatalf("expected UILang to be zh, got %q", a.UILang())
+	}
+	for _, want := range []string{"开始并发翻译", "项目", "管线", "语种", "聚焦单语种"} {
+		if !tt.HasText(want) {
+			t.Fatalf("expected %q in Chinese UI", want)
+		}
+	}
+}

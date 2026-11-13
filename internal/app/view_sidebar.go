@@ -7,16 +7,15 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"locloom/internal/domain"
 	"locloom/internal/provider"
 )
 
 func (a *App) viewSidebar(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
 
 	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(2)).Children(func() {
-		ui.Tabs(c, &a.sidebarTab, "项目", "管线", "语种").FillWidth()
-
+		ui.Tabs(c, &a.sidebarTab, tr.TabProject, tr.TabPipeline, tr.TabLocales).FillWidth()
 		switch a.sidebarTab {
 		case 0:
 			a.viewSidebarWorkspace(c)
@@ -30,32 +29,32 @@ func (a *App) viewSidebar(c *ui.Context) {
 
 func (a *App) viewSidebarWorkspace(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
 
 	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Gap(t.Space(2.5)).Padding(t.Space(1)).Children(func() {
 			// Write mode & options
-			ui.Text(c, "写回策略").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionWriteStrategy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			wm := int(a.cfg.WriteMode)
-			if ui.Segmented(c, &wm, "安全补齐空缺", "覆盖已有译文").FillEqually().Changed() {
-				a.cfg.WriteMode = domain.WriteMode(wm)
+			if ui.Segmented(c, &wm, tr.WriteModeFill, tr.WriteModeOverwrite).FillEqually().Changed() {
 				a.rebuildPlan()
 				a.scheduleConfigSave()
 			}
 
-			if ui.Checkbox(c, &a.cfg.AppendMissing, "追加词表新增词条").Changed() {
+			if ui.Checkbox(c, &a.cfg.AppendMissing, tr.CheckAppendMissing).Changed() {
 				a.rebuildPlan()
 				a.scheduleConfigSave()
 			}
 			if a.cfg.AppendMissing {
 				if ui.TextInput(c, &a.cfg.AppendContext).
-					Placeholder("默认上下文 (留空使用 Common)").
+					Placeholder(tr.PlaceholderDefaultCtx).
 					Changed() {
 					a.defaultCtx = a.cfg.AppendContext
 					a.rebuildPlan()
 					a.scheduleConfigSave()
 				}
 			}
-			if ui.Checkbox(c, &a.cfg.CreateBackup, "写回前备份 .bak").Changed() {
+			if ui.Checkbox(c, &a.cfg.CreateBackup, tr.CheckCreateBackup).Changed() {
 				a.scheduleConfigSave()
 			}
 
@@ -70,18 +69,18 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 				ctxNames = a.plan.Summary.ContextNames
 				ctxCounts = a.plan.Summary.ContextCounts
 			}
-			ui.Text(c, fmt.Sprintf("上下文导航 (%d)", len(ctxNames))).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, fmt.Sprintf(tr.SectionContextNavFmt, len(ctxNames))).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 
 			itemCount := 1 + len(ctxNames)
 			ui.List(c, &a.ctxListState, itemCount, func(i int) {
 				name := ""
-				label := fmt.Sprintf("全部上下文 (%d)", totalRows)
+				label := fmt.Sprintf(tr.AllContextsFmt, totalRows)
 				if i > 0 {
 					name = ctxNames[i-1]
 					cnt := ctxCounts[name]
 					disp := name
 					if disp == "" {
-						disp = "(无上下文)"
+						disp = tr.NoContextLabel
 					}
 					label = fmt.Sprintf("%s (%d)", disp, cnt)
 				}
@@ -109,10 +108,11 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 			ui.Divider(c)
 
 			// Per-Locale Progress Summary
-			ui.Text(c, "语种进度总览").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionLocaleProgress).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			lang := a.UILang()
 			for _, loc := range a.enabledNonRefLocales() {
 				locID := loc.ID
-				locName := loc.Name
+				locName := loc.DisplayName(lang)
 				var pct float64
 				var gaps, warns int
 				if a.plan != nil {
@@ -145,10 +145,10 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 					if gaps > 0 || warns > 0 {
 						ui.Row(c).Gap(t.Space(1.5)).Children(func() {
 							if gaps > 0 {
-								ui.Text(c, fmt.Sprintf("缺 %d", gaps)).FontSize(11).TextColor(t.Warning)
+								ui.Text(c, fmt.Sprintf(tr.LocaleGapFmt, gaps)).FontSize(11).TextColor(t.Warning)
 							}
 							if warns > 0 {
-								ui.Text(c, fmt.Sprintf("告警 %d", warns)).FontSize(11).TextColor(t.Danger)
+								ui.Text(c, fmt.Sprintf(tr.LocaleWarnFmt, warns)).FontSize(11).TextColor(t.Danger)
 							}
 						})
 					}
@@ -165,13 +165,14 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 
 func (a *App) viewSidebarPipeline(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
 
 	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Gap(t.Space(2.5)).Padding(t.Space(1)).Children(func() {
 			// Concurrency & Cache
-			ui.Text(c, "并发与缓存").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionConcurrencyCache).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "全局并发数").FontSize(12).Grow(1)
+				ui.Text(c, tr.LabelGlobalConcurrency).FontSize(12).Grow(1)
 				if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency <= 1).Clicked() {
 					a.cfg.Concurrency--
 					a.scheduleConfigSave()
@@ -184,17 +185,17 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			})
 
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				if ui.Checkbox(c, &a.cfg.BypassCache, "跳过本地翻译缓存").Grow(1).Changed() {
+				if ui.Checkbox(c, &a.cfg.BypassCache, tr.CheckBypassCache).Grow(1).Changed() {
 					a.scheduleConfigSave()
 				}
 				cacheLen := 0
 				if a.cache != nil {
 					cacheLen = a.cache.Len()
 				}
-				if ui.Button(c, fmt.Sprintf("清空(%d)", cacheLen)).Padding(t.Space(0.5), t.Space(2)).Clicked() {
+				if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Clicked() {
 					if a.cache != nil {
 						_ = a.cache.Clear()
-						a.setStatus("已清空本地翻译缓存", false)
+						a.setStatus(tr.StatusCacheCleared, false)
 					}
 				}
 			})
@@ -202,14 +203,14 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			ui.Divider(c)
 
 			// Network & Proxy
-			ui.Text(c, "网络与代理").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionNetworkProxy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			if ui.TextInput(c, &a.cfg.Proxy.ProxyURL).
-				Placeholder("http://127.0.0.1:8080 或 socks5://127.0.0.1:1080").
+				Placeholder(tr.PlaceholderProxy).
 				Changed() {
 				a.netPool.Update(a.cfg.Proxy)
 				a.scheduleConfigSave()
 			}
-			if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, "跳过 TLS 证书校验").Changed() {
+			if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).Changed() {
 				a.netPool.Update(a.cfg.Proxy)
 				a.scheduleConfigSave()
 			}
@@ -217,7 +218,7 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			ui.Divider(c)
 
 			// Ordered Waterfall Provider Cards
-			ui.Text(c, "翻译引擎瀑布流（按顺序回退）").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionWaterfall).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			provs := provider.Ordered(a.cfg.ProviderOrder)
 			for idx, p := range provs {
 				a.viewProviderCard(c, p, idx == 0, idx == len(provs)-1)
@@ -228,6 +229,8 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 
 func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLast bool) {
 	t := c.Theme()
+	tr := a.tr()
+	lang := a.UILang()
 	pid := p.ID()
 	enabled := a.isProviderActive(pid)
 
@@ -253,16 +256,16 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 		Children(func() {
 			// Card Header
 			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, p.Name()).FontSize(13).FontWeight(600).SingleLine().Grow(1)
-				kindLabel := "引擎"
+				ui.Text(c, provider.ProviderName(p, lang)).FontSize(13).FontWeight(600).SingleLine().Grow(1)
+				kindLabel := tr.BadgeEngine
 				if p.Kind() == provider.KindLocal {
-					kindLabel = "本地"
+					kindLabel = tr.BadgeLocal
 				}
 				ui.Badge(c, kindLabel)
-				if ui.Button(c, "↑").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isFirst).Tooltip("上移优先级").Clicked() {
+				if ui.Button(c, "↑").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isFirst).Tooltip(tr.TipMoveUp).Clicked() {
 					a.moveProvider(pid, -1)
 				}
-				if ui.Button(c, "↓").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isLast).Tooltip("下移优先级").Clicked() {
+				if ui.Button(c, "↓").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isLast).Tooltip(tr.TipMoveDown).Clicked() {
 					a.moveProvider(pid, 1)
 				}
 				if ui.Switch(c, &enabled).Changed() {
@@ -270,11 +273,11 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 				}
 			})
 
-			ui.Text(c, p.Description()).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, provider.ProviderDescription(p, lang)).FontSize(11).TextColor(t.TextMuted)
 
 			if enabled {
 				// Dynamic ConfigSchema fields
-				for _, field := range p.ConfigSchema() {
+				for _, field := range provider.ProviderSchema(p, lang) {
 					fKey := field.Key
 					curVal := vals[fKey]
 					if curVal == "" && field.Default != "" {
@@ -324,7 +327,7 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
-								if ui.Button(c, "浏览").Padding(t.Space(1), t.Space(2)).Clicked() {
+								if ui.Button(c, tr.BtnBrowse).Padding(t.Space(1), t.Space(2)).Clicked() {
 									win := a.win
 									go func() {
 										opts := mygo.OpenDialogOptions{
@@ -365,12 +368,12 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 				// Actions row: Test Connectivity + Discover Models (if supported)
 				ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 					testing := a.providerTesting[pid]
-					if ui.Button(c, "连通测试").Padding(t.Space(1), t.Space(2)).Disabled(testing).Clicked() {
+					if ui.Button(c, tr.BtnTestConn).Padding(t.Space(1), t.Space(2)).Disabled(testing).Clicked() {
 						a.testProviderAsync(pid)
 					}
 					if _, ok := p.(provider.ModelDiscoverer); ok {
 						disc := a.discoveringModels[pid]
-						if ui.Button(c, "发现模型").Padding(t.Space(1), t.Space(2)).Disabled(disc).Clicked() {
+						if ui.Button(c, tr.BtnDiscoverModels).Padding(t.Space(1), t.Space(2)).Disabled(disc).Clicked() {
 							a.discoverModelsAsync(pid)
 						}
 					}
@@ -388,36 +391,38 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 
 func (a *App) viewSidebarLocales(c *ui.Context) {
 	t := c.Theme()
+	tr := a.tr()
+	lang := a.UILang()
 
 	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Gap(t.Space(2)).Padding(t.Space(1)).Children(func() {
 			// Preset Profiles in 2-column Grid (no horizontal overflow)
-			ui.Text(c, "语种预设组合").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionPresetProfiles).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			ui.Grid(c).Columns(2).Gap(t.Space(1.5)).Children(func() {
 				for _, prof := range a.cfg.Profiles {
 					p := prof
-					if ui.Button(c, p.Name).Padding(t.Space(1), t.Space(2)).Clicked() {
+					if ui.Button(c, p.DisplayName(lang)).Padding(t.Space(1), t.Space(2)).Clicked() {
 						a.applyLocaleProfile(p)
 					}
 				}
 			})
 
 			ui.Row(c).Gap(t.Space(1.5)).Children(func() {
-				if ui.Button(c, "全选").Padding(t.Space(1), t.Space(2)).Grow(1).Clicked() {
+				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Grow(1).Clicked() {
 					a.selectAllLocales(true)
 				}
-				if ui.Button(c, "全不选").Padding(t.Space(1), t.Space(2)).Grow(1).Clicked() {
+				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Grow(1).Clicked() {
 					a.selectAllLocales(false)
 				}
 			})
 
 			// FilePattern & Skeleton scaffold
 			ui.Column(c).Gap(t.Space(1)).Children(func() {
-				ui.Text(c, "文件命名模式").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, tr.LabelFilePattern).FontSize(11).TextColor(t.TextMuted)
 				if ui.TextInput(c, &a.cfg.FilePattern).Placeholder("{id}.ts").Changed() {
 					a.scheduleConfigSave()
 				}
-				if ui.Button(c, "补全缺失语种骨架 .ts").Padding(t.Space(1), t.Space(2)).Disabled(a.bundle == nil).Clicked() {
+				if ui.Button(c, tr.BtnScaffoldTS).Padding(t.Space(1), t.Space(2)).Disabled(a.bundle == nil).Clicked() {
 					a.scaffoldMissingTSFiles()
 				}
 			})
@@ -425,7 +430,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			ui.Divider(c)
 
 			// Locale list
-			ui.Text(c, fmt.Sprintf("语种列表 (%d)", len(a.cfg.Locales))).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, fmt.Sprintf(tr.SectionLocaleListFmt, len(a.cfg.Locales))).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			for i := range a.cfg.Locales {
 				loc := &a.cfg.Locales[i]
 				ui.Row(c).
@@ -446,17 +451,17 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 									ui.Badge(c, loc.EngineCode)
 								}
 							})
-							ui.Text(c, loc.Name).FontSize(11).TextColor(t.TextMuted).SingleLine()
+							ui.Text(c, loc.DisplayName(lang)).FontSize(11).TextColor(t.TextMuted).SingleLine()
 						})
-						refLabel := "设为参考"
+						refLabel := tr.BtnSetRef
 						if loc.IsRef {
-							refLabel = "★ 参考"
+							refLabel = tr.BtnIsRef
 						}
 						if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Disabled(loc.IsRef).Clicked() {
 							a.setRefLocale(loc.ID)
 						}
 						if !loc.IsRef {
-							if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Tooltip("移除语种").Clicked() {
+							if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipRemoveLocale).Clicked() {
 								a.removeLocale(loc.ID)
 								return
 							}
@@ -467,14 +472,14 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			ui.Divider(c)
 
 			// Compact Add Custom Locale Form
-			ui.Text(c, "添加自定义语种").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, tr.SectionAddLocale).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			ui.Column(c).Gap(t.Space(1)).Children(func() {
-				ui.TextInput(c, &a.newLocID).Placeholder("语种 ID (如 nl_NL)")
+				ui.TextInput(c, &a.newLocID).Placeholder(tr.PlaceholderLocaleID)
 				ui.Row(c).Gap(t.Space(1)).Children(func() {
-					ui.TextInput(c, &a.newLocName).Placeholder("名称 (如 荷兰语)").Grow(1)
-					ui.TextInput(c, &a.newLocCode).Placeholder("引擎码 (nl)").Width(90)
+					ui.TextInput(c, &a.newLocName).Placeholder(tr.PlaceholderLocaleName).Grow(1)
+					ui.TextInput(c, &a.newLocCode).Placeholder(tr.PlaceholderEngineCode).Width(90)
 				})
-				if ui.Button(c, "添加语种").Padding(t.Space(1), t.Space(2)).Clicked() {
+				if ui.Button(c, tr.BtnAddLocale).Padding(t.Space(1), t.Space(2)).Clicked() {
 					a.addCustomLocale()
 				}
 			})

@@ -49,6 +49,7 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 | `-ts <path>` | Alias for `-src`: initial `.ts` directory or `.zip` path | `-ts ./i18n/ts` |
 | `-xlsx <path>` | Initial `.xlsx` glossary/translation workbook to import on startup | `-xlsx ./glossary.xlsx` |
 | `-theme <mode>` | UI theme override: `system` (default), `light`, `dark` | `-theme dark` |
+| `-lang <mode>` | UI language override: `zh` (default), `en`, `auto` | `-lang en` |
 | `-open-help` | Open the built-in usage guide modal on startup | `-open-help` |
 | `-headless-render <png>` | Render a single UI frame to a PNG file and exit (smoke verification) | `-headless-render ./preview.png` |
 | `-width <px>` | Initial window width (default `1280`) | `-width 1440` |
@@ -68,6 +69,7 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 2. **Import / Export `.xlsx`**: Drag and drop an `.xlsx` file or configure it in the sidebar. Supports `Context`, `Source`, `Comment`, and multi-locale columns (reference columns labeled `ref` / `参考` are skipped). Shared read mode on Windows allows reading workbooks even while open in Excel. Export modes include **Gaps Only**, **Full Matrix**, and **Current Changes**.
 3. **Configure Waterfall & Proxy**: Enable, reorder, and test providers (`XLSX`, `TS TM`, `Google Web`, `OpenAI / Ollama`) and optionally configure HTTP/SOCKS5 proxies.
 4. **Review & Write Back Safely**: Switch between **Focus Locale** and **Full Matrix**, inspect line-by-line XML diffs in the bottom inspector, and write back with optional `.bak` backups (directory mode) or `*_updated.zip` output preserving all non-`.ts` entries verbatim (ZIP mode).
+5. **Real-Time UI Language Switching**: Click the **`[EN]` / `[中文]`** button in the top-right header to toggle the entire workbench (menus, provider schemas, validation warnings, and built-in help) between English and Simplified Chinese on the fly, or pass `-lang <auto|zh|en>` on startup.
 
 Status badges are strictly for UI preview and are **never** written to `.ts` or `.xlsx` files:
 
@@ -139,6 +141,7 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 | `-ts <path>` | `-src` 的兼容别名：启动时自动加载 `.ts` 目录或 `.zip` | `-ts ./i18n/ts` |
 | `-xlsx <path>` | 启动时自动导入的 `.xlsx` 词条表 | `-xlsx ./glossary.xlsx` |
 | `-theme <mode>` | 界面主题：`system`（默认）、`light`、`dark` | `-theme dark` |
+| `-lang <mode>` | 界面语言覆盖：`zh`（默认）、`en`、`auto`（跟随系统） | `-lang en` |
 | `-open-help` | 启动后自动打开内置帮助弹窗 | `-open-help` |
 | `-headless-render <png>` | 无头渲染一帧 UI 到指定 PNG 并退出（用于烟雾验证） | `-headless-render ./preview.png` |
 | `-width <px>` | 初始窗口宽度（默认 `1280`） | `-width 1440` |
@@ -158,6 +161,7 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 2. **导入 / 导出 `.xlsx` 词条表**：拖入 `.xlsx` 或在左侧启用词条表，支持 `Context`、`Source`、`Comment` 及多语种列（表头含 `参考` / `ref` 的列默认跳过）。Windows 下采用共享读取模式，即使 Excel 正在打开文件也可直接读取。支持导出 **未翻译缺口**、**全量总表** 与 **本轮变更**。
 3. **配置翻译源与代理**：在左侧勾选并排序翻译源（`XLSX`、`TS TM`、`Google Web`、`OpenAI / Ollama`），支持模型自动发现与 HTTP/SOCKS5 代理配置。
 4. **审校与安全写回**：支持 **聚焦单语种** 与 **全景矩阵** 视图切换，底部检查栏可逐行预览 XML 片段差异；目录模式支持生成 `.bak` 备份并原子替换，ZIP 模式输出 `*_updated.zip` 并完整保留压缩包内的非 `.ts` 文件与目录结构。
+5. **中英文实时切换**：点击顶部工具栏右上角 **`[EN]` / `[中文]`** 按钮，即可实时切换全界面、翻译引擎配置表单、占位符告警及内置帮助文档语言；也可通过 `-lang <auto|zh|en>` 启动参数指定。
 
 单元格状态前缀仅用于界面提示，**绝不会写入 `.ts` 或 `.xlsx`**：
 

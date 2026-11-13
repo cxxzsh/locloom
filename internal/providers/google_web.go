@@ -39,6 +39,20 @@ func (p *googleWebProvider) Name() string { return "Google Translate (免Key批�
 func (p *googleWebProvider) Description() string {
 	return "调用 Google Translate Web 接口批量翻译（支持 gtx / clients5 与可选代理）"
 }
+
+func (p *googleWebProvider) LocalizedName(lang string) string {
+	if lang == "en" {
+		return "Google Translate (Keyless Batch)"
+	}
+	return p.Name()
+}
+
+func (p *googleWebProvider) LocalizedDescription(lang string) string {
+	if lang == "en" {
+		return "Batch translate via Google Translate Web API (supports gtx / clients5 endpoints and optional proxy)"
+	}
+	return p.Description()
+}
 func (p *googleWebProvider) Kind() provider.Kind { return provider.KindEngine }
 
 func (p *googleWebProvider) ConfigSchema() []provider.ConfigField {
@@ -66,6 +80,40 @@ func (p *googleWebProvider) ConfigSchema() []provider.ConfigField {
 		{
 			Key:     "use_proxy",
 			Label:   "使用代理",
+			Type:    provider.FieldBool,
+			Default: "false",
+		},
+	}
+}
+
+func (p *googleWebProvider) LocalizedConfigSchema(lang string) []provider.ConfigField {
+	if lang != "en" {
+		return p.ConfigSchema()
+	}
+	return []provider.ConfigField{
+		{
+			Key:     "host",
+			Label:   "API Host",
+			Type:    provider.FieldSelect,
+			Default: "translate.googleapis.com",
+			Options: []string{"translate.googleapis.com", "translate.google.com"},
+		},
+		{
+			Key:     "endpoint",
+			Label:   "Endpoint",
+			Type:    provider.FieldSelect,
+			Default: "gtx",
+			Options: []string{"gtx", "clients5"},
+		},
+		{
+			Key:     "batch_size",
+			Label:   "Batch Size",
+			Type:    provider.FieldText,
+			Default: "25",
+		},
+		{
+			Key:     "use_proxy",
+			Label:   "Use Proxy",
 			Type:    provider.FieldBool,
 			Default: "false",
 		},

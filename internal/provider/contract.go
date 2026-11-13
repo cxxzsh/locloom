@@ -75,6 +75,47 @@ type ModelDiscoverer interface {
 	DiscoverModels(ctx context.Context) ([]string, error)
 }
 
+// LocalizedProvider is an optional interface implemented by providers that support
+// localized display names, descriptions, and configuration schemas.
+type LocalizedProvider interface {
+	LocalizedName(lang string) string
+	LocalizedDescription(lang string) string
+	LocalizedConfigSchema(lang string) []ConfigField
+}
+
+// ProviderName returns the localized name of p for lang, falling back to p.Name().
+func ProviderName(p Provider, lang string) string {
+	if p == nil {
+		return ""
+	}
+	if lp, ok := p.(LocalizedProvider); ok {
+		return lp.LocalizedName(lang)
+	}
+	return p.Name()
+}
+
+// ProviderDescription returns the localized description of p for lang, falling back to p.Description().
+func ProviderDescription(p Provider, lang string) string {
+	if p == nil {
+		return ""
+	}
+	if lp, ok := p.(LocalizedProvider); ok {
+		return lp.LocalizedDescription(lang)
+	}
+	return p.Description()
+}
+
+// ProviderSchema returns the localized config schema of p for lang, falling back to p.ConfigSchema().
+func ProviderSchema(p Provider, lang string) []ConfigField {
+	if p == nil {
+		return nil
+	}
+	if lp, ok := p.(LocalizedProvider); ok {
+		return lp.LocalizedConfigSchema(lang)
+	}
+	return p.ConfigSchema()
+}
+
 // Registry is a thread-safe collection of translation providers.
 type Registry struct {
 	mu    sync.RWMutex

@@ -12,6 +12,7 @@ import (
 
 	"locloom/internal/config"
 	"locloom/internal/domain"
+	"locloom/internal/i18n"
 	"locloom/internal/locale"
 	"locloom/internal/netpool"
 	"locloom/internal/planner"
@@ -121,6 +122,7 @@ func NewWithConfig(cfg config.AppConfig) *App {
 	if len(cfg.Profiles) == 0 {
 		cfg.Profiles = locale.DefaultProfiles()
 	}
+	cfg.UILang = i18n.Resolve(cfg.UILang)
 
 	a := &App{
 		cfg:               cfg,
@@ -154,13 +156,38 @@ func NewWithConfig(cfg config.AppConfig) *App {
 	a.logListState.FollowEnd = true
 
 	a.rebuildPlan()
-	a.appendLog("info", "", "", "工作台已就绪，可拖拽 .ts 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。")
+	a.appendLog("info", "", "", a.tr().LogWorkbenchReady)
 	return a
 }
 
 // SetWindow binds the native window for dialogs and background UI-thread updates.
 func (a *App) SetWindow(w *mygo.Window) {
 	a.win = w
+}
+
+// UILang returns the resolved active UI language ("zh" or "en").
+func (a *App) UILang() string {
+	return i18n.Resolve(a.cfg.UILang)
+}
+
+// SetUILang switches the active UI language, updates the window title, rebuilds the plan
+// so validation messages reflect the new language, and schedules config persistence.
+func (a *App) SetUILang(lang string) {
+	a.cfg.UILang = i18n.Resolve(lang)
+	if a.win != nil {
+		a.win.SetTitle(a.tr().WindowTitle)
+	}
+	a.rebuildPlan()
+	a.scheduleConfigSave()
+}
+
+func (a *App) tr() *i18n.Catalog {
+	return i18n.Of(a.cfg.UILang)
+}
+
+// WindowTitle returns the localized window title for the active UI language.
+func (a *App) WindowTitle() string {
+	return a.tr().WindowTitle
 }
 
 // SetHelpMarkdown sets the Markdown content shown in the Help modal.
@@ -245,8 +272,9 @@ func (a *App) setStatus(msg string, isErr bool) {
 func (a *App) LoadTSTarget(dirOrZip string) error {
 	bundle, err := tsxml.LoadBundle(dirOrZip, a.cfg.FilePattern, a.cfg.Locales)
 	if err != nil {
-		a.setStatus("加载 .ts 失败: "+err.Error(), true)
-		a.appendLog("error", "", "", "加载 .ts 失败: "+err.Error())
+		msg := fmt.Sprintf(a.tr().ErrLoadTSFmt, err)
+		a.setStatus(msg, true)
+		a.appendLog("error", "", "", msg)
 		return err
 	}
 	a.applyLoadedBundle(bundle)
@@ -270,9 +298,10 @@ func (a *App) applyLoadedBundle(bundle *tsxml.Bundle) {
 	a.selectedRow = 0
 	a.rebuildPlan()
 
-	msg := fmt.Sprintf("已加载 %s（%d 个 .ts 文件，%d 条词条）", filepath.Base(bundle.SourcePath), len(bundle.Files), a.plan.Summary.TotalRows)
+	tr := a.tr()
+	msg := fmt.Sprintf(tr.StatusLoadedBundleFmt, filepath.Base(bundle.SourcePath), len(bundle.Files), a.plan.Summary.TotalRows)
 	if len(added) > 0 {
-		msg += fmt.Sprintf("，自动发现新语种: %v", added)
+		msg += fmt.Sprintf(tr.StatusDiscoveredLocalesFmt, added)
 	}
 	a.setStatus(msg, false)
 	a.appendLog("info", "", "", msg)
@@ -283,8 +312,9 @@ func (a *App) applyLoadedBundle(bundle *tsxml.Bundle) {
 func (a *App) ImportFromExcelFile(xlsxPath, sheetName string, skipRef bool) error {
 	wb, err := sheet.LoadExcel(xlsxPath, sheetName, a.cfg.Locales, skipRef)
 	if err != nil {
-		a.setStatus("导入 Excel 失败: "+err.Error(), true)
-		a.appendLog("error", "", "", "导入 Excel 失败: "+err.Error())
+		msg := fmt.Sprintf(a.tr().ErrImportExcelFmt, err)
+		a.setStatus(msg, true)
+		a.appendLog("error", "", "", msg)
 		return err
 	}
 	a.applyLoadedWorkbook(wb, skipRef)
@@ -312,7 +342,7 @@ func (a *App) applyLoadedWorkbook(wb *sheet.WorkbookData, skipRef bool) {
 	a.extraEntries = extra
 	a.rebuildPlan()
 
-	msg := fmt.Sprintf("已导入 %s（工作表 %s，%d 条译文）", filepath.Base(wb.FilePath), wb.SheetName, count)
+	msg := fmt.Sprintf(a.tr().StatusImportedExcelFmt, filepath.Base(wb.FilePath), wb.SheetName, count)
 	a.setStatus(msg, false)
 	a.appendLog("info", "", "", msg)
 	a.scheduleConfigSave()
@@ -321,15 +351,16 @@ func (a *App) applyLoadedWorkbook(wb *sheet.WorkbookData, skipRef bool) {
 // ExportToExcelFile writes the current translation matrix to an .xlsx workbook.
 func (a *App) ExportToExcelFile(xlsxPath string, scope sheet.ExportScope) error {
 	if a.plan == nil {
-		return fmt.Errorf("当前没有可导出的词条数据")
+		return fmt.Errorf("%s", a.tr().ErrNoExportData)
 	}
 	opts := planner.BuildExportRows(a.plan, scope, a.cfg.Locales)
 	if err := sheet.ExportExcel(xlsxPath, opts); err != nil {
-		a.setStatus("导出 Excel 失败: "+err.Error(), true)
-		a.appendLog("error", "", "", "导出 Excel 失败: "+err.Error())
+		msg := fmt.Sprintf(a.tr().ErrExportExcelFmt, err)
+		a.setStatus(msg, true)
+		a.appendLog("error", "", "", msg)
 		return err
 	}
-	msg := fmt.Sprintf("已导出 %d 行到 %s", len(opts.Rows), filepath.Base(xlsxPath))
+	msg := fmt.Sprintf(a.tr().StatusExportedExcelFmt, len(opts.Rows), filepath.Base(xlsxPath))
 	a.setStatus(msg, false)
 	a.appendLog("info", "", "", msg)
 	return nil
@@ -384,7 +415,7 @@ func (a *App) View(c *ui.Context) {
 			}
 			ui.Row(c).Padding(t.Space(1), t.Space(3)).Background(bg).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.statusBanner).FontSize(12).TextColor(fg).SingleLine().Grow(1)
-				if ui.Button(c, "关闭").Padding(t.Space(0.5), t.Space(2)).Clicked() {
+				if ui.Button(c, a.tr().BtnClose).Padding(t.Space(0.5), t.Space(2)).Clicked() {
 					a.statusBanner = ""
 				}
 			})
@@ -393,7 +424,7 @@ func (a *App) View(c *ui.Context) {
 
 		if dragOver {
 			ui.Row(c).Padding(t.Space(2), t.Space(3)).Background(t.Accent.Alpha(0.15)).Justify(ui.Center).Children(func() {
-				ui.Text(c, "松开即可加载 .ts 目录 / .zip 压缩包 / .xlsx 词表").FontSize(13).FontWeight(600).TextColor(t.Accent)
+				ui.Text(c, a.tr().DropHint).FontSize(13).FontWeight(600).TextColor(t.Accent)
 			})
 		}
 

@@ -11,6 +11,9 @@ import (
 
 func TestDefaultValues(t *testing.T) {
 	cfg := Default()
+	if cfg.UILang != "zh" {
+		t.Fatalf("expected UILang zh, got %q", cfg.UILang)
+	}
 	if cfg.LeftPaneWidth != 340 {
 		t.Fatalf("expected LeftPaneWidth 340, got %v", cfg.LeftPaneWidth)
 	}
@@ -116,5 +119,43 @@ func TestSaveToAndLoadFromPath(t *testing.T) {
 	}
 	if _, _, err := loadFromPath(primary); err == nil {
 		t.Fatal("expected error on corrupt JSON")
+	}
+}
+
+func TestUILangPersistenceAndNormalization(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	cfg := Default()
+	cfg.UILang = "en"
+	cloned := cfg.Clone()
+	if cloned.UILang != "en" {
+		t.Fatalf("Clone() lost UILang: got %q, want en", cloned.UILang)
+	}
+	if len(cloned.Profiles) == 0 || cloned.Profiles[0].EnglishName == "" {
+		t.Fatalf("Clone() lost Profile.EnglishName")
+	}
+
+	if err := SaveTo(path, cfg); err != nil {
+		t.Fatalf("SaveTo failed: %v", err)
+	}
+	loaded, _, err := loadFromPath(path)
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	if loaded.UILang != "en" {
+		t.Fatalf("loaded UILang = %q, want en", loaded.UILang)
+	}
+
+	// Invalid or empty ui_lang normalizes to "zh"
+	if err := os.WriteFile(path, []byte(`{"ui_lang":"fr"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loadedInvalid, _, err := loadFromPath(path)
+	if err != nil {
+		t.Fatalf("loadFromPath invalid failed: %v", err)
+	}
+	if loadedInvalid.UILang != "zh" {
+		t.Fatalf("invalid UILang = %q, want zh", loadedInvalid.UILang)
 	}
 }

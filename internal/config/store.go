@@ -17,6 +17,7 @@ const configFileName = "config.json"
 
 // AppConfig persists user preferences, proxy configuration, dynamic locales, and per-provider settings.
 type AppConfig struct {
+	UILang           string                       `json:"ui_lang"`
 	ThemeMode        int                          `json:"theme_mode"`
 	LeftPaneWidth    float32                      `json:"left_pane_width"`
 	BottomPaneHeight float32                      `json:"bottom_pane_height"`
@@ -41,6 +42,7 @@ type AppConfig struct {
 // Default returns a populated AppConfig with clean, company-neutral defaults.
 func Default() AppConfig {
 	return AppConfig{
+		UILang:           "zh",
 		ThemeMode:        0,
 		LeftPaneWidth:    340,
 		BottomPaneHeight: 230,
@@ -117,9 +119,10 @@ func (c AppConfig) Clone() AppConfig {
 		out.Profiles = make([]locale.Profile, len(c.Profiles))
 		for i, prof := range c.Profiles {
 			out.Profiles[i] = locale.Profile{
-				ID:        prof.ID,
-				Name:      prof.Name,
-				LocaleIDs: slices.Clone(prof.LocaleIDs),
+				ID:          prof.ID,
+				Name:        prof.Name,
+				EnglishName: prof.EnglishName,
+				LocaleIDs:   slices.Clone(prof.LocaleIDs),
 			}
 		}
 	}
@@ -154,6 +157,9 @@ func loadFromPath(primaryPath string) (AppConfig, string, error) {
 
 func normalizeLoaded(cfg *AppConfig) {
 	def := Default()
+	if cfg.UILang != "zh" && cfg.UILang != "en" {
+		cfg.UILang = def.UILang
+	}
 	if cfg.LeftPaneWidth <= 0 {
 		cfg.LeftPaneWidth = def.LeftPaneWidth
 	}

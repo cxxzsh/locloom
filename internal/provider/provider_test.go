@@ -247,3 +247,69 @@ func TestRunConcurrentWaterfallCacheAndNumerus(t *testing.T) {
 		t.Fatalf("expected 0 cache hits with BypassCache, got %d", res3.Statuses["zh_CN"].CacheHits)
 	}
 }
+
+type localizedStubProvider struct {
+	stubProvider
+}
+
+func (l *localizedStubProvider) LocalizedName(lang string) string {
+	if lang == "en" {
+		return "English Name"
+	}
+	return "中文名称"
+}
+
+func (l *localizedStubProvider) LocalizedDescription(lang string) string {
+	if lang == "en" {
+		return "English Description"
+	}
+	return "中文描述"
+}
+
+func (l *localizedStubProvider) LocalizedConfigSchema(lang string) []ConfigField {
+	label := "中文标签"
+	if lang == "en" {
+		label = "English Label"
+	}
+	return []ConfigField{{Key: "k", Label: label, Type: FieldText}}
+}
+
+func TestLocalizedProviderHelpers(t *testing.T) {
+	if got := ProviderName(nil, "en"); got != "" {
+		t.Fatalf("ProviderName(nil) = %q, want empty", got)
+	}
+	if got := ProviderDescription(nil, "en"); got != "" {
+		t.Fatalf("ProviderDescription(nil) = %q, want empty", got)
+	}
+	if got := ProviderSchema(nil, "en"); got != nil {
+		t.Fatalf("ProviderSchema(nil) = %v, want nil", got)
+	}
+
+	plain := &stubProvider{id: "plain"}
+	if got := ProviderName(plain, "en"); got != "plain" {
+		t.Fatalf("plain ProviderName = %q, want plain", got)
+	}
+	if got := ProviderDescription(plain, "en"); got != "plain" {
+		t.Fatalf("plain ProviderDescription = %q, want plain", got)
+	}
+	if got := ProviderSchema(plain, "en"); got != nil {
+		t.Fatalf("plain ProviderSchema = %v, want nil", got)
+	}
+
+	loc := &localizedStubProvider{stubProvider: stubProvider{id: "loc"}}
+	if got := ProviderName(loc, "en"); got != "English Name" {
+		t.Fatalf("loc ProviderName(en) = %q", got)
+	}
+	if got := ProviderName(loc, "zh"); got != "中文名称" {
+		t.Fatalf("loc ProviderName(zh) = %q", got)
+	}
+	if got := ProviderDescription(loc, "en"); got != "English Description" {
+		t.Fatalf("loc ProviderDescription(en) = %q", got)
+	}
+	if got := ProviderSchema(loc, "en"); len(got) != 1 || got[0].Label != "English Label" {
+		t.Fatalf("loc ProviderSchema(en) = %+v", got)
+	}
+	if got := ProviderSchema(loc, "zh"); len(got) != 1 || got[0].Label != "中文标签" {
+		t.Fatalf("loc ProviderSchema(zh) = %+v", got)
+	}
+}
