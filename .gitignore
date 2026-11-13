@@ -7,3 +7,4 @@ translation-cache.json
 *.bak
 *.dmp
 .DS_Store
+/playground/
