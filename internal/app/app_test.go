@@ -7,12 +7,11 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/xuri/excelize/v2"
-
 	"locloom/internal/config"
+	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/sheet"
 )
-
 func newTestApp() *App {
 	cfg := config.Default()
 	cfg.Locales = []locale.LocaleSpec{
@@ -273,5 +272,140 @@ func TestUILanguageSwitchENAndZH(t *testing.T) {
 		if !tt.HasText(want) {
 			t.Fatalf("expected %q in Chinese UI", want)
 		}
+	}
+}
+
+func writeHermeticJSONBundle(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	enJSON := `{
+  "app.title": "Hello",
+  "app.save": "Save"
+}
+`
+	jaJSON := `{
+  "app.title": "こんにちは",
+  "app.save": ""
+}
+`
+	frJSON := `{
+  "app.title": "Bonjour",
+  "app.save": ""
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "en.json"), []byte(enJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ja.json"), []byte(jaJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fr.json"), []byte(frJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestSmartLocaleSyncAndNonTSFormatLoad(t *testing.T) {
+	a := newTestApp()
+	jsonDir := writeHermeticJSONBundle(t)
+	if err := a.LoadProject(jsonDir); err != nil {
+		t.Fatalf("LoadProject(jsonDir) failed: %v", err)
+	}
+	if a.bundle == nil || a.bundle.Format != format.FormatJSON {
+		t.Fatalf("expected FormatJSON, got %+v", a.bundle)
+	}
+
+	// Smart Project Sync should disable de_DE (not in bundle) and enable ja & fr.
+	enabledMap := make(map[string]bool)
+	for _, loc := range a.cfg.Locales {
+		enabledMap[loc.ID] = loc.Enabled
+	}
+	if enabledMap["de_DE"] {
+		t.Fatal("expected de_DE to be disabled after loading jsonDir without de_DE")
+	}
+	if !enabledMap["ja_JP"] || !enabledMap["fr_FR"] {
+		t.Fatalf("expected ja_JP and fr_FR to be enabled, got %+v", enabledMap)
+	}
+	if enabledMap["en_US"] {
+		t.Fatalf("expected source locale en_US not to be enabled as target: %+v", enabledMap)
+	}
+	if a.focusedLocale != "ja_JP" && a.focusedLocale != "fr_FR" {
+		t.Fatalf("expected focusedLocale to be ja_JP or fr_FR, got %q", a.focusedLocale)
+	}
+
+	tt := ui.NewTester(a.View, 1280, 820)
+	if !tt.HasText("JSON") {
+		t.Fatal("expected JSON format badge in header")
+	}
+	if !tt.HasText("app.title") || !tt.HasText("Hello") {
+		t.Fatal("expected JSON key ID and backfilled source text in matrix")
+	}
+}
+
+func TestCollapsibleProviderCardsAndSecretToggle(t *testing.T) {
+	a := newTestApp()
+	tt := ui.NewTester(a.View, 1280, 820)
+
+	if err := tt.Click("管线"); err != nil {
+		t.Fatalf("click Pipeline tab failed: %v", err)
+	}
+	if tt.HasText("连通测试") {
+		t.Fatal("expected provider cards to be collapsed by default")
+	}
+
+	if err := tt.Click("DeepL / DeepLX 翻译"); err != nil {
+		t.Fatalf("click DeepL header failed: %v", err)
+	}
+	if !a.expandedProvider["deepl"] {
+		t.Fatal("expected deepl provider card to expand")
+	}
+	if !tt.HasText("连通测试") || !tt.HasText("显示") {
+		t.Fatal("expected expanded provider card to show Test and Show secret buttons")
+	}
+
+	if err := tt.Click("显示"); err != nil {
+		t.Fatalf("click Show secret button failed: %v", err)
+	}
+	if !a.revealedSecrets["deepl.api_key"] || !tt.HasText("隐藏") {
+		t.Fatal("expected secret toggle to reveal API key and switch label to 隐藏")
+	}
+}
+
+func TestFullMatrixCellClickAndGapNavigation(t *testing.T) {
+	a := newTestApp()
+	jsonDir := writeHermeticJSONBundle(t)
+	if err := a.LoadProject(jsonDir); err != nil {
+		t.Fatalf("LoadProject failed: %v", err)
+	}
+	tt := ui.NewTester(a.View, 1280, 820)
+
+	if err := tt.Click("全景矩阵"); err != nil {
+		t.Fatalf("click Full Matrix failed: %v", err)
+	}
+	if err := tt.Click("Bonjour"); err != nil {
+		t.Fatalf("click Bonjour cell failed: %v", err)
+	}
+	if a.activeEditLocale != "fr_FR" {
+		t.Fatalf("expected activeEditLocale to be fr_FR after clicking Bonjour cell, got %q", a.activeEditLocale)
+	}
+	if a.editBuf != "Bonjour" {
+		t.Fatalf("expected editBuf to be Bonjour, got %q", a.editBuf)
+	}
+
+	// Jump to next gap row ("Save")
+	if err := tt.Click("下一待办 ▶"); err != nil {
+		t.Fatalf("click Next Gap failed: %v", err)
+	}
+	if a.selectedKey.Source != "Save" {
+		t.Fatalf("expected Next Gap to jump to Save, got %q", a.selectedKey.Source)
+	}
+
+	// Use source as translation
+	if err := tt.Click("填入原文"); err != nil {
+		t.Fatalf("click Use Src failed: %v", err)
+	}
+	if a.editBuf != "Save" {
+		t.Fatalf("expected editBuf to be Save after Use Src, got %q", a.editBuf)
 	}
 }

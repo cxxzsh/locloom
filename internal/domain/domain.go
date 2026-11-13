@@ -2,8 +2,10 @@ package domain
 
 import "strings"
 
-// EntryKey uniquely identifies a translatable message within a Qt .ts catalog.
+// EntryKey uniquely identifies a translatable message across source-keyed (.ts, .po)
+// and ID-keyed (.json, .arb, .xcstrings, strings.xml, .resx, .xliff) localization formats.
 type EntryKey struct {
+	ID      string `json:"id,omitempty"`
 	Context string `json:"context"`
 	Source  string `json:"source"`
 	Comment string `json:"comment,omitempty"`
@@ -11,19 +13,26 @@ type EntryKey struct {
 
 // Canonical returns a stable, collision-free composite string key.
 func (k EntryKey) Canonical() string {
+	if k.ID != "" {
+		return "id:" + k.ID + "\x00" + k.Context + "\x00" + k.Source + "\x00" + k.Comment
+	}
 	return k.Context + "\x00" + k.Source + "\x00" + k.Comment
 }
 
-// ContextSource returns a key scoped to (Context, Source) with empty Comment.
-func (k EntryKey) ContextSource() EntryKey {
-	return EntryKey{Context: k.Context, Source: k.Source}
+// IDContext returns a key scoped to (ID, Context) for ID-based formats.
+func (k EntryKey) IDContext() EntryKey {
+	return EntryKey{ID: k.ID, Context: k.Context}
 }
 
-// SourceOnly returns a context-agnostic key scoped only to Source.
+// ContextSource returns a key scoped to (ID, Context, Source) with empty Comment.
+func (k EntryKey) ContextSource() EntryKey {
+	return EntryKey{ID: k.ID, Context: k.Context, Source: k.Source}
+}
+
+// SourceOnly returns a context-agnostic glossary key scoped only to Source.
 func (k EntryKey) SourceOnly() EntryKey {
 	return EntryKey{Source: k.Source}
 }
-
 // TransStatus describes the current state of a <translation> node in a .ts file.
 type TransStatus string
 

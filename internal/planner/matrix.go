@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/sheet"
 	"locloom/internal/tsxml"
@@ -66,6 +67,7 @@ type PlanSummary struct {
 
 // PlanInput configures BuildPlan.
 type PlanInput struct {
+	FormatBundle  *format.Bundle
 	Bundle        *tsxml.Bundle
 	ExtraEntries  []domain.EntryKey
 	DefaultCtx    string
@@ -117,50 +119,75 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 		trackedIDs = append(trackedIDs, plan.RefLocaleID)
 	}
 
-	// Index messages per locale by exact EntryKey and context-scoped (Context, Source).
+	var fb *format.Bundle
+	if in.FormatBundle != nil {
+		fb = in.FormatBundle
+	} else if in.Bundle != nil {
+		fb = format.FromTSBundle(in.Bundle)
+	}
+
+	// Index entries per locale by exact EntryKey, IDContext (when ID != ""), and ContextSource (when ID == "").
 	type localeIndex struct {
-		exact   map[domain.EntryKey]*tsxml.MessageEntry
-		ctxSrc  map[domain.EntryKey]*tsxml.MessageEntry
+		exact  map[domain.EntryKey]*format.NormalizedEntry
+		idCtx  map[domain.EntryKey]*format.NormalizedEntry
+		ctxSrc map[domain.EntryKey]*format.NormalizedEntry
 	}
 	idxByLocale := make(map[string]*localeIndex)
+	getLocaleIdx := func(locID string) *localeIndex {
+		li := idxByLocale[locID]
+		if li == nil {
+			li = &localeIndex{
+				exact:  make(map[domain.EntryKey]*format.NormalizedEntry),
+				idCtx:  make(map[domain.EntryKey]*format.NormalizedEntry),
+				ctxSrc: make(map[domain.EntryKey]*format.NormalizedEntry),
+			}
+			idxByLocale[locID] = li
+		}
+		return li
+	}
 
-	if in.Bundle != nil {
-		for _, tf := range in.Bundle.Files {
-			if tf == nil {
+	if fb != nil {
+		for _, doc := range fb.Docs {
+			if doc == nil {
 				continue
 			}
-			li := idxByLocale[tf.LocaleID]
-			if li == nil {
-				li = &localeIndex{
-					exact:  make(map[domain.EntryKey]*tsxml.MessageEntry),
-					ctxSrc: make(map[domain.EntryKey]*tsxml.MessageEntry),
+			for ei := range doc.Entries {
+				e := &doc.Entries[ei]
+				entryLoc := e.LocaleID
+				if entryLoc == "" {
+					entryLoc = doc.LocaleID
 				}
-				idxByLocale[tf.LocaleID] = li
-			}
-			for ci := range tf.Contexts {
-				ctx := &tf.Contexts[ci]
-				for mi := range ctx.Messages {
-					m := &ctx.Messages[mi]
-					k := m.Key()
-					if _, exists := li.exact[k]; !exists {
-						li.exact[k] = m
+				if entryLoc == "" {
+					continue
+				}
+				li := getLocaleIdx(entryLoc)
+				k := e.Key
+				if _, exists := li.exact[k]; !exists {
+					li.exact[k] = e
+				}
+				if k.ID != "" {
+					ik := k.IDContext()
+					if _, exists := li.idCtx[ik]; !exists {
+						li.idCtx[ik] = e
 					}
+				} else {
 					cs := k.ContextSource()
 					if _, exists := li.ctxSrc[cs]; !exists {
-						li.ctxSrc[cs] = m
+						li.ctxSrc[cs] = e
 					}
 				}
 			}
 		}
 	}
 
-	// Collect unique keys in deterministic order from Bundle.Files.
+	// Collect unique keys in deterministic order from FormatBundle.Docs.
 	var rows []MatrixRow
 	seenKeys := make(map[domain.EntryKey]int)
+	seenIDCtx := make(map[domain.EntryKey]int)
 	seenContexts := make(map[string]bool)
 
 	addRow := func(k domain.EntryKey, extraCmt, loc string, numerus, inTS bool) {
-		if k.Source == "" {
+		if k.Source == "" && k.ID == "" {
 			return
 		}
 		if idx, exists := seenKeys[k]; exists {
@@ -174,6 +201,28 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 				rows[idx].Numerus = true
 			}
 			return
+		}
+		if k.ID != "" {
+			ik := k.IDContext()
+			if idx, exists := seenIDCtx[ik]; exists {
+				if (rows[idx].Key.Source == "" || rows[idx].Key.Source == rows[idx].Key.ID) && k.Source != "" && k.Source != k.ID {
+					rows[idx].Key.Source = k.Source
+				}
+				if rows[idx].Key.Comment == "" && k.Comment != "" {
+					rows[idx].Key.Comment = k.Comment
+				}
+				if rows[idx].ExtraComment == "" && extraCmt != "" {
+					rows[idx].ExtraComment = extraCmt
+				}
+				if rows[idx].Location == "" && loc != "" {
+					rows[idx].Location = loc
+				}
+				if numerus {
+					rows[idx].Numerus = true
+				}
+				return
+			}
+			seenIDCtx[ik] = len(rows)
 		}
 		seenKeys[k] = len(rows)
 		if k.Context != "" {
@@ -194,35 +243,29 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 		})
 	}
 
-	if in.Bundle != nil {
-		for _, tf := range in.Bundle.Files {
-			if tf == nil {
+	if fb != nil {
+		for _, doc := range fb.Docs {
+			if doc == nil {
 				continue
 			}
-			for _, ctx := range tf.Contexts {
-				for _, m := range ctx.Messages {
-					loc := ""
-					if m.LocationFile != "" {
-						if m.LocationLine != "" {
-							loc = fmt.Sprintf("%s:%s", m.LocationFile, m.LocationLine)
-						} else {
-							loc = m.LocationFile
-						}
-					}
-					addRow(m.Key(), m.ExtraComment, loc, m.Numerus, true)
-				}
+			for _, e := range doc.Entries {
+				addRow(e.Key, e.ExtraComment, e.Location, e.Numerus, true)
 			}
 		}
 	}
 
-	// Phantom-row protection: only append ExtraEntries not in .ts when AppendMissing is true.
+	// Phantom-row protection: only append ExtraEntries not in bundle when AppendMissing is true.
 	if in.AppendMissing {
 		for _, extra := range in.ExtraEntries {
 			k := extra
 			if k.Context == "" && in.DefaultCtx != "" {
 				k.Context = in.DefaultCtx
 			}
-			if _, exists := seenKeys[k]; !exists {
+			_, exists := seenKeys[k]
+			if !exists && k.ID != "" {
+				_, exists = seenIDCtx[k.IDContext()]
+			}
+			if !exists {
 				addRow(k, "", "", false, false)
 			}
 		}
@@ -238,29 +281,40 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 		}
 	}
 
+	isMultiLocale := fb != nil && fb.Topology == format.TopologyMultiLocale
 	for rIdx := range rows {
 		row := &rows[rIdx]
 		for _, locID := range trackedIDs {
-			var msgPtr *tsxml.MessageEntry
+			var entryPtr *format.NormalizedEntry
 			if li := idxByLocale[locID]; li != nil {
-				if m, ok := li.exact[row.Key]; ok {
-					msgPtr = m
-				} else if m, ok := li.ctxSrc[row.Key.ContextSource()]; ok {
-					msgPtr = m
+				if e, ok := li.exact[row.Key]; ok {
+					entryPtr = e
+				} else if row.Key.ID != "" {
+					if e, ok := li.idCtx[row.Key.IDContext()]; ok {
+						entryPtr = e
+					}
+				} else if e, ok := li.ctxSrc[row.Key.ContextSource()]; ok {
+					entryPtr = e
 				}
 			}
 
 			oldText := ""
 			status := domain.StatusMissing
+			if isMultiLocale && row.InTS {
+				// Multi-locale files (e.g. .xcstrings) treat absent localizations as empty gaps so they fill without AppendMissing.
+				status = domain.StatusEmpty
+			}
 			numerus := row.Numerus
-			if msgPtr != nil {
-				oldText = msgPtr.Translation
-				status = msgPtr.Status
-				if msgPtr.Numerus {
+			if entryPtr != nil {
+				oldText = entryPtr.Text
+				if oldText == "" && entryPtr.Numerus && len(entryPtr.PluralForms) > 0 {
+					oldText = domain.JoinNumerus(entryPtr.PluralForms)
+				}
+				status = entryPtr.Status
+				if entryPtr.Numerus {
 					numerus = true
 				}
 			}
-
 			cp := evalCellPlan(row.Key, oldText, status, numerus, locID, in.Catalog, in.WriteMode, in.UILang)
 			row.Cells[locID] = cp
 			applyCellToStats(plan, locID, cp, +1)
@@ -471,6 +525,40 @@ func BuildPatchesForFile(plan *MatrixPlan, tf *tsxml.TSFile, localeID string) []
 	return patches
 }
 
+// BuildFormatPatches extracts per-locale PatchOps for all enabled locales with mutating actions.
+func BuildFormatPatches(plan *MatrixPlan) map[string][]format.PatchOp {
+	if plan == nil {
+		return nil
+	}
+	out := make(map[string][]format.PatchOp)
+	for _, locID := range plan.EnabledIDs {
+		var ops []format.PatchOp
+		for _, row := range plan.Rows {
+			cp, ok := row.Cells[locID]
+			if !ok || !cp.Action.Mutates() {
+				continue
+			}
+			isNumerus := row.Numerus || cp.Numerus
+			var forms []string
+			if isNumerus {
+				forms = domain.SplitNumerus(cp.NewText)
+			}
+			ops = append(ops, format.PatchOp{
+				Key:         row.Key,
+				LocaleID:    locID,
+				NewText:     cp.NewText,
+				PluralForms: forms,
+				Action:      cp.Action,
+				Numerus:     isNumerus,
+			})
+		}
+		if len(ops) > 0 {
+			out[locID] = ops
+		}
+	}
+	return out
+}
+
 // BuildExportRows converts a MatrixPlan into sheet.ExportOptions filtered by scope.
 func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale.LocaleSpec) sheet.ExportOptions {
 	opts := sheet.ExportOptions{
@@ -482,8 +570,13 @@ func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale
 
 	opts.IncludeContext = plan.Summary.MultiContext
 	for _, r := range plan.Rows {
+		if r.Key.ID != "" {
+			opts.IncludeKeyID = true
+		}
 		if r.Key.Comment != "" {
 			opts.IncludeComment = true
+		}
+		if opts.IncludeKeyID && opts.IncludeComment {
 			break
 		}
 	}
@@ -530,6 +623,7 @@ func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale
 			}
 		}
 		opts.Rows = append(opts.Rows, sheet.ExportRow{
+			KeyID:   r.Key.ID,
 			Context: r.Key.Context,
 			Source:  r.Key.Source,
 			Comment: r.Key.Comment,

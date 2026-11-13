@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"locloom/internal/i18n"
 	"github.com/egoist/mygo/ui"
+
+	"locloom/internal/format"
+	"locloom/internal/i18n"
 )
 
 func (a *App) viewHeader(c *ui.Context) {
@@ -17,9 +19,13 @@ func (a *App) viewHeader(c *ui.Context) {
 		AlignItems(ui.Center).
 		Background(t.Surface).
 		Children(func() {
-			// Brand & loaded source badge
-			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Shrink(0).Children(func() {
-				ui.Text(c, "LocLoom").FontSize(15).FontWeight(700).TextColor(t.Text).SingleLine()
+			// Brand, format badge & loaded source summary (shrinkable so right utility buttons never clip at 1280px)
+			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
+				ui.Text(c, "LocLoom").FontSize(15).FontWeight(700).TextColor(t.Text).SingleLine().Shrink(0)
+
+				if a.bundle != nil {
+					ui.Badge(c, format.FormatLabel(a.bundle.Format, a.UILang())).Shrink(0)
+				}
 
 				sourceLabel := tr.SourceUnloaded
 				if a.bundle != nil {
@@ -45,16 +51,16 @@ func (a *App) viewHeader(c *ui.Context) {
 					}
 				}
 				badgeText := fmt.Sprintf(tr.HeaderSummaryFmt, sourceLabel, rows, pct*100)
-				ui.Badge(c, badgeText)
+				ui.Badge(c, badgeText).Shrink(1).MinWidth(0).Tooltip(badgeText)
 			})
 
 			// File & Excel Action Group
 			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Shrink(0).Children(func() {
 				if headerBtn(c, iconFolder, tr.BtnOpenDir, tr.TipOpenDir).Clicked() {
-					a.openTSDirAsync()
+					a.openDirAsync()
 				}
-				if headerBtn(c, iconZip, tr.BtnOpenZip, tr.TipOpenZip).Clicked() {
-					a.openZipAsync()
+				if headerBtn(c, iconZip, tr.BtnOpenFile, tr.TipOpenFile).Clicked() {
+					a.openFileAsync()
 				}
 				if headerBtn(c, iconImport, tr.BtnImportExcel, tr.TipImportExcel).Clicked() {
 					a.importExcelAsync()
@@ -63,7 +69,6 @@ func (a *App) viewHeader(c *ui.Context) {
 					a.showExportModal = true
 				}
 			})
-
 			ui.Spacer(c)
 
 			// Primary CTA Group
@@ -99,6 +104,14 @@ func (a *App) viewHeader(c *ui.Context) {
 					}
 				}
 
+				pendingCount := 0
+				if a.plan != nil {
+					pendingCount = a.plan.Summary.TotalChanges + a.plan.Summary.TotalAppends
+				}
+				writeLabel := tr.BtnWriteTS
+				if pendingCount > 0 {
+					writeLabel = fmt.Sprintf(tr.BtnWriteTSCountFmt, pendingCount)
+				}
 				writeBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(3)).
 					Disabled(a.translating || a.bundle == nil).
@@ -106,11 +119,11 @@ func (a *App) viewHeader(c *ui.Context) {
 				writeBtn.Children(func() {
 					ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, iconSave).Size(14, 14)
-						ui.Text(c, tr.BtnWriteTS).FontSize(13).SingleLine()
+						ui.Text(c, writeLabel).FontSize(13).SingleLine()
 					})
 				})
 				if writeBtn.Clicked() {
-					a.writeTSAsync()
+					a.writeBackAsync()
 				}
 			})
 
@@ -136,8 +149,10 @@ func (a *App) viewHeader(c *ui.Context) {
 				logLabel := fmt.Sprintf(tr.HeaderLogsFmt, len(a.logs))
 				if headerBtn(c, iconLogs, logLabel, tr.TipLogs).Clicked() {
 					a.bottomTab = 1
+					if a.matrixHeightPct > 72 {
+						a.matrixHeightPct = 72
+					}
 				}
-
 				helpBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(2)).
 					Label(tr.BtnHelp).

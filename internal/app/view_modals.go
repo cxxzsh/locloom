@@ -15,7 +15,7 @@ func (a *App) viewModals(c *ui.Context) {
 	tr := a.tr()
 	// Help Markdown Modal
 	ui.Modal(c, &a.showHelp, func() {
-		ui.Column(c).Width(720).MaxHeight(580).Gap(t.Space(2)).Children(func() {
+		ui.Column(c).Width(720).MaxWidth(720).MaxHeight(580).Gap(t.Space(2)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, tr.HelpModalTitle).FontSize(16).FontWeight(700).Grow(1)
 				if ui.Button(c, tr.BtnClose).Padding(t.Space(1), t.Space(2.5)).Clicked() {
@@ -35,7 +35,7 @@ func (a *App) viewModals(c *ui.Context) {
 
 	// Export Excel Modal
 	ui.Modal(c, &a.showExportModal, func() {
-		ui.Column(c).Width(460).Gap(t.Space(2.5)).Children(func() {
+		ui.Column(c).Width(480).MaxWidth(480).Gap(t.Space(2.5)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, tr.ExportModalTitle).FontSize(16).FontWeight(700).Grow(1)
 				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1), t.Space(2)).Clicked() {
@@ -57,8 +57,7 @@ func (a *App) viewModals(c *ui.Context) {
 			if idx < 0 || idx >= len(descriptions) {
 				idx = 0
 			}
-			ui.Text(c, descriptions[idx]).FontSize(12).TextColor(t.TextMuted)
-
+			ui.Text(c, descriptions[idx]).FontSize(12).TextColor(t.TextMuted).MinWidth(0)
 			ui.Row(c).Justify(ui.End).Gap(t.Space(2)).Children(func() {
 				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1.5), t.Space(3)).Clicked() {
 					a.showExportModal = false

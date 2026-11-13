@@ -13,11 +13,11 @@ import (
 	"github.com/egoist/mygo/transfer"
 
 	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/planner"
 	"locloom/internal/provider"
 	"locloom/internal/sheet"
-	"locloom/internal/tsxml"
 )
 
 func (a *App) enabledNonRefLocales() []locale.LocaleSpec {
@@ -41,7 +41,7 @@ func (a *App) enabledNonRefIDs() []string {
 
 func (a *App) rebuildPlan() {
 	in := planner.PlanInput{
-		Bundle:        a.bundle,
+		FormatBundle:  a.bundle,
 		ExtraEntries:  a.extraEntries,
 		DefaultCtx:    a.defaultCtx,
 		Catalog:       a.catalog,
@@ -124,7 +124,8 @@ func (a *App) refilterRows() {
 }
 
 func rowMatchesQuery(row *planner.MatrixRow, q, focusedLocale string) bool {
-	if strings.Contains(strings.ToLower(row.Key.Context), q) ||
+	if strings.Contains(strings.ToLower(row.Key.ID), q) ||
+		strings.Contains(strings.ToLower(row.Key.Context), q) ||
 		strings.Contains(strings.ToLower(row.Key.Source), q) ||
 		strings.Contains(strings.ToLower(row.Key.Comment), q) ||
 		strings.Contains(strings.ToLower(row.RefText), q) {
@@ -244,7 +245,7 @@ func (a *App) moveProvider(id string, delta int) {
 	a.scheduleConfigSave()
 }
 
-func (a *App) openTSDirAsync() {
+func (a *App) openDirAsync() {
 	win := a.win
 	defaultPath := a.cfg.LastTSPath
 	filePattern := a.cfg.FilePattern
@@ -261,7 +262,7 @@ func (a *App) openTSDirAsync() {
 		if err != nil || len(paths) == 0 {
 			return
 		}
-		bundle, err := tsxml.LoadBundle(paths[0], filePattern, locales)
+		bundle, err := format.Load(paths[0], filePattern, locales)
 		a.dispatchUI(func() {
 			if err != nil {
 				msg := fmt.Sprintf(a.tr().ErrLoadTSDirFmt, err)
@@ -274,7 +275,7 @@ func (a *App) openTSDirAsync() {
 	}()
 }
 
-func (a *App) openZipAsync() {
+func (a *App) openFileAsync() {
 	win := a.win
 	defaultPath := a.cfg.LastTSPath
 	filePattern := a.cfg.FilePattern
@@ -284,17 +285,23 @@ func (a *App) openZipAsync() {
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      win,
-			Title:       tr.DialogOpenZip,
+			Title:       tr.DialogOpenFile,
 			DefaultPath: defaultPath,
-			Filters:     []mygo.FileFilter{{Name: tr.FilterZipName, Extensions: []string{"zip"}}},
+			Multiple:    true,
+			Filters:     []mygo.FileFilter{{Name: tr.FilterLocFilesName, Extensions: format.SupportedExtensions()}},
 		})
 		if err != nil || len(paths) == 0 {
 			return
 		}
-		bundle, err := tsxml.LoadBundle(paths[0], filePattern, locales)
+		var bundle *format.Bundle
+		if len(paths) == 1 {
+			bundle, err = format.Load(paths[0], filePattern, locales)
+		} else {
+			bundle, err = format.LoadFiles(paths, filePattern, locales)
+		}
 		a.dispatchUI(func() {
 			if err != nil {
-				msg := fmt.Sprintf(a.tr().ErrLoadZipFmt, err)
+				msg := fmt.Sprintf(a.tr().ErrLoadFilesFmt, err)
 				a.setStatus(msg, true)
 				a.appendLog("error", "", "", msg)
 				return
@@ -376,20 +383,32 @@ func (a *App) exportExcelAsync(scope sheet.ExportScope) {
 }
 
 func (a *App) handleDroppedPaths(paths []string) {
+	var excelPaths []string
+	var locPaths []string
 	for _, p := range paths {
 		ext := strings.ToLower(filepath.Ext(p))
-		switch ext {
-		case ".xlsx":
-			_ = a.ImportFromExcelFile(p, "", true)
-		case ".zip":
-			_ = a.LoadTSTarget(p)
-		case ".ts":
-			_ = a.LoadTSTarget(filepath.Dir(p))
-		default:
-			if info, err := os.Stat(p); err == nil && info.IsDir() {
-				_ = a.LoadTSTarget(p)
-			}
+		if ext == ".xlsx" || ext == ".xls" {
+			excelPaths = append(excelPaths, p)
+		} else {
+			locPaths = append(locPaths, p)
 		}
+	}
+
+	for _, ep := range excelPaths {
+		_ = a.ImportFromExcelFile(ep, "", true)
+	}
+
+	if len(locPaths) == 1 {
+		_ = a.LoadProject(locPaths[0])
+	} else if len(locPaths) > 1 {
+		bundle, err := format.LoadFiles(locPaths, a.cfg.FilePattern, a.cfg.Locales)
+		if err != nil {
+			msg := fmt.Sprintf(a.tr().ErrLoadFilesFmt, err)
+			a.setStatus(msg, true)
+			a.appendLog("error", "", "", msg)
+			return
+		}
+		a.applyLoadedBundle(bundle)
 	}
 }
 
@@ -595,53 +614,40 @@ func (a *App) stopTranslation() {
 	}
 }
 
-func (a *App) writeTSAsync() {
+func (a *App) writeBackAsync() {
 	if a.bundle == nil || a.plan == nil {
 		a.setStatus(a.tr().ErrLoadTSFirst, true)
 		return
 	}
 	bundle := a.bundle
 	plan := a.plan
-	opts := tsxml.SaveOptions{
+	locales := slices.Clone(a.cfg.Locales)
+	filePattern := a.cfg.FilePattern
+	opts := format.SaveOptions{
 		CreateBackup: a.cfg.CreateBackup,
 	}
 
 	go func() {
-		patched := make(map[string][]byte)
+		patchesByLocale := planner.BuildFormatPatches(plan)
 		totalApplied := 0
 		totalAppended := 0
-
-		for _, tf := range bundle.Files {
-			if tf.LocaleID == "" {
-				continue
-			}
-			patches := planner.BuildPatchesForFile(plan, tf, tf.LocaleID)
-			if len(patches) == 0 {
-				continue
-			}
-			res, err := tsxml.ApplyPatches(tf, patches)
-			if err != nil {
-				a.dispatchUI(func() {
-					a.setStatus(fmt.Sprintf(a.tr().ErrBuildPatchFmt, tf.RelPath, err), true)
-					a.appendLog("error", "", tf.LocaleID, fmt.Sprintf(a.tr().LogBuildPatchErrFmt, err))
-				})
-				return
-			}
-			if res.Applied > 0 || res.Appended > 0 {
-				patched[tf.RelPath] = res.OutputRaw
-				totalApplied += res.Applied
-				totalAppended += res.Appended
+		for _, ops := range patchesByLocale {
+			for _, op := range ops {
+				if op.Action == domain.ActionAppendNew {
+					totalAppended++
+				} else if op.Action.Mutates() {
+					totalApplied++
+				}
 			}
 		}
-
-		if len(patched) == 0 {
+		if totalApplied == 0 && totalAppended == 0 {
 			a.dispatchUI(func() {
 				a.setStatus(a.tr().StatusNoTSChanges, false)
 			})
 			return
 		}
 
-		report, err := tsxml.SaveBundle(bundle, patched, opts)
+		report, err := format.Save(bundle, patchesByLocale, locales, filePattern, opts)
 		if err != nil {
 			a.dispatchUI(func() {
 				msg := fmt.Sprintf(a.tr().ErrWriteTSFmt, err)
@@ -651,8 +657,13 @@ func (a *App) writeTSAsync() {
 			return
 		}
 
-		// Reload the bundle cleanly from disk/output zip so offsets reflect the newly written XML.
-		reloaded, reloadErr := tsxml.LoadBundle(report.OutputPath, a.cfg.FilePattern, a.cfg.Locales)
+		var reloaded *format.Bundle
+		var reloadErr error
+		if !bundle.IsZip && report.OutputPath != "" {
+			if info, statErr := os.Stat(report.OutputPath); statErr == nil && (info.IsDir() || bundle.IsSingleFile) {
+				reloaded, reloadErr = format.Load(report.OutputPath, filePattern, locales)
+			}
+		}
 
 		a.dispatchUI(func() {
 			msg := fmt.Sprintf(a.tr().StatusWriteTSDoneFmt,
@@ -681,19 +692,26 @@ func (a *App) clearAllTranslations() {
 	a.setStatus(a.tr().StatusClearedAll, false)
 }
 
-func (a *App) scaffoldMissingTSFiles() {
+func (a *App) scaffoldMissingLocaleFiles() {
 	if a.bundle == nil {
 		a.setStatus(a.tr().ErrScaffoldLoadFirst, true)
 		return
 	}
+	ad, ok := format.GetAdapter(a.bundle.Format)
+	if !ok {
+		return
+	}
 	existing := make(map[string]bool)
-	var template *tsxml.TSFile
-	for _, tf := range a.bundle.Files {
-		if tf.LocaleID != "" {
-			existing[tf.LocaleID] = true
+	var template *format.DocRecord
+	for _, doc := range a.bundle.Docs {
+		if doc.LocaleID != "" {
+			existing[doc.LocaleID] = true
+		}
+		for _, l := range doc.Locales {
+			existing[l] = true
 		}
 		if template == nil {
-			template = tf
+			template = doc
 		}
 	}
 
@@ -703,21 +721,18 @@ func (a *App) scaffoldMissingTSFiles() {
 			continue
 		}
 		relPath := loc.FileName(a.cfg.FilePattern)
-		var newTF *tsxml.TSFile
-		var err error
-		if template != nil {
-			newTF, err = tsxml.CloneSkeleton(template, loc, relPath)
-		} else {
-			newTF = tsxml.NewEmptyTSFile(loc, relPath, "\n")
-		}
+		newDoc, err := ad.NewLocaleDoc(template, loc, relPath)
 		if err != nil {
 			a.appendLog("error", "", loc.ID, fmt.Sprintf(a.tr().LogScaffoldErrFmt, err))
 			continue
 		}
-		if !a.bundle.IsZip {
-			newTF.FilePath = filepath.Join(a.bundle.SourcePath, filepath.FromSlash(relPath))
+		if !a.bundle.IsZip && !a.bundle.IsSingleFile {
+			newDoc.FilePath = filepath.Join(a.bundle.SourcePath, filepath.FromSlash(relPath))
 		}
-		a.bundle.Files = append(a.bundle.Files, newTF)
+		a.bundle.Docs = append(a.bundle.Docs, newDoc)
+		if !slices.Contains(a.bundle.Locales, loc.ID) {
+			a.bundle.Locales = append(a.bundle.Locales, loc.ID)
+		}
 		created++
 	}
 
@@ -754,6 +769,25 @@ func (a *App) selectAllLocales(on bool) {
 			continue
 		}
 		a.cfg.Locales[i].Enabled = on
+	}
+	a.rebuildPlan()
+	a.scheduleConfigSave()
+}
+
+func (a *App) syncBundleLocales() {
+	if a.bundle == nil || len(a.bundle.Locales) == 0 {
+		return
+	}
+	inBundle := make(map[string]bool, len(a.bundle.Locales))
+	for _, id := range a.bundle.Locales {
+		inBundle[id] = true
+	}
+	for i := range a.cfg.Locales {
+		if a.cfg.Locales[i].IsRef {
+			a.cfg.Locales[i].Enabled = true
+			continue
+		}
+		a.cfg.Locales[i].Enabled = inBundle[a.cfg.Locales[i].ID]
 	}
 	a.rebuildPlan()
 	a.scheduleConfigSave()
@@ -848,4 +882,137 @@ func (a *App) copyLogsToClipboard() {
 	}
 	_ = mygo.Clipboard.Write(transfer.TextData(sb.String()))
 	a.setStatus(a.tr().StatusCopiedLogs, false)
+}
+
+func (a *App) jumpGap(delta int) {
+	if a.plan == nil || len(a.filteredRows) == 0 {
+		a.setStatus(a.tr().StatusNoGapsFound, false)
+		return
+	}
+	n := len(a.filteredRows)
+	start := a.selectedRow
+	if start < 0 || start >= n {
+		if delta > 0 {
+			start = -1
+		} else {
+			start = n
+		}
+	}
+	for step := 1; step <= n; step++ {
+		idx := ((start + delta*step) % n + n) % n
+		row := &a.plan.Rows[a.filteredRows[idx]]
+		if row.HasGap || row.HasWarning {
+			a.selectedRow = idx
+			a.syncEditorFromSelection()
+			return
+		}
+	}
+	a.setStatus(a.tr().StatusNoGapsFound, false)
+}
+
+func (a *App) copySourceToClipboard() {
+	_, row := a.currentMatrixRow()
+	if row == nil {
+		return
+	}
+	_ = mygo.Clipboard.Write(transfer.TextData(row.Key.Source))
+	a.setStatus(a.tr().StatusCopiedSrc, false)
+}
+
+func (a *App) useSourceAsTranslation() {
+	_, row := a.currentMatrixRow()
+	if row == nil || a.activeEditLocale == "" {
+		return
+	}
+	a.editBuf = row.Key.Source
+	a.onEditCell(a.editBuf)
+}
+
+func (a *App) translateCurrentRowAsync() {
+	if a.translating || a.translatingRow || a.plan == nil {
+		return
+	}
+	_, row := a.currentMatrixRow()
+	if row == nil || strings.TrimSpace(row.RefText) == "" {
+		return
+	}
+	cfg := a.cfg.Clone()
+	a.netPool.Update(cfg.Proxy)
+
+	ordered := provider.Ordered(cfg.ProviderOrder)
+	var activeIDs []string
+	for _, p := range ordered {
+		if slices.Contains(cfg.ActiveProviders, p.ID()) {
+			if err := p.Configure(cfg.ProviderConfigs[p.ID()], a.netPool); err != nil {
+				a.appendLog("warn", p.ID(), "", fmt.Sprintf(a.tr().LogConfigSkippedFmt, err))
+				continue
+			}
+			activeIDs = append(activeIDs, p.ID())
+		}
+	}
+	if len(activeIDs) == 0 {
+		a.setStatus(a.tr().ErrNoActiveProvider, true)
+		return
+	}
+
+	targetLocales := a.enabledNonRefLocales()
+	if len(targetLocales) == 0 {
+		a.setStatus(a.tr().ErrNoTargetLocale, true)
+		return
+	}
+
+	tasks := make(map[string][]provider.SourceItem)
+	refID := a.plan.RefLocaleID
+	for _, loc := range targetLocales {
+		cell, ok := row.Cells[loc.ID]
+		if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
+			continue
+		}
+		if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
+			continue
+		}
+		tasks[loc.ID] = []provider.SourceItem{{
+			ID:        row.Key.Canonical(),
+			Key:       row.Key,
+			RefLocale: refID,
+			RefText:   row.RefText,
+			Numerus:   row.Numerus,
+		}}
+	}
+	if len(tasks) == 0 {
+		a.setStatus(a.tr().StatusRowNoGaps, false)
+		return
+	}
+
+	a.translatingRow = true
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		opts := provider.DispatchOptions{
+			Registry:    provider.DefaultRegistry(),
+			Cache:       a.cache,
+			ProviderIDs: activeIDs,
+			Locales:     targetLocales,
+			Tasks:       tasks,
+			Concurrency: cfg.Concurrency,
+			BypassCache: cfg.BypassCache,
+		}
+		res := provider.RunConcurrent(ctx, opts)
+		a.dispatchUI(func() {
+			a.translatingRow = false
+			for _, cell := range res.Cells {
+				a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+			}
+			for _, ev := range res.Events {
+				a.logs = append(a.logs, ev)
+			}
+			a.trimLogs()
+			if len(res.Cells) > 0 {
+				a.editBoundLocale = ""
+				a.rebuildPlan()
+				a.syncEditorFromSelection()
+			}
+			a.setStatus(fmt.Sprintf(a.tr().StatusTranslateRowDoneFmt, len(res.Cells)), false)
+		})
+	}()
 }

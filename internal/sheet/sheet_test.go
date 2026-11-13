@@ -119,3 +119,78 @@ func TestGlossaryWorkbookWithoutContextColumn(t *testing.T) {
 		t.Fatalf("expected glossary fallback to find Ouvrir, got %+v ok=%v", entry, ok)
 	}
 }
+
+func TestExportLoadAndPopulateCatalogWithKeyID(t *testing.T) {
+	dir := t.TempDir()
+	xlsxPath := filepath.Join(dir, "id_keyed.xlsx")
+
+	opts := ExportOptions{
+		IncludeKeyID:   true,
+		IncludeContext: true,
+		IncludeComment: false,
+		SheetName:      "Strings",
+		Columns: []ExportColumn{
+			{LocaleID: "ja", Header: "ja"},
+			{LocaleID: "fr", Header: "fr"},
+		},
+		Rows: []ExportRow{
+			{
+				KeyID:   "btn.save",
+				Context: "MainWindow",
+				Source:  "Save",
+				Cells: map[string]ExportCell{
+					"ja": {Text: "保存", Status: domain.StatusFinished},
+					"fr": {Text: "Enregistrer", Status: domain.StatusFinished},
+				},
+			},
+			{
+				KeyID:   "btn.cancel",
+				Context: "MainWindow",
+				Source:  "Cancel",
+				Cells: map[string]ExportCell{
+					"ja": {Text: "キャンセル", Status: domain.StatusFinished},
+				},
+			},
+		},
+	}
+
+	if err := ExportExcel(xlsxPath, opts); err != nil {
+		t.Fatalf("ExportExcel failed: %v", err)
+	}
+
+	wb, err := LoadExcel(xlsxPath, "Strings", locale.DefaultLocales(), true)
+	if err != nil {
+		t.Fatalf("LoadExcel failed: %v", err)
+	}
+	if !wb.HasKeyIDColumn {
+		t.Fatal("expected HasKeyIDColumn = true")
+	}
+	if len(wb.Rows) != 2 || wb.Rows[0].KeyID != "btn.save" || wb.Rows[1].KeyID != "btn.cancel" {
+		t.Fatalf("unexpected rows: %+v", wb.Rows)
+	}
+
+	cat := domain.NewCatalog()
+	imported := PopulateCatalog(wb, cat, true)
+	if imported != 3 {
+		t.Fatalf("imported = %d, want 3", imported)
+	}
+
+	// Lookup by IDContext even if Source changed slightly.
+	entry, ok := cat.Lookup("ja_JP", domain.EntryKey{ID: "btn.save", Context: "MainWindow", Source: "Save changes"})
+	if !ok || entry.Text != "保存" {
+		t.Fatalf("expected IDContext lookup to return 保存, got %+v ok=%v", entry, ok)
+	}
+}
+
+func TestIsKeyIDHeaderVariants(t *testing.T) {
+	for _, h := range []string{"Key", "ID", "Key ID", "String ID", "msgid_key", "键", "键名", "  key id "} {
+		if !isKeyIDHeader(h) {
+			t.Fatalf("expected isKeyIDHeader(%q) = true", h)
+		}
+	}
+	for _, h := range []string{"Source", "Context", "ja_JP", "en"} {
+		if isKeyIDHeader(h) {
+			t.Fatalf("expected isKeyIDHeader(%q) = false", h)
+		}
+	}
+}

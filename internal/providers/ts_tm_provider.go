@@ -4,16 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/netpool"
-	"locloom/internal/platform"
 	"locloom/internal/provider"
-	"locloom/internal/tsxml"
 )
 
 type tmCacheKey struct {
@@ -28,30 +26,30 @@ type tsTMProvider struct {
 
 	loadMu       sync.Mutex
 	cacheKey     tmCacheKey
-	cachedBundle *tsxml.Bundle
+	cachedBundle *format.Bundle
 }
 
-// NewTSTMProvider creates the built-in local Qt .ts / .zip translation memory provider.
+// NewTSTMProvider creates the built-in local multi-format translation memory provider.
 func NewTSTMProvider() provider.Provider {
 	return &tsTMProvider{}
 }
 
 func (p *tsTMProvider) ID() string   { return domain.OriginTM }
-func (p *tsTMProvider) Name() string { return "本地 .ts 翻译记忆库 (TM)" }
+func (p *tsTMProvider) Name() string { return "本地翻译记忆库 (多格式 TM)" }
 func (p *tsTMProvider) Description() string {
-	return "从历史 .ts 目录、.zip 归档或单个 .ts 文件提取已完成译文（多语言并发时仅解析一次）"
+	return "从历史翻译目录、.zip 归档或单文件（.ts/.po/.xcstrings/.json/.arb/.xml/.resx/.xliff）提取已完成译文（多语言并发时仅解析一次）"
 }
 
 func (p *tsTMProvider) LocalizedName(lang string) string {
 	if lang == "en" {
-		return "Local .ts Translation Memory (TM)"
+		return "Local Translation Memory (Multi-Format TM)"
 	}
 	return p.Name()
 }
 
 func (p *tsTMProvider) LocalizedDescription(lang string) string {
 	if lang == "en" {
-		return "Extract finished translations from historical .ts folders, .zip archives, or single .ts files (parsed once across concurrent locales)"
+		return "Extract finished translations from historical localization folders, .zip archives, or single files (.ts/.po/.xcstrings/.json/.arb/.xml/.resx/.xliff) (parsed once across concurrent locales)"
 	}
 	return p.Description()
 }
@@ -61,10 +59,10 @@ func (p *tsTMProvider) ConfigSchema() []provider.ConfigField {
 	return []provider.ConfigField{
 		{
 			Key:         "tm_path",
-			Label:       "参考 .ts / .zip 路径",
+			Label:       "参考翻译路径 (目录 / .zip / 单文件)",
 			Type:        provider.FieldFile,
-			Placeholder: "选择历史 .ts 翻译目录、.zip 归档或单个 .ts 文件",
-			Extensions:  []string{"zip", "ts"},
+			Placeholder: "选择历史翻译目录、.zip 归档或支持的本地化文件",
+			Extensions:  format.SupportedExtensions(),
 		},
 	}
 }
@@ -76,10 +74,10 @@ func (p *tsTMProvider) LocalizedConfigSchema(lang string) []provider.ConfigField
 	return []provider.ConfigField{
 		{
 			Key:         "tm_path",
-			Label:       "Reference .ts / .zip Path",
+			Label:       "Reference Localization Path (Folder / .zip / File)",
 			Type:        provider.FieldFile,
-			Placeholder: "Select historical .ts folder, .zip archive, or single .ts file",
-			Extensions:  []string{"zip", "ts"},
+			Placeholder: "Select historical localization folder, .zip archive, or supported file",
+			Extensions:  format.SupportedExtensions(),
 		},
 	}
 }
@@ -91,13 +89,13 @@ func (p *tsTMProvider) Configure(values map[string]string, _ *netpool.Pool) erro
 	return nil
 }
 
-func (p *tsTMProvider) loadBundleCached() (*tsxml.Bundle, error) {
+func (p *tsTMProvider) loadBundleCached() (*format.Bundle, error) {
 	p.mu.RLock()
 	tmPath := p.tmPath
 	p.mu.RUnlock()
 
 	if tmPath == "" {
-		return nil, fmt.Errorf("translation memory (.ts/.zip) path is not configured")
+		return nil, fmt.Errorf("translation memory path is not configured")
 	}
 
 	info, err := os.Stat(tmPath)
@@ -117,30 +115,9 @@ func (p *tsTMProvider) loadBundleCached() (*tsxml.Bundle, error) {
 		return p.cachedBundle, nil
 	}
 
-	var bundle *tsxml.Bundle
-	if !info.IsDir() && strings.EqualFold(filepath.Ext(tmPath), ".ts") {
-		raw, rerr := platform.ReadFileShared(tmPath)
-		if rerr != nil {
-			return nil, rerr
-		}
-		tf, perr := tsxml.ParseBytes(filepath.Base(tmPath), raw)
-		if perr != nil {
-			return nil, perr
-		}
-		tf.FilePath = tmPath
-		if tf.LocaleID == "" {
-			tf.LocaleID = locale.StemLocaleID(filepath.Base(tmPath), "{id}.ts", locale.DefaultLocales())
-		}
-		bundle = &tsxml.Bundle{
-			SourcePath: tmPath,
-			Files:      []*tsxml.TSFile{tf},
-		}
-	} else {
-		var lerr error
-		bundle, lerr = tsxml.LoadBundle(tmPath, "{id}.ts", locale.DefaultLocales())
-		if lerr != nil {
-			return nil, lerr
-		}
+	bundle, err := format.Load(tmPath, "{id}.ts", locale.DefaultLocales())
+	if err != nil {
+		return nil, err
 	}
 
 	p.cacheKey = key
@@ -153,50 +130,98 @@ func (p *tsTMProvider) Check(_ context.Context) error {
 	return err
 }
 
+func matchesTMLocale(loc string, target locale.LocaleSpec) bool {
+	if loc == "" {
+		return false
+	}
+	if loc == target.ID || strings.EqualFold(loc, target.ID) {
+		return true
+	}
+	if target.EngineCode != "" && strings.EqualFold(loc, target.EngineCode) {
+		return true
+	}
+	normLoc := strings.ReplaceAll(strings.ToLower(loc), "-", "_")
+	normTarget := strings.ReplaceAll(strings.ToLower(target.ID), "-", "_")
+	if normLoc == normTarget {
+		return true
+	}
+	known := locale.DefaultLocales()
+	canonLoc, _, ok1 := locale.ParseHeaderLocale(loc, known)
+	canonTarget, _, ok2 := locale.ParseHeaderLocale(target.ID, known)
+	if ok1 && canonLoc == target.ID {
+		return true
+	}
+	if ok2 && loc == canonTarget {
+		return true
+	}
+	return ok1 && ok2 && canonLoc == canonTarget
+}
+
 func (p *tsTMProvider) Translate(_ context.Context, req provider.Request) (map[string]string, error) {
 	bundle, err := p.loadBundleCached()
 	if err != nil {
 		return nil, err
 	}
 
-	targetID := req.TargetLocale.ID
-	var matchedFile *tsxml.TSFile
-	for _, tf := range bundle.Files {
-		if tf.LocaleID == targetID ||
-			strings.EqualFold(tf.Language, targetID) ||
-			strings.EqualFold(tf.FileName, targetID+".ts") {
-			matchedFile = tf
-			break
-		}
-	}
-	if matchedFile == nil {
-		return map[string]string{}, nil
-	}
-
 	type ctxSrc struct {
 		ctx string
 		src string
 	}
+	byIDCtx := make(map[domain.EntryKey]string)
 	byCtxSrc := make(map[ctxSrc]string)
 	bySrc := make(map[string]string)
 
-	for _, ctxBlock := range matchedFile.Contexts {
-		for _, msg := range ctxBlock.Messages {
-			if msg.Status != domain.StatusFinished || msg.Translation == "" {
+	for _, doc := range bundle.Docs {
+		if doc == nil {
+			continue
+		}
+		if bundle.Topology == format.TopologyPerLocale && doc.LocaleID != "" && !matchesTMLocale(doc.LocaleID, req.TargetLocale) {
+			continue
+		}
+		for _, e := range doc.Entries {
+			entryLoc := e.LocaleID
+			if entryLoc == "" {
+				entryLoc = doc.LocaleID
+			}
+			if !matchesTMLocale(entryLoc, req.TargetLocale) {
 				continue
 			}
-			cs := ctxSrc{ctx: ctxBlock.Name, src: msg.Source}
-			if _, exists := byCtxSrc[cs]; !exists {
-				byCtxSrc[cs] = msg.Translation
+			if e.Status != domain.StatusFinished {
+				continue
 			}
-			if _, exists := bySrc[msg.Source]; !exists {
-				bySrc[msg.Source] = msg.Translation
+			text := e.Text
+			if text == "" && e.Numerus && len(e.PluralForms) > 0 {
+				text = domain.JoinNumerus(e.PluralForms)
+			}
+			if text == "" {
+				continue
+			}
+			if e.Key.ID != "" {
+				ik := e.Key.IDContext()
+				if _, exists := byIDCtx[ik]; !exists {
+					byIDCtx[ik] = text
+				}
+			}
+			if e.Key.Source != "" {
+				cs := ctxSrc{ctx: e.Key.Context, src: e.Key.Source}
+				if _, exists := byCtxSrc[cs]; !exists {
+					byCtxSrc[cs] = text
+				}
+				if _, exists := bySrc[e.Key.Source]; !exists {
+					bySrc[e.Key.Source] = text
+				}
 			}
 		}
 	}
 
 	out := make(map[string]string, len(req.Items))
 	for _, item := range req.Items {
+		if item.Key.ID != "" {
+			if v, ok := byIDCtx[item.Key.IDContext()]; ok && v != "" {
+				out[item.ID] = v
+				continue
+			}
+		}
 		if v, ok := byCtxSrc[ctxSrc{ctx: item.Key.Context, src: item.Key.Source}]; ok && v != "" {
 			out[item.ID] = v
 			continue

@@ -131,3 +131,43 @@ func TestValidateTranslationLang(t *testing.T) {
 		})
 	}
 }
+
+func TestIDKeyCatalogAndMultiFormatValidation(t *testing.T) {
+	cat := NewCatalog()
+	kBtnA := EntryKey{ID: "menu.open", Context: "common", Source: "Open"}
+	kBtnB := EntryKey{ID: "state.open", Context: "common", Source: "Open"}
+
+	if kBtnA.Canonical() == kBtnB.Canonical() {
+		t.Fatalf("distinct IDs must produce distinct Canonical keys")
+	}
+
+	cat.Set("ja_JP", EntryKey{ID: "menu.open", Context: "common"}, "開く", OriginManual)
+	cat.Set("ja_JP", EntryKey{ID: "state.open"}, "接続中", OriginXLSX)
+
+	if got, ok := cat.Lookup("ja_JP", kBtnA); !ok || got.Text != "開く" {
+		t.Fatalf("expected ID+Context lookup 開く, got %+v (ok=%v)", got, ok)
+	}
+	if got, ok := cat.Lookup("ja_JP", kBtnB); !ok || got.Text != "接続中" {
+		t.Fatalf("expected ID-only lookup 接続中, got %+v (ok=%v)", got, ok)
+	}
+
+	// Multi-format placeholders: printf, Apple, i18next, .NET/ARB, Rails, XLIFF
+	validPairs := [][2]string{
+		{"Hello {{user}}, you have {count} messages", "こんにちは {{user}}、{count} 件のメッセージがあります"},
+		{"Downloaded %1$d of %2$s (%@)", "%2$s 中 %1$d をダウンロード (%@)"},
+		{"Total: {0:N2} for %{name} <x id=\"1\"/>", "合計: %{name} は {0:N2} <x id=\"1\"/>"},
+		{"Terms & Privacy <v2>", "利用規約 <v2>"},
+	}
+	for _, pair := range validPairs {
+		if w := ValidateTranslationLang(pair[0], pair[1], false, "en"); len(w) != 0 {
+			t.Fatalf("unexpected warning for %q -> %q: %v", pair[0], pair[1], w)
+		}
+	}
+
+	if w := ValidateTranslationLang("Hello {{user}}!", "こんにちは!", false, "en"); len(w) == 0 {
+		t.Fatal("expected warning when {{user}} is missing")
+	}
+	if w := ValidateTranslationLang("Count: {0:N2}", "Count: 100", false, "en"); len(w) == 0 {
+		t.Fatal("expected warning when {0:N2} is missing")
+	}
+}

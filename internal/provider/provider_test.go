@@ -96,6 +96,19 @@ func TestMaskAndRestorePlaceholders(t *testing.T) {
 	}
 }
 
+func TestMaskMultiFormatPlaceholders(t *testing.T) {
+	src := `Hello {{user_name}}, file %1$s has {count} items (%@) <x id="1"/>`
+	m := MaskPlaceholders(src)
+	if len(m.Tokens) != 5 {
+		t.Fatalf("expected 5 multi-format tokens, got %d: %v", len(m.Tokens), m.Tokens)
+	}
+	restored := RestorePlaceholders(`こんにちは [[0]]、ファイル [[1]] には [[2]] 個 ([[3]]) [[4]]`, m)
+	want := `こんにちは {{user_name}}、ファイル %1$s には {count} 個 (%@) <x id="1"/>`
+	if restored != want {
+		t.Fatalf("restored = %q, want %q", restored, want)
+	}
+}
+
 func TestCachePersistenceAndFallback(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "translation-cache.json")
 	c := NewCache(path)

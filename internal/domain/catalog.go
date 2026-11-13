@@ -44,7 +44,7 @@ func (c *Catalog) Clone() *Catalog {
 // Set stores or updates a translation for localeID and key.
 // Empty text removes the entry rather than storing blank overrides.
 func (c *Catalog) Set(localeID string, key EntryKey, text, origin string) {
-	if localeID == "" || key.Source == "" {
+	if localeID == "" || (key.Source == "" && key.ID == "") {
 		return
 	}
 	if text == "" {
@@ -72,8 +72,8 @@ func (c *Catalog) Delete(localeID string, key EntryKey) {
 	}
 }
 
-// LookupExact checks exact (Context, Source, Comment) and, when Comment != "",
-// falls back to (Context, Source, ""), without crossing into other contexts.
+// LookupExact checks exact key, then (ID, Context, Source, ""), and for ID-keyed entries
+// (ID, Context, "", "") and (ID, "", "", ""), without crossing into unrelated contexts.
 func (c *Catalog) LookupExact(localeID string, key EntryKey) (TranslationEntry, bool) {
 	if c == nil {
 		return TranslationEntry{}, false
@@ -90,16 +90,32 @@ func (c *Catalog) LookupExact(localeID string, key EntryKey) (TranslationEntry, 
 			return v, true
 		}
 	}
+	if key.ID != "" {
+		if v, found := m[key.IDContext()]; found {
+			return v, true
+		}
+		if key.Context != "" {
+			if v, found := m[EntryKey{ID: key.ID}]; found {
+				return v, true
+			}
+		}
+		// Match ID+Context even when stored alongside an earlier Source string.
+		for k, v := range m {
+			if k.ID == key.ID && k.Context == key.Context {
+				return v, true
+			}
+		}
+	}
 	return TranslationEntry{}, false
 }
 
 // Lookup resolves a translation for row key, falling back to context-free ("", Source, "")
-// glossary entries if no context-specific translation is present.
+// glossary entries if no exact/ID/context-scoped translation is present.
 func (c *Catalog) Lookup(localeID string, key EntryKey) (TranslationEntry, bool) {
 	if v, ok := c.LookupExact(localeID, key); ok {
 		return v, true
 	}
-	if key.Context != "" || key.Comment != "" {
+	if key.Source != "" && (key.ID != "" || key.Context != "" || key.Comment != "") {
 		if m, ok := c.byLocale[localeID]; ok {
 			if v, found := m[key.SourceOnly()]; found {
 				return v, true

@@ -79,17 +79,18 @@ type Catalog struct {
 	HeaderSummaryFmt  string
 	BtnOpenDir        string
 	TipOpenDir        string
-	BtnOpenZip        string
-	TipOpenZip        string
-	BtnImportExcel    string
-	TipImportExcel    string
-	BtnExportExcel    string
-	TipExportExcel    string
-	StatusTranslating string
-	BtnStopTranslate  string
-	BtnStartTranslate string
-	BtnWriteTS        string
-	TipWriteTS        string
+	BtnOpenFile        string
+	TipOpenFile        string
+	BtnImportExcel     string
+	TipImportExcel     string
+	BtnExportExcel     string
+	TipExportExcel     string
+	StatusTranslating  string
+	BtnStopTranslate   string
+	BtnStartTranslate  string
+	BtnWriteTS         string
+	BtnWriteTSCountFmt string
+	TipWriteTS         string
 	ThemeSystem       string
 	ThemeLight        string
 	ThemeDark         string
@@ -137,23 +138,28 @@ type Catalog struct {
 	BtnBrowse               string
 	BtnTestConn             string
 	BtnDiscoverModels       string
+	BtnShowSecret           string
+	BtnHideSecret           string
 
 	// Sidebar: Locales tab
-	SectionPresetProfiles string
-	BtnSelectAll          string
-	BtnDeselectAll        string
-	LabelFilePattern      string
-	BtnScaffoldTS         string
-	SectionLocaleListFmt  string
-	BtnSetRef             string
-	BtnIsRef              string
-	TipRemoveLocale       string
-	SectionAddLocale      string
-	PlaceholderLocaleID   string
-	PlaceholderLocaleName string
-	PlaceholderEngineCode string
-	BtnAddLocale          string
-
+	SectionPresetProfiles   string
+	BtnSelectAll            string
+	BtnDeselectAll          string
+	BtnSyncBundleLocales    string
+	TipSyncBundleLocales    string
+	PlaceholderLocaleSearch string
+	BadgeInBundle           string
+	LabelFilePattern        string
+	BtnScaffoldTS           string
+	SectionLocaleListFmt    string
+	BtnSetRef               string
+	BtnIsRef                string
+	TipRemoveLocale         string
+	SectionAddLocale        string
+	PlaceholderLocaleID     string
+	PlaceholderLocaleName   string
+	PlaceholderEngineCode   string
+	BtnAddLocale            string
 	// Matrix toolbar & empty states
 	FilterAll         string
 	FilterGaps        string
@@ -171,6 +177,7 @@ type Catalog struct {
 
 	// Matrix columns, badges, and origins
 	ColContext      string
+	ColKeyID        string
 	ColSource       string
 	ColSourceShort  string
 	ColRef          string
@@ -203,6 +210,7 @@ type Catalog struct {
 	TabInspector        string
 	TabLogsFmt          string
 	InspectorEmptyHint  string
+	LabelKeyIDPrefix    string
 	LabelContextPrefix  string
 	LabelLocationPrefix string
 	LabelCommentPrefix  string
@@ -212,6 +220,14 @@ type Catalog struct {
 	LabelRef            string
 	LabelNone           string
 	LabelEditTargetFmt  string
+	BtnTranslateRow     string
+	TipTranslateRow     string
+	BtnPrevGap          string
+	TipPrevGap          string
+	BtnNextGap          string
+	TipNextGap          string
+	BtnCopySrc          string
+	BtnUseSrc           string
 	BtnResetCell        string
 	HintNumerus         string
 	PlaceholderEditor   string
@@ -239,9 +255,9 @@ type Catalog struct {
 	// Actions, native dialogs & background tasks
 	DialogOpenTSDir            string
 	ErrLoadTSDirFmt            string
-	DialogOpenZip              string
-	FilterZipName              string
-	ErrLoadZipFmt              string
+	DialogOpenFile             string
+	FilterLocFilesName         string
+	ErrLoadFilesFmt            string
 	DialogImportExcel          string
 	FilterExcelName            string
 	DialogExportExcel          string
@@ -276,17 +292,21 @@ type Catalog struct {
 	ErrEnterLocaleID           string
 	ErrLocaleExistsFmt         string
 	StatusCopiedLogs           string
+	StatusCopiedSrc            string
+	StatusTranslateRowDoneFmt  string
+	StatusNoGapsFound          string
+	StatusRowNoGaps            string
 }
 
 var zhCatalog = Catalog{
 	WindowTitle:       "LocLoom — 跨平台本地化工作台",
 	BtnClose:          "关闭",
 	BtnCancel:         "取消",
-	DropHint:          "松开即可加载 .ts 目录 / .zip 压缩包 / .xlsx 词表",
-	LogWorkbenchReady: "工作台已就绪，可拖拽 .ts 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。",
+	DropHint:          "松开即可加载本地化文件 / 目录 / .zip / .xlsx 词表",
+	LogWorkbenchReady: "工作台已就绪，可拖拽本地化文件 / 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。",
 
-	ErrLoadTSFmt:               "加载 .ts 失败: %v",
-	StatusLoadedBundleFmt:      "已加载 %s（%d 个 .ts 文件，%d 条词条）",
+	ErrLoadTSFmt:               "加载本地化项目失败: %v",
+	StatusLoadedBundleFmt:      "已加载 %s（%d 个文件，%d 条词条）",
 	StatusDiscoveredLocalesFmt: "，自动发现新语种: %v",
 	ErrImportExcelFmt:          "导入 Excel 失败: %v",
 	StatusImportedExcelFmt:     "已导入 %s（工作表 %s，%d 条译文）",
@@ -297,9 +317,9 @@ var zhCatalog = Catalog{
 	SourceUnloaded:    "未加载项目",
 	HeaderSummaryFmt:  "%s · %d 条 · %.0f%%",
 	BtnOpenDir:        "打开目录",
-	TipOpenDir:        "打开 Qt .ts 目录 (Cmd/Ctrl+O)",
-	BtnOpenZip:        "打开 ZIP",
-	TipOpenZip:        "打开包含 .ts 的 ZIP 压缩包",
+	TipOpenDir:        "打开本地化目录 (Cmd/Ctrl+O)",
+	BtnOpenFile:       "打开文件",
+	TipOpenFile:       "打开本地化文件（.ts/.po/.json/.arb/.xcstrings/strings.xml/.resx/.xliff/.zip）",
 	BtnImportExcel:    "导入 Excel",
 	TipImportExcel:    "导入 .xlsx 翻译词表",
 	BtnExportExcel:    "导出 Excel",
@@ -307,9 +327,10 @@ var zhCatalog = Catalog{
 	StatusTranslating: "正在并发翻译",
 	BtnStopTranslate:  "停止翻译",
 	BtnStartTranslate: "开始并发翻译",
-	BtnWriteTS:        "写回 .ts",
-	TipWriteTS:        "无损回填写回 .ts 文件 (Cmd/Ctrl+S)",
-	ThemeSystem:       "系统",
+	BtnWriteTS:         "写回保存",
+	BtnWriteTSCountFmt: "写回保存 (%d)",
+	TipWriteTS:         "将待写回变更原位无损保存到文件或 ZIP (Cmd/Ctrl+S)",
+	ThemeSystem:       "跟随系统",
 	ThemeLight:        "浅色",
 	ThemeDark:         "深色",
 	TipTheme:          "切换外观主题 (跟随系统 / 浅色 / 深色)",
@@ -353,12 +374,18 @@ var zhCatalog = Catalog{
 	BtnBrowse:               "浏览",
 	BtnTestConn:             "连通测试",
 	BtnDiscoverModels:       "发现模型",
+	BtnShowSecret:           "显示",
+	BtnHideSecret:           "隐藏",
 
-	SectionPresetProfiles: "语种预设组合",
-	BtnSelectAll:          "全选",
-	BtnDeselectAll:        "全不选",
-	LabelFilePattern:      "文件命名模式",
-	BtnScaffoldTS:         "补全缺失语种骨架 .ts",
+	SectionPresetProfiles:   "语种预设组合",
+	BtnSelectAll:            "全选",
+	BtnDeselectAll:          "全不选",
+	BtnSyncBundleLocales:    "仅选项目语种",
+	TipSyncBundleLocales:    "仅启用当前已加载项目中实际包含的目标语种",
+	PlaceholderLocaleSearch: "搜索语种 ID 或名称...",
+	BadgeInBundle:           "项目内",
+	LabelFilePattern:        "文件命名模式",
+	BtnScaffoldTS:           "补全缺失语种骨架文件",
 	SectionLocaleListFmt:  "语种列表 (%d)",
 	BtnSetRef:             "设为参考",
 	BtnIsRef:              "★ 参考",
@@ -380,10 +407,11 @@ var zhCatalog = Catalog{
 	MenuClearMachine:  "清空机翻结果",
 	MenuClearAll:      "清空全部暂存译文",
 	EmptyNoDataTitle:  "尚未加载词条数据",
-	EmptyNoDataHint:   "请点击顶部「打开目录」/「打开 ZIP」/「导入 Excel」，或直接将文件拖拽到窗口",
+	EmptyNoDataHint:   "请点击顶部「打开目录」/「打开文件」/「导入 Excel」，或直接将文件拖拽到窗口",
 	EmptyNoMatch:      "当前筛选条件下没有匹配词条",
 
 	ColContext:      "上下文",
+	ColKeyID:        "键名 / 上下文",
 	ColSource:       "英文原文 (Source)",
 	ColSourceShort:  "英文原文",
 	ColRef:          "参考译文",
@@ -404,7 +432,7 @@ var zhCatalog = Catalog{
 	TagFill:         "[补]",
 	TagOver:         "[改]",
 	TagAdd:          "[新]",
-	OriginTS:        "TS",
+	OriginTS:        "源文件",
 	OriginXLSX:      "Excel",
 	OriginTM:        "语料库",
 	OriginGoogle:    "Google",
@@ -412,9 +440,10 @@ var zhCatalog = Catalog{
 	OriginManual:    "手工",
 	OriginCache:     "缓存",
 
-	TabInspector:        "词条精修与 XML 对比",
+	TabInspector:        "词条精修与格式对比",
 	TabLogsFmt:          "运行日志与诊断 (%d)",
-	InspectorEmptyHint:  "在上方表格中点击任意词条行，即可在此处精修译文并预览 XML 回填差异",
+	InspectorEmptyHint:  "在上方表格中点击任意词条行，即可在此处精修译文并预览格式回填差异",
+	LabelKeyIDPrefix:    "键名: ",
 	LabelContextPrefix:  "上下文: ",
 	LabelLocationPrefix: "位置: ",
 	LabelCommentPrefix:  "注释: ",
@@ -424,11 +453,19 @@ var zhCatalog = Catalog{
 	LabelRef:            "参考译文",
 	LabelNone:           "(无)",
 	LabelEditTargetFmt:  "译文编辑 (%s)",
+	BtnTranslateRow:     "⚡ 翻译此条",
+	TipTranslateRow:     "使用当前激活的翻译引擎即时翻译此行",
+	BtnPrevGap:          "◀ 上一待办",
+	TipPrevGap:          "跳转到上一个缺口或告警行 (Alt+Up)",
+	BtnNextGap:          "下一待办 ▶",
+	TipNextGap:          "跳转到下一个缺口或告警行 (Alt+Down / F3)",
+	BtnCopySrc:          "复制原文",
+	BtnUseSrc:           "填入原文",
 	BtnResetCell:        "重置该格",
 	HintNumerus:         "提示：此词条包含复数形式，请使用单独一行 --- 分隔各个复数译文。",
 	PlaceholderEditor:   "输入译文（实时保存，O(1) 刷新单元格）...",
-	LabelBeforeXML:      "修改前 XML (Before)",
-	LabelAfterXML:       "回填后 XML (After)",
+	LabelBeforeXML:      "修改前片段 (Before)",
+	LabelAfterXML:       "回填后片段 (After)",
 	LogCountFmt:         "共 %d 条运行日志",
 	BtnCopyLogs:         "复制日志",
 	BtnClearLogs:        "清空日志",
@@ -447,11 +484,11 @@ var zhCatalog = Catalog{
 	ExportDescWarnings:  "仅导出存在 Qt 占位符缺失、多余或结构告警的词条。",
 	BtnExportConfirm:    "选择路径并导出...",
 
-	DialogOpenTSDir:           "选择包含 Qt .ts 文件的目录",
-	ErrLoadTSDirFmt:           "加载 .ts 目录失败: %v",
-	DialogOpenZip:             "选择包含 .ts 的 ZIP 压缩包",
-	FilterZipName:             "ZIP 压缩包",
-	ErrLoadZipFmt:             "加载 ZIP 失败: %v",
+	DialogOpenTSDir:           "选择本地化项目目录",
+	ErrLoadTSDirFmt:           "加载目录失败: %v",
+	DialogOpenFile:            "选择本地化文件或 ZIP 压缩包",
+	FilterLocFilesName:        "本地化文件与 ZIP",
+	ErrLoadFilesFmt:           "加载文件失败: %v",
 	DialogImportExcel:         "导入 Excel 翻译词表 (.xlsx)",
 	FilterExcelName:           "Excel 工作簿",
 	DialogExportExcel:         "导出 Excel 词条表",
@@ -471,33 +508,37 @@ var zhCatalog = Catalog{
 	LogStartTranslateFmt:      "开始并发翻译：%d 个语种，共 %d 条待译词条（并发度 %d）",
 	StatusTranslateDoneFmt:    "并发翻译完成：新增 %d 条译文，耗时 %s",
 	LogStoppingTranslate:      "正在取消并发翻译任务...",
-	ErrLoadTSFirst:            "请先加载 Qt .ts 目录或 .zip 压缩包",
+	ErrLoadTSFirst:            "请先加载本地化文件、目录或 .zip 压缩包",
 	ErrBuildPatchFmt:          "生成补丁失败 (%s): %v",
 	LogBuildPatchErrFmt:       "生成补丁失败: %v",
-	StatusNoTSChanges:         "没有需要写回 .ts 文件的变更",
-	ErrWriteTSFmt:             "写回 .ts 失败: %v",
+	StatusNoTSChanges:         "没有需要写回的变更",
+	ErrWriteTSFmt:             "写回保存失败: %v",
 	StatusWriteTSDoneFmt:      "写回完成：%d 个文件（更新 %d 条，追加 %d 条）-> %s",
 	StatusClearedMachineFmt:   "已清空 %d 条机翻暂存译文",
 	StatusClearedAll:          "已清空全部工作区暂存译文",
-	ErrScaffoldLoadFirst:      "请先加载 .ts 目录或 .zip 再补全骨架文件",
+	ErrScaffoldLoadFirst:      "请先加载项目再补全骨架文件",
 	LogScaffoldErrFmt:         "生成骨架失败: %v",
-	StatusAllLocalesHaveTS:    "所有已启用语种均已有对应的 .ts 文件",
-	StatusScaffoldDoneFmt:     "已为 %d 个缺失语种生成空白 .ts 骨架（写回 .ts 时将一并保存）",
+	StatusAllLocalesHaveTS:    "所有已启用语种均已有对应文件",
+	StatusScaffoldDoneFmt:     "已为 %d 个缺失语种生成骨架文件（写回时将一并保存）",
 	ErrEnterLocaleID:          "请输入语种 ID（例如 nl_NL）",
 	ErrLocaleExistsFmt:        "语种 ID 已存在: %s",
 	StatusCopiedLogs:          "已复制运行日志到剪贴板",
+	StatusCopiedSrc:           "已复制原文到剪贴板",
+	StatusTranslateRowDoneFmt: "单行翻译完成：更新 %d 个语种",
+	StatusNoGapsFound:         "未找到待办或告警行",
+	StatusRowNoGaps:           "当前行所有已启用语种均已有译文",
 }
 
 var enCatalog = Catalog{
 	WindowTitle:       "LocLoom — Cross-Platform Localization Workbench",
 	BtnClose:          "Close",
 	BtnCancel:         "Cancel",
-	DropHint:          "Drop to load .ts folder / .zip archive / .xlsx workbook",
-	LogWorkbenchReady: "Workbench ready. Drag & drop a .ts folder / .zip / .xlsx onto the window, or use the top toolbar buttons.",
+	DropHint:          "Drop to load localization file(s) / folder / .zip / .xlsx",
+	LogWorkbenchReady: "Workbench ready. Drag & drop localization files, folder, .zip, or .xlsx onto the window, or use the top toolbar buttons.",
 
-	ErrLoadTSFmt:               "Failed to load .ts: %v",
-	StatusLoadedBundleFmt:      "Loaded %s (%d .ts files, %d entries)",
-	StatusDiscoveredLocalesFmt: ", discovered locales: %v",
+	ErrLoadTSFmt:               "Failed to load localization project: %v",
+	StatusLoadedBundleFmt:      "Loaded %s (%d files, %d entries)",
+	StatusDiscoveredLocalesFmt: ", auto-discovered locales: %v",
 	ErrImportExcelFmt:          "Failed to import Excel: %v",
 	StatusImportedExcelFmt:     "Imported %s (sheet %s, %d translations)",
 	ErrNoExportData:            "No entries available to export",
@@ -507,9 +548,9 @@ var enCatalog = Catalog{
 	SourceUnloaded:    "Unloaded",
 	HeaderSummaryFmt:  "%s · %d items · %.0f%%",
 	BtnOpenDir:        "Open Dir",
-	TipOpenDir:        "Open Qt .ts folder (Cmd/Ctrl+O)",
-	BtnOpenZip:        "Open ZIP",
-	TipOpenZip:        "Open ZIP archive containing .ts files",
+	TipOpenDir:        "Open localization folder (Cmd/Ctrl+O)",
+	BtnOpenFile:       "Open File",
+	TipOpenFile:       "Open localization file(s) (.ts/.po/.json/.arb/.xcstrings/strings.xml/.resx/.xliff/.zip)",
 	BtnImportExcel:    "Import Excel",
 	TipImportExcel:    "Import .xlsx translation workbook",
 	BtnExportExcel:    "Export Excel",
@@ -517,8 +558,9 @@ var enCatalog = Catalog{
 	StatusTranslating: "Translating",
 	BtnStopTranslate:  "Stop",
 	BtnStartTranslate: "Start Translate",
-	BtnWriteTS:        "Write .ts",
-	TipWriteTS:        "Losslessly patch .ts files (Cmd/Ctrl+S)",
+	BtnWriteTS:         "Save Back",
+	BtnWriteTSCountFmt: "Save Back (%d)",
+	TipWriteTS:         "Save pending changes losslessly to files or ZIP (Cmd/Ctrl+S)",
 	ThemeSystem:       "System",
 	ThemeLight:        "Light",
 	ThemeDark:         "Dark",
@@ -563,12 +605,18 @@ var enCatalog = Catalog{
 	BtnBrowse:               "Browse",
 	BtnTestConn:             "Test",
 	BtnDiscoverModels:       "Models",
+	BtnShowSecret:           "Show",
+	BtnHideSecret:           "Hide",
 
-	SectionPresetProfiles: "Preset Profiles",
-	BtnSelectAll:          "Select All",
-	BtnDeselectAll:        "Deselect All",
-	LabelFilePattern:      "Filename Pattern",
-	BtnScaffoldTS:         "Scaffold Missing .ts Files",
+	SectionPresetProfiles:   "Preset Profiles",
+	BtnSelectAll:            "Select All",
+	BtnDeselectAll:          "Deselect All",
+	BtnSyncBundleLocales:    "Sync Bundle",
+	TipSyncBundleLocales:    "Enable only target locales present in the loaded project",
+	PlaceholderLocaleSearch: "Filter locales...",
+	BadgeInBundle:           "In Bundle",
+	LabelFilePattern:        "Filename Pattern",
+	BtnScaffoldTS:           "Scaffold Missing Locale Files",
 	SectionLocaleListFmt:  "Locales (%d)",
 	BtnSetRef:             "Set Ref",
 	BtnIsRef:              "★ Ref",
@@ -590,10 +638,11 @@ var enCatalog = Catalog{
 	MenuClearMachine:  "Clear Machine Translations",
 	MenuClearAll:      "Clear All Staged Translations",
 	EmptyNoDataTitle:  "No entries loaded",
-	EmptyNoDataHint:   "Click Open Dir / Open ZIP / Import Excel above, or drag & drop files here",
+	EmptyNoDataHint:   "Click Open Dir / Open File / Import Excel above, or drag & drop files here",
 	EmptyNoMatch:      "No entries match the current filter",
 
 	ColContext:      "Context",
+	ColKeyID:        "Key / Context",
 	ColSource:       "Source",
 	ColSourceShort:  "Source",
 	ColRef:          "Ref",
@@ -614,7 +663,7 @@ var enCatalog = Catalog{
 	TagFill:         "[Fill]",
 	TagOver:         "[Over]",
 	TagAdd:          "[Add]",
-	OriginTS:        "TS",
+	OriginTS:        "Source",
 	OriginXLSX:      "Excel",
 	OriginTM:        "TM",
 	OriginGoogle:    "Google",
@@ -622,9 +671,10 @@ var enCatalog = Catalog{
 	OriginManual:    "Manual",
 	OriginCache:     "Cache",
 
-	TabInspector:        "Inspector & XML Diff",
+	TabInspector:        "Inspector & Format Diff",
 	TabLogsFmt:          "Logs & Diagnostics (%d)",
-	InspectorEmptyHint:  "Click any entry row above to edit its translation and preview the XML diff",
+	InspectorEmptyHint:  "Click any entry row above to edit its translation and preview the format diff",
+	LabelKeyIDPrefix:    "Key: ",
 	LabelContextPrefix:  "Context: ",
 	LabelLocationPrefix: "Location: ",
 	LabelCommentPrefix:  "Comment: ",
@@ -634,11 +684,19 @@ var enCatalog = Catalog{
 	LabelRef:            "Reference",
 	LabelNone:           "(None)",
 	LabelEditTargetFmt:  "Translation (%s)",
+	BtnTranslateRow:     "⚡ Translate Row",
+	TipTranslateRow:     "Translate this row immediately using active providers",
+	BtnPrevGap:          "◀ Prev Gap",
+	TipPrevGap:          "Jump to previous gap or warning row (Alt+Up)",
+	BtnNextGap:          "Next Gap ▶",
+	TipNextGap:          "Jump to next gap or warning row (Alt+Down / F3)",
+	BtnCopySrc:          "Copy Src",
+	BtnUseSrc:           "Use Src",
 	BtnResetCell:        "Reset Cell",
 	HintNumerus:         "Tip: This entry has plural forms. Separate each form with a line containing only ---.",
 	PlaceholderEditor:   "Enter translation (auto-saved, O(1) cell refresh)...",
-	LabelBeforeXML:      "Before XML",
-	LabelAfterXML:       "After XML",
+	LabelBeforeXML:      "Before",
+	LabelAfterXML:       "After",
 	LogCountFmt:         "%d log entries",
 	BtnCopyLogs:         "Copy Logs",
 	BtnClearLogs:        "Clear Logs",
@@ -657,11 +715,11 @@ var enCatalog = Catalog{
 	ExportDescWarnings:  "Export only entries with Qt placeholder or structural validation warnings.",
 	BtnExportConfirm:    "Choose Path & Export...",
 
-	DialogOpenTSDir:           "Select Qt .ts Folder",
-	ErrLoadTSDirFmt:           "Failed to load .ts folder: %v",
-	DialogOpenZip:             "Select ZIP Archive with .ts Files",
-	FilterZipName:             "ZIP Archive",
-	ErrLoadZipFmt:             "Failed to load ZIP: %v",
+	DialogOpenTSDir:           "Select Localization Folder",
+	ErrLoadTSDirFmt:           "Failed to load folder: %v",
+	DialogOpenFile:            "Select Localization File(s) or ZIP",
+	FilterLocFilesName:        "Localization Files & ZIP",
+	ErrLoadFilesFmt:           "Failed to load file(s): %v",
 	DialogImportExcel:         "Import Excel Workbook (.xlsx)",
 	FilterExcelName:           "Excel Workbook",
 	DialogExportExcel:         "Export Excel Workbook",
@@ -681,19 +739,23 @@ var enCatalog = Catalog{
 	LogStartTranslateFmt:      "Starting translation: %d locales, %d entries (concurrency %d)",
 	StatusTranslateDoneFmt:    "Translation complete: %d entries added in %s",
 	LogStoppingTranslate:      "Cancelling translation tasks...",
-	ErrLoadTSFirst:            "Load a Qt .ts folder or .zip archive first",
+	ErrLoadTSFirst:            "Load a localization file, folder, or .zip archive first",
 	ErrBuildPatchFmt:          "Failed to build patch (%s): %v",
 	LogBuildPatchErrFmt:       "Failed to build patch: %v",
-	StatusNoTSChanges:         "No changes to write back to .ts files",
-	ErrWriteTSFmt:             "Failed to write .ts: %v",
+	StatusNoTSChanges:         "No changes to save back",
+	ErrWriteTSFmt:             "Save back failed: %v",
 	StatusWriteTSDoneFmt:      "Write complete: %d files (%d updated, %d appended) -> %s",
 	StatusClearedMachineFmt:   "Cleared %d machine translations",
 	StatusClearedAll:          "Cleared all staged translations",
-	ErrScaffoldLoadFirst:      "Load a .ts folder or .zip archive before scaffolding",
+	ErrScaffoldLoadFirst:      "Load a project before scaffolding",
 	LogScaffoldErrFmt:         "Scaffold failed: %v",
-	StatusAllLocalesHaveTS:    "All enabled locales already have .ts files",
-	StatusScaffoldDoneFmt:     "Scaffolded %d empty .ts files (will be saved on Write .ts)",
+	StatusAllLocalesHaveTS:    "All enabled locales already have files",
+	StatusScaffoldDoneFmt:     "Scaffolded %d missing locale file(s) (will save on Save Back)",
 	ErrEnterLocaleID:          "Enter a locale ID (e.g. nl_NL)",
 	ErrLocaleExistsFmt:        "Locale ID already exists: %s",
 	StatusCopiedLogs:          "Logs copied to clipboard",
+	StatusCopiedSrc:           "Copied source text to clipboard",
+	StatusTranslateRowDoneFmt: "Row translated: updated %d locale(s)",
+	StatusNoGapsFound:         "No gap or warning rows found",
+	StatusRowNoGaps:           "Current row has no gaps for enabled locales",
 }

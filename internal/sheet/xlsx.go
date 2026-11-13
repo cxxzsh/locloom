@@ -14,6 +14,7 @@ import (
 // RowRecord represents a single parsed row from an Excel translation sheet.
 type RowRecord struct {
 	RowNumber    int
+	KeyID        string
 	Context      string
 	Source       string
 	Comment      string
@@ -25,6 +26,7 @@ type WorkbookData struct {
 	FilePath          string
 	SheetName         string
 	SheetNames        []string
+	HasKeyIDColumn    bool
 	HasContextColumn  bool
 	HasCommentColumn  bool
 	DiscoveredLocales []string
@@ -59,6 +61,7 @@ type ExportCell struct {
 
 // ExportRow holds one row of data for Excel export.
 type ExportRow struct {
+	KeyID   string
 	Context string
 	Source  string
 	Comment string
@@ -67,6 +70,7 @@ type ExportRow struct {
 
 // ExportOptions configures Excel export formatting and data.
 type ExportOptions struct {
+	IncludeKeyID   bool
 	IncludeContext bool
 	IncludeComment bool
 	SheetName      string
@@ -78,6 +82,15 @@ type localeColInfo struct {
 	colIdx   int
 	localeID string
 	isRef    bool
+}
+
+func isKeyIDHeader(header string) bool {
+	switch strings.ToLower(strings.TrimSpace(header)) {
+	case "key", "id", "key id", "string id", "msgid_key", "键", "键名":
+		return true
+	default:
+		return false
+	}
 }
 
 // LoadExcel reads an Excel workbook using shared file access and parses translation rows.
@@ -130,6 +143,7 @@ func LoadExcel(path, sheetName string, known []locale.LocaleSpec, skipRef bool) 
 	}
 
 	header := rows[0]
+	keyIDCol := -1
 	sourceCol := -1
 	contextCol := -1
 	commentCol := -1
@@ -138,6 +152,9 @@ func LoadExcel(path, sheetName string, known []locale.LocaleSpec, skipRef bool) 
 
 	for colIdx, h := range header {
 		switch {
+		case keyIDCol < 0 && isKeyIDHeader(h):
+			keyIDCol = colIdx
+			wb.HasKeyIDColumn = true
 		case sourceCol < 0 && locale.IsSourceHeader(h):
 			sourceCol = colIdx
 		case contextCol < 0 && locale.IsContextHeader(h):
@@ -176,6 +193,7 @@ func LoadExcel(path, sheetName string, known []locale.LocaleSpec, skipRef bool) 
 		}
 		rec := RowRecord{
 			RowNumber:    rIdx + 1,
+			KeyID:        strings.TrimSpace(cellAt(row, keyIDCol)),
 			Context:      strings.TrimSpace(cellAt(row, contextCol)),
 			Source:       src,
 			Comment:      strings.TrimSpace(cellAt(row, commentCol)),
@@ -204,8 +222,8 @@ func cellAt(row []string, idx int) string {
 }
 
 // PopulateCatalog imports workbook translations into cat.
-// Uses EntryKey{Context, Source, Comment} when HasContextColumn is true,
-// or glossary key EntryKey{Source: src} when HasContextColumn is false.
+// Uses EntryKey{ID, Context, Source, Comment} when HasKeyIDColumn or HasContextColumn is true,
+// or glossary key EntryKey{Source: src} when neither Key nor Context column is present.
 func PopulateCatalog(wb *WorkbookData, cat *domain.Catalog, skipRef bool) int {
 	if wb == nil || cat == nil {
 		return 0
@@ -213,8 +231,9 @@ func PopulateCatalog(wb *WorkbookData, cat *domain.Catalog, skipRef bool) int {
 	imported := 0
 	for _, row := range wb.Rows {
 		var key domain.EntryKey
-		if wb.HasContextColumn {
+		if wb.HasKeyIDColumn || wb.HasContextColumn {
 			key = domain.EntryKey{
+				ID:      row.KeyID,
 				Context: row.Context,
 				Source:  row.Source,
 				Comment: row.Comment,
@@ -222,7 +241,6 @@ func PopulateCatalog(wb *WorkbookData, cat *domain.Catalog, skipRef bool) int {
 		} else {
 			key = domain.EntryKey{Source: row.Source}
 		}
-
 		for locID, text := range row.Translations {
 			if text == "" {
 				continue
@@ -285,7 +303,10 @@ func ExportExcel(path string, opts ExportOptions) error {
 		Border:    border,
 	})
 
-	headers := make([]string, 0, 3+len(opts.Columns))
+	headers := make([]string, 0, 4+len(opts.Columns))
+	if opts.IncludeKeyID {
+		headers = append(headers, "Key")
+	}
 	if opts.IncludeContext {
 		headers = append(headers, "Context")
 	}
@@ -327,6 +348,9 @@ func ExportExcel(path string, opts ExportOptions) error {
 			cIdx++
 		}
 
+		if opts.IncludeKeyID {
+			writeCell(row.KeyID, defaultStyle)
+		}
 		if opts.IncludeContext {
 			writeCell(row.Context, defaultStyle)
 		}

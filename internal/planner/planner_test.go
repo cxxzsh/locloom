@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/sheet"
 	"locloom/internal/tsxml"
@@ -176,5 +177,121 @@ func TestBuildPlanAndUpdateCellUILang(t *testing.T) {
 	wZh := planZh.Rows[0].Cells["ja_JP"].Warnings
 	if len(wZh) != 2 || wZh[0] != "缺失占位符: %1" {
 		t.Fatalf("zh warnings = %v", wZh)
+	}
+}
+
+func TestBuildPlanIDKeyedFormatBundleAndBuildFormatPatches(t *testing.T) {
+	fb := &format.Bundle{
+		Format:       format.FormatJSON,
+		Topology:     format.TopologyPerLocale,
+		SourceLocale: "en",
+		Docs: []*format.DocRecord{
+			{
+				FormatID:   format.FormatJSON,
+				LocaleID:   "en",
+				IsTemplate: true,
+				Entries: []format.NormalizedEntry{
+					{Key: domain.EntryKey{ID: "menu.save", Source: "Save"}, LocaleID: "en", Text: "Save", Status: domain.StatusFinished},
+					{Key: domain.EntryKey{ID: "menu.exit", Source: "Exit"}, LocaleID: "en", Text: "Exit", Status: domain.StatusFinished},
+				},
+			},
+			{
+				FormatID: format.FormatJSON,
+				LocaleID: "ja",
+				Entries: []format.NormalizedEntry{
+					{Key: domain.EntryKey{ID: "menu.save", Source: "Save"}, LocaleID: "ja", Text: "", Status: domain.StatusEmpty},
+				},
+			},
+		},
+	}
+
+	locales := []locale.LocaleSpec{
+		{ID: "en", Name: "English", Enabled: false, IsRef: true},
+		{ID: "ja", Name: "Japanese", Enabled: true},
+	}
+
+	cat := domain.NewCatalog()
+	cat.Set("ja", domain.EntryKey{ID: "menu.save", Source: "Save"}, "保存", domain.OriginManual)
+	cat.Set("ja", domain.EntryKey{ID: "menu.exit", Source: "Exit"}, "終了", domain.OriginLLM)
+
+	plan := BuildPlan(PlanInput{
+		FormatBundle: fb,
+		Catalog:      cat,
+		Locales:      locales,
+		WriteMode:    domain.ModeFillUnfinished,
+	})
+
+	if plan.Summary.TotalRows != 2 {
+		t.Fatalf("TotalRows = %d, want 2", plan.Summary.TotalRows)
+	}
+	if plan.Rows[0].RefText != "Save" || plan.Rows[1].RefText != "Exit" {
+		t.Fatalf("unexpected RefTexts: %q, %q", plan.Rows[0].RefText, plan.Rows[1].RefText)
+	}
+	if got := plan.Rows[0].Cells["ja"].Action; got != domain.ActionFillGap {
+		t.Fatalf("row 0 ja action = %s, want %s", got, domain.ActionFillGap)
+	}
+	if got := plan.Rows[1].Cells["ja"].Action; got != domain.ActionAppendNew {
+		t.Fatalf("row 1 ja action = %s, want %s", got, domain.ActionAppendNew)
+	}
+
+	patches := BuildFormatPatches(plan)
+	if len(patches["ja"]) != 2 {
+		t.Fatalf("expected 2 patches for ja, got %d", len(patches["ja"]))
+	}
+	if _, hasEn := patches["en"]; hasEn {
+		t.Fatal("disabled ref locale en should not have patches")
+	}
+
+	exportOpts := BuildExportRows(plan, sheet.ExportAll, locales)
+	if !exportOpts.IncludeKeyID {
+		t.Fatal("expected IncludeKeyID = true")
+	}
+	if len(exportOpts.Rows) != 2 || exportOpts.Rows[0].KeyID != "menu.save" {
+		t.Fatalf("unexpected export rows: %+v", exportOpts.Rows)
+	}
+}
+
+func TestBuildPlanMultiLocaleXCStringsMissingLocalesFillGap(t *testing.T) {
+	fb := &format.Bundle{
+		Format:       format.FormatXCStrings,
+		Topology:     format.TopologyMultiLocale,
+		SourceLocale: "en",
+		Docs: []*format.DocRecord{
+			{
+				FormatID: format.FormatXCStrings,
+				Locales:  []string{"en", "ja"},
+				Entries: []format.NormalizedEntry{
+					{Key: domain.EntryKey{ID: "greeting", Source: "Hello"}, LocaleID: "en", Text: "Hello", Status: domain.StatusFinished},
+					{Key: domain.EntryKey{ID: "greeting", Source: "Hello"}, LocaleID: "ja", Text: "こんにちは", Status: domain.StatusFinished},
+				},
+			},
+		},
+	}
+
+	locales := []locale.LocaleSpec{
+		{ID: "ja", Name: "Japanese", Enabled: true},
+		{ID: "fr", Name: "French", Enabled: true},
+	}
+
+	cat := domain.NewCatalog()
+	cat.Set("fr", domain.EntryKey{ID: "greeting", Source: "Hello"}, "Bonjour", domain.OriginLLM)
+
+	plan := BuildPlan(PlanInput{
+		FormatBundle:  fb,
+		Catalog:       cat,
+		Locales:       locales,
+		WriteMode:     domain.ModeFillUnfinished,
+		AppendMissing: false,
+	})
+
+	if plan.Summary.TotalRows != 1 {
+		t.Fatalf("TotalRows = %d, want 1", plan.Summary.TotalRows)
+	}
+	frCell := plan.Rows[0].Cells["fr"]
+	if frCell.Status != domain.StatusEmpty {
+		t.Fatalf("fr Status = %s, want %s", frCell.Status, domain.StatusEmpty)
+	}
+	if frCell.Action != domain.ActionFillGap {
+		t.Fatalf("fr Action = %s, want %s", frCell.Action, domain.ActionFillGap)
 	}
 }

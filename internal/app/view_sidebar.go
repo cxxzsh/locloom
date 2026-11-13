@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -233,6 +234,7 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 	lang := a.UILang()
 	pid := p.ID()
 	enabled := a.isProviderActive(pid)
+	expanded := a.expandedProvider[pid]
 
 	if a.cfg.ProviderConfigs == nil {
 		a.cfg.ProviderConfigs = make(map[string]map[string]string)
@@ -254,14 +256,26 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 		Border(1, border).
 		Radius(t.Radius).
 		Children(func() {
-			// Card Header
-			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, provider.ProviderName(p, lang)).FontSize(13).FontWeight(600).SingleLine().Grow(1)
+			// Collapsible Card Header
+			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+				arrow := "▸"
+				if expanded {
+					arrow = "▾"
+				}
+				hdr := ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Grow(1).MinWidth(0).Cursor(ui.CursorPointer)
+				hdr.Children(func() {
+					ui.Text(c, arrow).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(0)
+					ui.Text(c, provider.ProviderName(p, lang)).FontSize(13).FontWeight(600).SingleLine().Grow(1).MinWidth(0)
+				})
+				if hdr.Clicked() {
+					a.expandedProvider[pid] = !expanded
+				}
+
 				kindLabel := tr.BadgeEngine
 				if p.Kind() == provider.KindLocal {
 					kindLabel = tr.BadgeLocal
 				}
-				ui.Badge(c, kindLabel)
+				ui.Badge(c, kindLabel).Shrink(0)
 				if ui.Button(c, "↑").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isFirst).Tooltip(tr.TipMoveUp).Clicked() {
 					a.moveProvider(pid, -1)
 				}
@@ -273,9 +287,9 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 				}
 			})
 
-			ui.Text(c, provider.ProviderDescription(p, lang)).FontSize(11).TextColor(t.TextMuted)
+			if expanded {
+				ui.Text(c, provider.ProviderDescription(p, lang)).FontSize(11).TextColor(t.TextMuted).MinWidth(0)
 
-			if enabled {
 				// Dynamic ConfigSchema fields
 				for _, field := range provider.ProviderSchema(p, lang) {
 					fKey := field.Key
@@ -303,27 +317,42 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 								opts = a.discoveredModels[pid]
 							}
 							if len(opts) > 0 {
-								if ui.Combobox(c, &curVal, opts).Changed() {
+								if ui.Combobox(c, &curVal, opts).FillWidth().Changed() {
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
 							} else {
-								if ui.TextInput(c, &curVal).Placeholder(field.Placeholder).Changed() {
+								if ui.TextInput(c, &curVal).Placeholder(field.Placeholder).MinWidth(0).Changed() {
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
 							}
 						case provider.FieldSecret:
-							if ui.TextInput(c, &curVal).Password().Placeholder(field.Placeholder).Changed() {
-								vals[fKey] = curVal
-								a.scheduleConfigSave()
-							}
+							secretKey := pid + "." + fKey
+							revealed := a.revealedSecrets[secretKey]
+							ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+								inp := ui.TextInput(c, &curVal).Placeholder(field.Placeholder).Grow(1).MinWidth(0)
+								if !revealed {
+									inp = inp.Password()
+								}
+								if inp.Changed() {
+									vals[fKey] = curVal
+									a.scheduleConfigSave()
+								}
+								toggleLbl := tr.BtnShowSecret
+								if revealed {
+									toggleLbl = tr.BtnHideSecret
+								}
+								if ui.Button(c, toggleLbl).Padding(t.Space(1), t.Space(2)).Clicked() {
+									a.revealedSecrets[secretKey] = !revealed
+								}
+							})
 						case provider.FieldFile, provider.FieldDir:
 							isDir := field.Type == provider.FieldDir
 							exts := slices.Clone(field.Extensions)
 							fLabel := field.Label
 							ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-								if ui.TextInput(c, &curVal).Placeholder(field.Placeholder).Grow(1).Changed() {
+								if ui.TextInput(c, &curVal).Placeholder(field.Placeholder).Grow(1).MinWidth(0).Changed() {
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
@@ -351,12 +380,12 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 							})
 						default:
 							if fKey == "model" && len(a.discoveredModels[pid]) > 0 {
-								if ui.Combobox(c, &curVal, a.discoveredModels[pid]).Changed() {
+								if ui.Combobox(c, &curVal, a.discoveredModels[pid]).FillWidth().Changed() {
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
 							} else {
-								if ui.TextInput(c, &curVal).Placeholder(field.Placeholder).Changed() {
+								if ui.TextInput(c, &curVal).Placeholder(field.Placeholder).MinWidth(0).Changed() {
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
@@ -383,7 +412,7 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 					if a.providerTestErr[pid] {
 						col = t.Danger
 					}
-					ui.Text(c, msg).FontSize(11).TextColor(col)
+					ui.Text(c, msg).FontSize(11).TextColor(col).MinWidth(0)
 				}
 			}
 		})
@@ -394,11 +423,18 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 	tr := a.tr()
 	lang := a.UILang()
 
+	inBundle := make(map[string]bool)
+	if a.bundle != nil {
+		for _, id := range a.bundle.Locales {
+			inBundle[id] = true
+		}
+	}
+
 	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Gap(t.Space(2)).Padding(t.Space(1)).Children(func() {
-			// Preset Profiles in 2-column Grid (no horizontal overflow)
+			// Preset Profiles as wrapped chips
 			ui.Text(c, tr.SectionPresetProfiles).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
-			ui.Grid(c).Columns(2).Gap(t.Space(1.5)).Children(func() {
+			ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
 				for _, prof := range a.cfg.Profiles {
 					p := prof
 					if ui.Button(c, p.DisplayName(lang)).Padding(t.Space(1), t.Space(2)).Clicked() {
@@ -407,32 +443,50 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 				}
 			})
 
-			ui.Row(c).Gap(t.Space(1.5)).Children(func() {
-				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Grow(1).Clicked() {
+			ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
+				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Clicked() {
 					a.selectAllLocales(true)
 				}
-				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Grow(1).Clicked() {
+				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Clicked() {
 					a.selectAllLocales(false)
+				}
+				if ui.Button(c, tr.BtnSyncBundleLocales).
+					Padding(t.Space(1), t.Space(2)).
+					Disabled(a.bundle == nil).
+					Tooltip(tr.TipSyncBundleLocales).
+					Clicked() {
+					a.syncBundleLocales()
 				}
 			})
 
 			// FilePattern & Skeleton scaffold
 			ui.Column(c).Gap(t.Space(1)).Children(func() {
 				ui.Text(c, tr.LabelFilePattern).FontSize(11).TextColor(t.TextMuted)
-				if ui.TextInput(c, &a.cfg.FilePattern).Placeholder("{id}.ts").Changed() {
+				if ui.TextInput(c, &a.cfg.FilePattern).Placeholder("{id}.ts").MinWidth(0).Changed() {
 					a.scheduleConfigSave()
 				}
 				if ui.Button(c, tr.BtnScaffoldTS).Padding(t.Space(1), t.Space(2)).Disabled(a.bundle == nil).Clicked() {
-					a.scaffoldMissingTSFiles()
+					a.scaffoldMissingLocaleFiles()
 				}
 			})
 
 			ui.Divider(c)
 
-			// Locale list
+			// Locale search & list
 			ui.Text(c, fmt.Sprintf(tr.SectionLocaleListFmt, len(a.cfg.Locales))).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.SearchField(c, &a.localeSearchQuery).Placeholder(tr.PlaceholderLocaleSearch).MinWidth(0)
+
+			locQuery := strings.ToLower(strings.TrimSpace(a.localeSearchQuery))
 			for i := range a.cfg.Locales {
 				loc := &a.cfg.Locales[i]
+				if locQuery != "" {
+					disp := strings.ToLower(loc.DisplayName(lang))
+					if !strings.Contains(strings.ToLower(loc.ID), locQuery) &&
+						!strings.Contains(disp, locQuery) &&
+						!strings.Contains(strings.ToLower(loc.EngineCode), locQuery) {
+						continue
+					}
+				}
 				ui.Row(c).
 					Padding(t.Space(1), t.Space(1.5)).
 					Gap(t.Space(1)).
@@ -446,12 +500,15 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 						}
 						ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 							ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, loc.ID).FontSize(12).FontWeight(600).SingleLine()
+								ui.Text(c, loc.ID).FontSize(12).FontWeight(600).SingleLine().MinWidth(0)
 								if loc.EngineCode != "" {
-									ui.Badge(c, loc.EngineCode)
+									ui.Badge(c, loc.EngineCode).Shrink(0)
+								}
+								if inBundle[loc.ID] {
+									ui.Badge(c, tr.BadgeInBundle).Shrink(0)
 								}
 							})
-							ui.Text(c, loc.DisplayName(lang)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+							ui.Text(c, loc.DisplayName(lang)).FontSize(11).TextColor(t.TextMuted).SingleLine().MinWidth(0)
 						})
 						refLabel := tr.BtnSetRef
 						if loc.IsRef {
@@ -474,10 +531,10 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			// Compact Add Custom Locale Form
 			ui.Text(c, tr.SectionAddLocale).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			ui.Column(c).Gap(t.Space(1)).Children(func() {
-				ui.TextInput(c, &a.newLocID).Placeholder(tr.PlaceholderLocaleID)
+				ui.TextInput(c, &a.newLocID).Placeholder(tr.PlaceholderLocaleID).MinWidth(0)
 				ui.Row(c).Gap(t.Space(1)).Children(func() {
-					ui.TextInput(c, &a.newLocName).Placeholder(tr.PlaceholderLocaleName).Grow(1)
-					ui.TextInput(c, &a.newLocCode).Placeholder(tr.PlaceholderEngineCode).Width(90)
+					ui.TextInput(c, &a.newLocName).Placeholder(tr.PlaceholderLocaleName).Grow(1).MinWidth(0)
+					ui.TextInput(c, &a.newLocCode).Placeholder(tr.PlaceholderEngineCode).Width(90).MinWidth(0)
 				})
 				if ui.Button(c, tr.BtnAddLocale).Padding(t.Space(1), t.Space(2)).Clicked() {
 					a.addCustomLocale()

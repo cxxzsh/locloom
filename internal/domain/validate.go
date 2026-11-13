@@ -8,13 +8,30 @@ import (
 )
 
 var (
-	reQtArgPlaceholder = regexp.MustCompile(`%L?[1-9][0-9]?`)
-	reLeakMaskToken    = regexp.MustCompile(`\[\[\s*\d+\s*\]\]|【【\s*\d+\s*】】`)
+	// reUniversalPlaceholder matches placeholders across Qt (%1, %L1), C/Android/Apple printf
+	// (%s, %d, %1$s, %1$@, %@, %lld, %(name)s, %#@v@), i18next ({{name}}), Rails (%{name}),
+	// .NET/ARB/Vue ({0}, {0:N2}, {name}), and XLIFF/Android inline tags (<ph>, <x/>, <xliff:g>).
+	reUniversalPlaceholder = regexp.MustCompile(
+		`<ph\b[^>]*>[\s\S]*?</ph>|<x\b[^/>]*/>|<xliff:g\b[^>]*>[\s\S]*?</xliff:g>|</?[bui]>|<br\s*/?>|` +
+			`\{\{-?\s*[a-zA-Z0-9_.-]+\s*\}\}|` +
+			`%\{[a-zA-Z0-9_]+\}|` +
+			`%#@?[a-zA-Z0-9_]+@|` +
+			`%(?:[1-9][0-9]*\$)?(?:l{1,2}[duoxX]|[@sduoxXfFeEgGc])|` +
+			`%\([a-zA-Z0-9_]+\)[sduoxXfFeEgG]|` +
+			`%L?[1-9][0-9]?|` +
+			`\{(?:[0-9]+(?::[^}\n]+)?|[a-zA-Z_][a-zA-Z0-9_]*)\}`,
+	)
+	reLeakMaskToken = regexp.MustCompile(`\[\[\s*\d+\s*\]\]|【【\s*\d+\s*】】`)
 )
 
-// ExtractQtArgs returns sorted unique Qt positional placeholders (%1..%99, %L1..%L99).
+// ExtractQtArgs returns sorted unique placeholders across supported localization formats.
 func ExtractQtArgs(s string) []string {
-	matches := reQtArgPlaceholder.FindAllString(s, -1)
+	return ExtractPlaceholders(s)
+}
+
+// ExtractPlaceholders returns sorted unique format placeholders found in s.
+func ExtractPlaceholders(s string) []string {
+	matches := reUniversalPlaceholder.FindAllString(s, -1)
 	if len(matches) == 0 {
 		return nil
 	}
@@ -29,7 +46,6 @@ func ExtractQtArgs(s string) []string {
 	sort.Strings(out)
 	return out
 }
-
 // ValidateTranslation checks Qt placeholder parity, leaked guard tokens, and structural whitespace mismatches
 // using Chinese warning messages. Returns nil when valid.
 func ValidateTranslation(source, target string, numerus bool) []string {

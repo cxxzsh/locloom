@@ -8,24 +8,28 @@
 
 ## English
 
-**LocLoom** is a cross-platform, single-binary desktop and CLI localization workbench (`CGO_ENABLED=0`) built with Go and [`egoist/mygo`](https://github.com/egoist/mygo), supporting **macOS**, **Windows**, and **Linux**. Designed around lossless file preservation, it extracts localization entries (currently Qt Linguist `.ts` files and `.zip` archives), fills multi-language translations via a 4-stage concurrent waterfall pipeline, exports multi-mode `.xlsx` review workbooks, and patches target files back using **surgical byte-offset updates**.
+**LocLoom** is a cross-platform, single-binary desktop and CLI localization workbench (`CGO_ENABLED=0`) built with Go and [`egoist/mygo`](https://github.com/egoist/mygo), supporting **macOS**, **Windows**, and **Linux**. Designed around lossless file preservation, it supports **8 built-in localization formats** (`Qt .ts`, `GNU Gettext .po/.pot`, `JSON i18n`, `Flutter .arb`, `Apple .xcstrings`, `Android strings.xml`, `.NET .resx`, and `XLIFF 1.2/2.0`), fills multi-language translations via a concurrent 10-source waterfall pipeline, exports multi-mode `.xlsx` review workbooks, and writes changes back **losslessly**.
 
 ### 1. Overview & Core Capabilities
 
-- **Surgical Byte-Offset XML Patching**
-  - Instead of full-document XML re-serialization, LocLoom computes exact UTF-8 byte offsets for `<translation>` nodes inside each `<message>`.
-  - Preserves original **UTF-8 BOM**, **CRLF / LF line endings**, indentation, XML comments, `<!DOCTYPE TS>`, `<location>` tags, `<byte value="x..."/>` control characters, and `<numerusform>` plural forms verbatim.
-  - Escapes only `&`, `<`, and `>` per Qt `lupdate` conventions (preventing double-unescape bugs) and validates the patched XML in memory with `encoding/xml` before writing to disk.
-- **Context-Safe Disambiguation & Phantom-Row Protection**
-  - Uniquely identifies entries by the `(Context, Source, Comment)` tuple (`EntryKey`), ensuring identical `<source>` strings in different `<context>` blocks (e.g., `Open` in `FileMenu` vs. `ConnectionState`) never leak across contexts.
-  - Isolates `.xlsx`-only rows by default to prevent injecting phantom entries into `.ts` files; external rows are only inserted when **Append Missing** is explicitly enabled.
+- **8 Built-In Lossless Localization Formats**
+  - **Qt Linguist (`.ts`)**: Surgical UTF-8 byte-offset XML patching preserving BOM, CRLF/LF, indentation, XML comments, `<!DOCTYPE TS>`, `<location>`, `<byte value="x..."/>`, and `<numerusform>` plural forms.
+  - **GNU Gettext (`.po` / `.pot`)**: Preserves headers, translator/extracted comments, `msgctxt` context, `msgid_plural` / `msgstr[n]` plural forms, and `fuzzy` flags.
+  - **JSON i18n (`.json`)**: Nested or flat key-value JSON with `{placeholder}` / `{{placeholder}}` protection and source-template backfilling.
+  - **Flutter ARB (`.arb`)**: Preserves `@metadata` blocks, ICU placeholders, and `@@locale`.
+  - **Apple String Catalogs (`.xcstrings`)**: Multi-locale single-file catalog preserving `sourceLanguage`, `extractionState`, `variations`, and `state`.
+  - **Android (`strings.xml`)**: Supports `values/strings.xml` and `values-<lang>/strings.xml` with `translatable="false"`, `<string-array>`, and `<plurals>`.
+  - **.NET (`.resx`)**: Preserves XML schema headers, `resheader` metadata, `<data>` comments, and non-string resources.
+  - **XLIFF (`.xliff` / `.xlf`)**: Supports both XLIFF 1.2 (`<trans-unit>`) and XLIFF 2.0 (`<unit>` / `<segment>`).
+- **Context & Key-ID Safe Disambiguation**
+  - Uniquely identifies entries by `(ID, Context, Source, Comment)` (`EntryKey`), ensuring identical strings across different contexts or key IDs never collide.
+  - Automatically backfills readable source text from source templates (e.g., `en.json`, `values/strings.xml`, `Strings.resx`, `.pot`) for ID-keyed formats.
+  - Isolates `.xlsx`-only rows by default to prevent injecting phantom entries; external rows are inserted only when **Append Missing** is explicitly enabled.
 - **10-Source Concurrent Waterfall Pipeline**
-  - Chains local and online providers in customizable priority order: **Local `.xlsx` Glossary** → **Local `.ts` Translation Memory (TM)** → **Google Translate (Web)** → **Microsoft Bing / Edge (Keyless / Azure)** → **DeepL / DeepLX** → **MyMemory** → **LibreTranslate / Lingva** → **Baidu Translate API** → **Niutrans API** → **OpenAI / Ollama-Compatible LLMs**.
+  - Chains local and online providers in customizable priority order: **Local `.xlsx` Glossary** → **Local Translation Memory (TM)** → **Google Translate (Web)** → **Microsoft Bing / Edge (Keyless / Azure)** → **DeepL / DeepLX** → **MyMemory** → **LibreTranslate / Lingva** → **Baidu Translate API** → **Niutrans API** → **OpenAI / Ollama-Compatible LLMs**.
   - Supports multi-locale concurrent scheduling, persistent local caching (`translation-cache.json`), and **HTTP / SOCKS5 proxies** (with optional TLS verification skip for self-signed gateways).
-- **Qt Placeholder & Whitespace Guard**
-  - Automatically masks `%1`..`%99`, `%L1`..`%L99`, `%n`, and surrounding whitespace before sending text to remote MT/LLM providers.
-  - Validates placeholder count parity, residual mask tokens, and trailing `\t` mismatches after restoration, flagging anomalies with `[⚠]`.
-
+- **Placeholder & Whitespace Guard**
+  - Automatically masks Qt (`%1`..`%99`, `%n`), printf (`%s`, `%d`, `%1$s`), ICU/template (`{name}`, `{{var}}`), and surrounding whitespace before sending text to remote MT/LLM providers, flagging anomalies with `[⚠]`.
 ### 2. Cross-Platform Build & CLI Flags
 
 #### Build Commands (`CGO_ENABLED=0`)
@@ -65,14 +69,13 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 
 ### 3. Standard Workflow & Status Badges
 
-1. **Load Target Directory or `.zip`**: Click **Browse Dir…** / **Browse ZIP…** in the header (or drag and drop a folder / `.zip` onto the window). Subdirectories, relative paths, custom filename patterns (e.g., `{id}.ts`), and unknown locales are discovered automatically.
-2. **Import / Export `.xlsx`**: Drag and drop an `.xlsx` file or configure it in the sidebar. Supports `Context`, `Source`, `Comment`, and multi-locale columns (reference columns labeled `ref` / `参考` are skipped). Shared read mode on Windows allows reading workbooks even while open in Excel. Export modes include **Gaps Only**, **Full Matrix**, and **Current Changes**.
-3. **Configure Waterfall & Proxy**: Enable, reorder, and test any of the 10 built-in providers (`XLSX`, `TS TM`, `Google Web`, `Bing / Edge`, `DeepL / DeepLX`, `MyMemory`, `LibreTranslate / Lingva`, `Baidu API`, `Niutrans`, `OpenAI / Ollama`) and optionally configure HTTP/SOCKS5 proxies.
-4. **Review & Write Back Safely**: Switch between **Focus Locale** and **Full Matrix**, inspect line-by-line XML diffs in the bottom inspector, and write back with optional `.bak` backups (directory mode) or `*_updated.zip` output preserving all non-`.ts` entries verbatim (ZIP mode).
-5. **Real-Time UI Language Switching**: Click the **`[EN]` / `[中文]`** button in the top-right header to toggle the entire workbench (menus, provider schemas, validation warnings, and built-in help) between English and Simplified Chinese on the fly, or pass `-lang <auto|zh|en>` on startup.
+1. **Load Any Supported Format**: Click **Open Dir** or **Open File** in the header (or drag and drop files, a folder, or a `.zip` onto the window). LocLoom auto-detects the format, displays the active format badge, and **Smart Project Sync** aligns enabled target locales with the loaded project.
+2. **Import / Export `.xlsx`**: Drag and drop an `.xlsx` file or use the header buttons. Supports `Key ID`, `Context`, `Source`, `Comment`, and multi-locale columns (reference columns labeled `ref` / `参考` are skipped). Export modes include **All**, **Gaps Only**, **Pending Changes**, and **Warnings Only**.
+3. **Configure Waterfall & Proxy**: Expand any of the 10 built-in provider cards in the **Pipeline** tab, toggle secret visibility, test connectivity, discover LLM models, and optionally configure HTTP/SOCKS5 proxies.
+4. **Inspect, Translate Row & Save Back**: Switch between **Focus Locale** and **Full Matrix** (click any cell to target that locale), use Inspector power actions (**⚡ Translate Row**, **◀ Prev Gap**, **Next Gap ▶**, **Copy Src**, **Use Src**, **Reset Cell**), preview format-aware Before/After diffs, and click **Save Back (N)** with optional `.bak` backups or `*_updated.zip` output.
+5. **Real-Time UI Language Switching**: Click **`[EN]` / `[中文]`** in the top-right header to toggle the entire workbench between English and Simplified Chinese on the fly, or pass `-lang <auto|zh|en>` on startup.
 
-Status badges are strictly for UI preview and are **never** written to `.ts` or `.xlsx` files:
-
+Status badges are strictly for UI preview and are **never** written to localization or `.xlsx` files:
 | Badge | Meaning | Behavior |
 | :--- | :--- | :--- |
 | **`[补]`** | Fill Gap | Original entry is `unfinished` or empty; writes translation and removes `type="unfinished"` |
@@ -91,33 +94,37 @@ LocLoom follows standard OS application directories and supports **Portable Mode
 | **Linux** | `~/.config/locloom/config.json` | `~/.cache/locloom/translation-cache.json` |
 | **Portable Mode** | If `config.json` exists alongside the executable, LocLoom reads and writes it there |
 
-### 5. Multi-Format Architecture Note
+### 5. Multi-Format Engine Architecture
 
-LocLoom's internal domain model (`internal/domain` and `internal/planner`) is format-agnostic and centered on `(Context, Source, Comment)` keys, locale catalogs, and surgical byte-range patching. While Qt `.ts` is the first-class format implemented today, the architecture is designed to expand cleanly to additional localization ecosystems, including **GNU gettext (`.po`)**, **Apple String Catalogs (`.xcstrings`)**, **XLIFF (`.xliff` / `.xlf`)**, **Flutter/Web (`.arb` / JSON)**, **Android (`strings.xml`)**, and **.NET (`.resx`)**.
-
+LocLoom's `internal/format` driver registry decouples the domain model (`internal/domain`), matrix planner (`internal/planner`), and desktop workbench (`internal/app`) from individual file syntaxes, enabling seamless lossless round-trips across all 8 localization ecosystems.
 ---
 
 <a id="简体中文"></a>
 
 ## 简体中文
 
-**LocLoom** 是一款基于 Go 与 [`egoist/mygo`](https://github.com/egoist/mygo) 构建的跨平台单文件桌面与命令行本地化工作台（`CGO_ENABLED=0`），支持 **macOS**、**Windows** 与 **Linux**。工具围绕“原位无损回填”设计，支持提取多语言词条（当前首发支持 Qt Linguist `.ts` 目录与 `.zip` 压缩包）、通过四级并发瀑布流自动补齐译文、导出多模式 `.xlsx` 审校表，并以**原位字节偏移补丁**写回目标文件。
+**LocLoom** 是一款基于 Go 与 [`egoist/mygo`](https://github.com/egoist/mygo) 构建的跨平台单文件桌面与命令行本地化工作台（`CGO_ENABLED=0`），支持 **macOS**、**Windows** 与 **Linux**。工具围绕“原位无损回填”设计，原生支持 **8 大主流本地化格式**（`Qt .ts`、`GNU Gettext .po/.pot`、`JSON i18n`、`Flutter .arb`、`Apple .xcstrings`、`Android strings.xml`、`.NET .resx`、`XLIFF 1.2/2.0`），通过十源并发瀑布流自动补齐译文、导出多模式 `.xlsx` 审校表，并**无损写回**目标文件。
 
 ### 1. 核心架构与能力
 
-- **原位字节偏移无损写回（Surgical Byte-Offset XML Patching）**
-  - 不使用全量 XML 重序列化，而是精确计算每个 `<message>` 内 `<translation>` 节点的 UTF-8 字节偏移进行局部替换。
-  - 严格保留原文件的 **UTF-8 BOM**、**CRLF / LF 换行符**、缩进、XML 注释、`<!DOCTYPE TS>`、`<location>` 节点、`<byte value="x..."/>` 控制字符以及 `<numerusform>` 复数形式。
-  - 仅按 Qt `lupdate` 规范转义 `&`、`<`、`>`，避免实体二次转义，写盘前在内存中通过 `encoding/xml` 完整校验语法合法性。
-- **上下文安全去重与幽灵词条隔离**
-  - 以 `(Context, Source, Comment)` 三元组（`EntryKey`）唯一标识词条；不同 `<context>` 下相同 `<source>`（如 `FileMenu` 与 `ConnectionState` 中的 `Open`）互不串扰。
-  - 默认严格隔离仅存在于 `.xlsx` 中的外部词条，防止向 `.ts` 注入“幽灵词条”；仅在显式开启 **「追加缺失」** 时才写入目标 `<context>`。
+- **原生支持 8 大无损本地化格式**
+  - **Qt Linguist (`.ts`)**：原位 UTF-8 字节偏移 XML 补丁，严格保留 BOM、CRLF/LF 换行、缩进、XML 注释、`<!DOCTYPE TS>`、`<location>`、`<byte value="x..."/>` 与 `<numerusform>` 复数形式。
+  - **GNU Gettext (`.po` / `.pot`)**：完整保留文件头、译者/提取注释、`msgctxt` 上下文、`msgid_plural` / `msgstr[n]` 复数与 `fuzzy` 标记。
+  - **JSON i18n (`.json`)**：支持嵌套与扁平键值对 JSON、占位符保护及源模板原文自动回填。
+  - **Flutter ARB (`.arb`)**：完整保留 `@metadata` 元数据、ICU 占位符与 `@@locale`。
+  - **Apple String Catalogs (`.xcstrings`)**：单文件多语种目录，保留 `sourceLanguage`、`extractionState`、`variations` 与 `state`。
+  - **Android (`strings.xml`)**：支持 `values/strings.xml` 与 `values-<lang>/strings.xml`，兼容 `translatable="false"`、`<string-array>` 与 `<plurals>`。
+  - **.NET (`.resx`)**：保留 XML schema 头、`resheader`、`<data>` 注释与非字符串资源节点。
+  - **XLIFF (`.xliff` / `.xlf`)**：同时支持 XLIFF 1.2（`<trans-unit>`）与 XLIFF 2.0（`<unit>` / `<segment>`）。
+- **上下文与键名安全去重**
+  - 以 `(ID, Context, Source, Comment)` 四元组（`EntryKey`）唯一标识词条，不同上下文或键名下的相同原文互不串扰。
+  - 针对 ID 键控格式（如 `en.json`、`values/strings.xml`、`Strings.resx`、`.pot`），自动从源模板回填可读原文供审校与机翻使用。
+  - 默认严格隔离仅存在于 `.xlsx` 中的外部词条，仅在显式开启 **「追加词表新增词条」** 时才插入目标文件。
 - **十源并发瀑布流引擎（10-Source Concurrent Waterfall）**
-  - 支持自定义优先级链式回退补缺：**本地 `.xlsx` 词条表** → **本地 `.ts` 翻译记忆库 (TM)** → **Google Web（免 Key）** → **Microsoft Bing / Edge（免 Key / Azure）** → **DeepL / DeepLX** → **MyMemory（免 Key）** → **LibreTranslate / Lingva** → **百度翻译开放平台** → **小牛翻译 Niutrans** → **OpenAI / Ollama 兼容大模型**。
+  - 支持自定义优先级链式回退补缺：**本地 `.xlsx` 词条表** → **本地翻译记忆库 (TM)** → **Google Web（免 Key）** → **Microsoft Bing / Edge（免 Key / Azure）** → **DeepL / DeepLX** → **MyMemory（免 Key）** → **LibreTranslate / Lingva** → **百度翻译开放平台** → **小牛翻译 Niutrans** → **OpenAI / Ollama 兼容大模型**。
   - 支持多语种并发调度、持久化本地缓存（`translation-cache.json`）以及 **HTTP / SOCKS5 代理**（支持自签证书网关跳过 TLS 校验）。
-- **Qt 占位符与格式护栏**
-  - 发送给远端机器翻译 / 大模型前自动掩码 `%1`..`%99`、`%L1`..`%L99`、`%n` 与前后空白；还原后自动校验占位符数量一致性、残留掩码及末尾制表符 `\t` 差异并标记 `[⚠]`。
-
+- **占位符与格式护栏**
+  - 发送给远端翻译引擎前自动掩码 Qt（`%1`..`%99`、`%n`）、printf（`%s`、`%d`、`%1$s`）、ICU/模板（`{name}`、`{{var}}`）及前后空白；还原后自动校验一致性并标记 `[⚠]`。
 ### 2. 跨平台编译与命令行参数
 
 #### 编译命令（全平台 `CGO_ENABLED=0`）
@@ -157,14 +164,13 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 
 ### 3. 标准工作流与状态标记
 
-1. **加载目标目录或 `.zip`**：点击顶部工具栏 **「浏览目录…」** / **「浏览 ZIP…」**（或直接拖入窗口）。自动递归扫描子目录、保留相对路径、支持 `{id}.ts` 命名模板并自动发现未知语种。
-2. **导入 / 导出 `.xlsx` 词条表**：拖入 `.xlsx` 或在左侧启用词条表，支持 `Context`、`Source`、`Comment` 及多语种列（表头含 `参考` / `ref` 的列默认跳过）。Windows 下采用共享读取模式，即使 Excel 正在打开文件也可直接读取。支持导出 **未翻译缺口**、**全量总表** 与 **本轮变更**。
-3. **配置翻译源与代理**：在左侧自由勾选并上下调整 10 种内置翻译源（`XLSX`、`TS TM`、`Google Web`、`Bing / Edge`、`DeepL / DeepLX`、`MyMemory`、`LibreTranslate / Lingva`、`百度翻译`、`小牛翻译`、`OpenAI / Ollama`），支持连通性测试、LLM 模型自动发现与 HTTP/SOCKS5 代理配置。
-4. **审校与安全写回**：支持 **聚焦单语种** 与 **全景矩阵** 视图切换，底部检查栏可逐行预览 XML 片段差异；目录模式支持生成 `.bak` 备份并原子替换，ZIP 模式输出 `*_updated.zip` 并完整保留压缩包内的非 `.ts` 文件与目录结构。
-5. **中英文实时切换**：点击顶部工具栏右上角 **`[EN]` / `[中文]`** 按钮，即可实时切换全界面、翻译引擎配置表单、占位符告警及内置帮助文档语言；也可通过 `-lang <auto|zh|en>` 启动参数指定。
+1. **加载任意格式项目**：点击顶部工具栏 **「打开目录」** / **「打开文件」**（或直接拖入单个/多个文件、目录或 `.zip`）。工作台自动识别格式并在顶部显示格式徽章，同时通过 **智能语种同步** 自动对齐当前项目包含的目标语种。
+2. **导入 / 导出 `.xlsx` 词条表**：拖入 `.xlsx` 或通过顶部按钮导入导出，支持 `Key ID`、`Context`、`Source`、`Comment` 及多语种列（表头含 `参考` / `ref` 的列默认跳过）。支持导出 **全部词条**、**仅未翻译**、**仅待写入变更** 与 **仅含告警**。
+3. **配置翻译源与代理**：在 **「管线」** 选项卡点击展开任意翻译源手风琴卡片，支持密钥明文切换、连通性测试、LLM 模型自动发现与 HTTP/SOCKS5 代理配置。
+4. **单行快翻、缺口跳转与安全写回**：支持 **聚焦单语种** 与 **全景矩阵**（点击任意语种单元格即可直达编辑），底部检查栏提供 **⚡ 翻译此条**、**◀ 上一待办 / 下一待办 ▶**、**复制原文 / 填入原文 / 重置该格** 与格式感知的 Before/After 差异预览；点击 **「写回保存 (N)」** 即可无损落盘（支持 `.bak` 备份与 `*_updated.zip`）。
+5. **中英文实时切换**：点击顶部工具栏右上角 **`[EN]` / `[中文]`** 按钮，即可实时切换全界面语言；也可通过 `-lang <auto|zh|en>` 启动参数指定。
 
-单元格状态前缀仅用于界面提示，**绝不会写入 `.ts` 或 `.xlsx`**：
-
+单元格状态前缀仅用于界面提示，**绝不会写入本地化文件或 `.xlsx`**：
 | 标记 | 含义 | 说明 |
 | :--- | :--- | :--- |
 | **`[补]`** | 补缺写入 | 原 `.ts` 为 `unfinished` 或空译文，写入时填入新译文并移除 `type="unfinished"` |
@@ -185,4 +191,4 @@ LocLoom 自动遵循各操作系统的标准目录规范，并支持**便携模�
 
 ### 5. 多格式扩展架构说明
 
-LocLoom 的核心领域模型（`internal/domain` 与 `internal/planner`）采用与具体文件格式解耦的设计，围绕 `(Context, Source, Comment)` 三元组索引、多语种目录与原位字节补丁构建。当前首发完整支持 Qt `.ts`，该架构已为平滑扩展至 **GNU gettext (`.po`)**、**Apple String Catalogs (`.xcstrings`)**、**XLIFF (`.xliff` / `.xlf`)**、**Flutter / Web (`.arb` / JSON)**、**Android (`strings.xml`)** 及 **.NET (`.resx`)** 等主流本地化生态做好了抽象准备。
+LocLoom 通过 `internal/format` 统一驱动注册表将领域模型（`internal/domain`）、矩阵规划器（`internal/planner`）与桌面工作台（`internal/app`）解耦于具体文件语法，在保持 `CGO_ENABLED=0` 零依赖跨平台编译的同时实现 8 大本地化生态的原位无损往返。

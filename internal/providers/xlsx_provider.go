@@ -176,6 +176,7 @@ func (p *xlsxProvider) Translate(_ context.Context, req provider.Request) (map[s
 		locCandidates = append(locCandidates, req.TargetLocale.EngineCode)
 	}
 	exactMap := make(map[domain.EntryKey]string, len(wb.Rows))
+	idCtxMap := make(map[domain.EntryKey]string, len(wb.Rows))
 	ctxSrcMap := make(map[domain.EntryKey]string, len(wb.Rows))
 	ctxSrcExact := make(map[domain.EntryKey]bool, len(wb.Rows))
 	srcOnlyMap := make(map[string]string, len(wb.Rows))
@@ -192,6 +193,7 @@ func (p *xlsxProvider) Translate(_ context.Context, req provider.Request) (map[s
 			continue
 		}
 		k := domain.EntryKey{
+			ID:      row.KeyID,
 			Context: row.Context,
 			Source:  row.Source,
 			Comment: row.Comment,
@@ -199,7 +201,13 @@ func (p *xlsxProvider) Translate(_ context.Context, req provider.Request) (map[s
 		if _, exists := exactMap[k]; !exists {
 			exactMap[k] = trans
 		}
-		csKey := k.ContextSource()
+		if wb.HasKeyIDColumn && row.KeyID != "" {
+			ik := k.IDContext()
+			if _, exists := idCtxMap[ik]; !exists {
+				idCtxMap[ik] = trans
+			}
+		}
+		csKey := domain.EntryKey{Context: row.Context, Source: row.Source}
 		if row.Comment == "" {
 			if !ctxSrcExact[csKey] {
 				ctxSrcMap[csKey] = trans
@@ -221,8 +229,14 @@ func (p *xlsxProvider) Translate(_ context.Context, req provider.Request) (map[s
 			out[item.ID] = v
 			continue
 		}
+		if wb.HasKeyIDColumn && item.Key.ID != "" {
+			if v, ok := idCtxMap[item.Key.IDContext()]; ok && v != "" {
+				out[item.ID] = v
+				continue
+			}
+		}
 		if item.Key.Comment != "" {
-			if v, ok := ctxSrcMap[item.Key.ContextSource()]; ok && v != "" {
+			if v, ok := ctxSrcMap[domain.EntryKey{Context: item.Key.Context, Source: item.Key.Source}]; ok && v != "" {
 				out[item.ID] = v
 				continue
 			}

@@ -3,33 +3,34 @@ package app
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 
 	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/i18n"
 	"locloom/internal/planner"
 )
-
 func (a *App) viewMatrix(c *ui.Context) {
 	t := c.Theme()
 	tr := a.tr()
 
 	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
-		// Filter & View Mode Toolbar
-		ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Wrap().Children(func() {
-			if ui.Segmented(c, &a.statusFilter, tr.FilterAll, tr.FilterGaps, tr.FilterPending, tr.FilterWarnings).Changed() {
+		// Filter & View Mode Toolbar (kept on 1 crisp line at 1280px)
+		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Wrap().Children(func() {
+			if ui.Segmented(c, &a.statusFilter, tr.FilterAll, tr.FilterGaps, tr.FilterPending, tr.FilterWarnings).Shrink(0).Changed() {
 				a.refilterRows()
 			}
 
-			if ui.Segmented(c, &a.cfg.MatrixViewMode, tr.ViewModeFocus, tr.ViewModeFull).Changed() {
+			if ui.Segmented(c, &a.cfg.MatrixViewMode, tr.ViewModeFocus, tr.ViewModeFull).Shrink(0).Changed() {
 				a.scheduleConfigSave()
 			}
 
 			if a.cfg.MatrixViewMode == 0 {
 				ids := a.enabledNonRefIDs()
 				if len(ids) > 0 {
-					if ui.Select(c, &a.focusedLocale, ids).Width(115).Changed() {
+					if ui.Select(c, &a.focusedLocale, ids).Width(92).Shrink(0).Changed() {
 						a.activeEditLocale = a.focusedLocale
 						a.syncEditorFromSelection()
 					}
@@ -40,11 +41,10 @@ func (a *App) viewMatrix(c *ui.Context) {
 				Bind(&a.searchHandle).
 				Placeholder(tr.PlaceholderSearch).
 				Grow(1).
-				MinWidth(180).
+				MinWidth(90).
 				Changed() {
 				a.refilterRows()
 			}
-
 			ui.MenuButton(c, tr.MenuClear, func(m *ui.Menu) {
 				if m.Item(tr.MenuClearMachine).Chosen() {
 					a.clearMachineTranslations()
@@ -52,7 +52,7 @@ func (a *App) viewMatrix(c *ui.Context) {
 				if m.Item(tr.MenuClearAll).Chosen() {
 					a.clearAllTranslations()
 				}
-			})
+			}).Shrink(0)
 		})
 
 		if a.plan == nil || len(a.filteredRows) == 0 {
@@ -88,50 +88,61 @@ func (a *App) viewFocusedMatrixTable(c *ui.Context) {
 		refHeader = fmt.Sprintf(tr.ColRefFmt, a.plan.RefLocaleID)
 	}
 
+	ctxTitle := tr.ColContext
+	if a.bundle != nil && a.bundle.Format != format.FormatQtTS && a.bundle.Format != format.FormatGettextPO {
+		ctxTitle = tr.ColKeyID
+	}
+
 	cols := []ui.TableColumn{
-		{ID: "idx", Title: "#", Width: 44, Align: ui.End, Fixed: true, RowHeader: true},
-		{ID: "ctx", Title: tr.ColContext, Width: 120, MinWidth: 85, Sortable: false},
-		{ID: "src", Title: tr.ColSource, Width: 210, MinWidth: 140},
-		{ID: "ref", Title: refHeader, Width: 170, MinWidth: 120},
-		{ID: "tgt", Title: targetHeader, Width: 210, MinWidth: 140},
-		{ID: "status", Title: tr.ColStatus, Width: 125, MinWidth: 95},
+		{ID: "idx", Title: "#", Width: 38, Align: ui.End, Fixed: true, RowHeader: true},
+		{ID: "ctx", Title: ctxTitle, Width: 115, MinWidth: 80, Sortable: false},
+		{ID: "src", Title: tr.ColSource, Width: 175, MinWidth: 120},
+		{ID: "ref", Title: refHeader, Width: 145, MinWidth: 100},
+		{ID: "tgt", Title: targetHeader, Width: 175, MinWidth: 120},
+		{ID: "status", Title: tr.ColStatus, Width: 105, MinWidth: 85},
 	}
 
 	tbl := ui.Table(c, &a.tableState, cols, len(a.filteredRows), func(row, col int) {
 		r := &a.plan.Rows[a.filteredRows[row]]
+		sel := row == a.selectedRow
+		mutedOrSel := func(el ui.Element) ui.Element {
+			if !sel {
+				el.TextColor(t.TextMuted)
+			}
+			return el
+		}
 		switch col {
 		case 0:
-			ui.Text(c, strconv.Itoa(r.Index+1)).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			mutedOrSel(ui.Text(c, strconv.Itoa(r.Index+1)).FontSize(12).SingleLine())
 		case 1:
-			ctxName := r.Key.Context
-			if ctxName == "" {
-				ctxName = "-"
-			}
-			ui.Text(c, ctxName).FontSize(12).TextColor(t.TextMuted).SingleLine().Tooltip(ctxName)
+			ctxName := formatRowCtxOrKey(r)
+			mutedOrSel(ui.Text(c, ctxName).FontSize(12).SingleLine()).Tooltip(ctxName)
 		case 2:
 			ui.Text(c, r.Key.Source).FontSize(12).SingleLine().Tooltip(r.Key.Source)
 		case 3:
-			ui.Text(c, r.RefText).FontSize(12).TextColor(t.TextMuted).SingleLine().Tooltip(r.RefText)
+			mutedOrSel(ui.Text(c, r.RefText).FontSize(12).SingleLine()).Tooltip(r.RefText)
 		case 4:
 			if targetLoc == "" {
-				ui.Text(c, "-").FontSize(12).TextColor(t.TextMuted).SingleLine()
+				mutedOrSel(ui.Text(c, "-").FontSize(12).SingleLine())
 				return
 			}
 			cell := r.Cells[targetLoc]
 			txt := cell.Effective
-			colr := t.Text
+			el := ui.Text(c, txt).FontSize(12).SingleLine()
 			if txt == "" {
-				txt = tr.EmptyCell
-				colr = t.TextMuted
+				el = mutedOrSel(ui.Text(c, tr.EmptyCell).FontSize(12).SingleLine())
 			}
-			ui.Text(c, txt).FontSize(12).TextColor(colr).SingleLine().Tooltip(cell.Effective)
+			el.Tooltip(cell.Effective)
 		case 5:
 			if targetLoc == "" {
 				return
 			}
 			cell := r.Cells[targetLoc]
 			badge, fg := formatCellStatusBadge(c, cell, tr)
-			ui.Text(c, badge).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
+			lbl := ui.Text(c, badge).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
+			if len(cell.Warnings) > 0 {
+				lbl.Tooltip(strings.Join(cell.Warnings, "\n"))
+			}
 		}
 	}).Grow(1).MinHeight(0)
 
@@ -150,10 +161,15 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 		refHeader = fmt.Sprintf(tr.ColRefFmt, a.plan.RefLocaleID)
 	}
 
+	ctxTitle := tr.ColContext
+	if a.bundle != nil && a.bundle.Format != format.FormatQtTS && a.bundle.Format != format.FormatGettextPO {
+		ctxTitle = tr.ColKeyID
+	}
+
 	cols := make([]ui.TableColumn, 0, 4+len(locs))
 	cols = append(cols,
 		ui.TableColumn{ID: "idx", Title: "#", Width: 48, Align: ui.End, Fixed: true, RowHeader: true},
-		ui.TableColumn{ID: "ctx", Title: tr.ColContext, Width: 120, MinWidth: 80},
+		ui.TableColumn{ID: "ctx", Title: ctxTitle, Width: 130, MinWidth: 80},
 		ui.TableColumn{ID: "src", Title: tr.ColSourceShort, Width: 180, MinWidth: 120},
 		ui.TableColumn{ID: "ref", Title: refHeader, Width: 150, MinWidth: 100},
 	)
@@ -172,11 +188,8 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 		case 0:
 			ui.Text(c, strconv.Itoa(r.Index+1)).FontSize(12).TextColor(t.TextMuted).SingleLine()
 		case 1:
-			ctxName := r.Key.Context
-			if ctxName == "" {
-				ctxName = "-"
-			}
-			ui.Text(c, ctxName).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			ctxName := formatRowCtxOrKey(r)
+			ui.Text(c, ctxName).FontSize(12).TextColor(t.TextMuted).SingleLine().Tooltip(ctxName)
 		case 2:
 			ui.Text(c, r.Key.Source).FontSize(12).SingleLine().Tooltip(r.Key.Source)
 		case 3:
@@ -189,7 +202,33 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 			locID := locs[locIdx].ID
 			cell := r.Cells[locID]
 			tag, fg := shortMatrixTag(c, cell, tr)
-			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+			bg := ui.Transparent
+			if a.activeEditLocale == locID {
+				if a.selectedRow == row {
+					bg = t.Accent.Alpha(0.14)
+				} else {
+					bg = t.Accent.Alpha(0.05)
+				}
+			}
+			tip := cell.Effective
+			if len(cell.Warnings) > 0 {
+				warnTip := strings.Join(cell.Warnings, "\n")
+				if tip != "" {
+					tip = warnTip + "\n" + tip
+				} else {
+					tip = warnTip
+				}
+			}
+			cellRow := ui.Row(c).
+				FillWidth().
+				Gap(t.Space(1)).
+				Padding(t.Space(0.5), t.Space(1)).
+				Radius(t.Radius).
+				Background(bg).
+				AlignItems(ui.Center).
+				Cursor(ui.CursorPointer).
+				Tooltip(tip)
+			cellRow.Children(func() {
 				if tag != "" {
 					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(fg).SingleLine()
 				}
@@ -197,14 +236,32 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 				if txt == "" {
 					txt = "-"
 				}
-				ui.Text(c, txt).FontSize(12).SingleLine().Shrink(1).Tooltip(cell.Effective)
+				ui.Text(c, txt).FontSize(12).SingleLine().Shrink(1).MinWidth(0)
 			})
+			if cellRow.Clicked() {
+				a.selectedRow = row
+				a.focusedLocale = locID
+				a.activeEditLocale = locID
+				a.syncEditorFromSelection()
+			}
 		}
 	}).Grow(1).MinHeight(0)
-
 	if tbl.Changed() {
 		a.syncEditorFromSelection()
 	}
+}
+
+func formatRowCtxOrKey(r *planner.MatrixRow) string {
+	if r.Key.ID != "" && r.Key.Context != "" {
+		return r.Key.Context + " · " + r.Key.ID
+	}
+	if r.Key.ID != "" {
+		return r.Key.ID
+	}
+	if r.Key.Context != "" {
+		return r.Key.Context
+	}
+	return "-"
 }
 
 func formatCellStatusBadge(c *ui.Context, cell planner.CellPlan, tr *i18n.Catalog) (string, ui.Color) {

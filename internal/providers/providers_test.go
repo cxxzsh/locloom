@@ -386,3 +386,73 @@ func TestBuiltinsLocalizedProvider(t *testing.T) {
 		}
 	}
 }
+
+func TestXLSXProviderKeyIDMatching(t *testing.T) {
+	dir := t.TempDir()
+	xlsxPath := filepath.Join(dir, "id_glossary.xlsx")
+
+	f := excelize.NewFile()
+	sheetName := f.GetSheetName(0)
+	_ = f.SetSheetRow(sheetName, "A1", &[]any{"Key", "Context", "Source", "ja"})
+	_ = f.SetSheetRow(sheetName, "A2", &[]any{"btn.save", "MainWindow", "Save", "保存"})
+	_ = f.SetSheetRow(sheetName, "A3", &[]any{"btn.open", "MainWindow", "Open", "開く"})
+	if err := f.SaveAs(xlsxPath); err != nil {
+		t.Fatalf("SaveAs failed: %v", err)
+	}
+	_ = f.Close()
+
+	p := NewXLSXProvider()
+	if err := p.Configure(map[string]string{
+		"file_path": xlsxPath,
+		"skip_ref":  "true",
+	}, nil); err != nil {
+		t.Fatalf("Configure failed: %v", err)
+	}
+
+	out, err := p.Translate(context.Background(), provider.Request{
+		TargetLocale: locale.LocaleSpec{ID: "ja"},
+		Items: []provider.SourceItem{
+			{ID: "1", Key: domain.EntryKey{ID: "btn.save", Context: "MainWindow", Source: "Save"}},
+			// Changed Source text still matches via IDContext.
+			{ID: "2", Key: domain.EntryKey{ID: "btn.open", Context: "MainWindow", Source: "Open File"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Translate failed: %v", err)
+	}
+	if out["1"] != "保存" || out["2"] != "開く" {
+		t.Fatalf("unexpected translations: %+v", out)
+	}
+}
+
+func TestTSTMProviderMultiFormatJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "en.json"), []byte(`{"app.title": "LocLoom", "btn.save": "Save"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ja.json"), []byte(`{"app.title": "LocLoom JA", "btn.save": "保存"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewTSTMProvider()
+	if err := p.Configure(map[string]string{"tm_path": dir}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Check(context.Background()); err != nil {
+		t.Fatalf("Check failed: %v", err)
+	}
+
+	out, err := p.Translate(context.Background(), provider.Request{
+		TargetLocale: locale.LocaleSpec{ID: "ja"},
+		Items: []provider.SourceItem{
+			{ID: "1", Key: domain.EntryKey{ID: "btn.save", Source: "Save"}},
+			{ID: "2", Key: domain.EntryKey{ID: "app.title", Source: "LocLoom"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Translate failed: %v", err)
+	}
+	if out["1"] != "保存" || out["2"] != "LocLoom JA" {
+		t.Fatalf("unexpected multi-format TM translations: %+v", out)
+	}
+}

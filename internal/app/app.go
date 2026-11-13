@@ -12,6 +12,7 @@ import (
 
 	"locloom/internal/config"
 	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/i18n"
 	"locloom/internal/locale"
 	"locloom/internal/netpool"
@@ -19,7 +20,6 @@ import (
 	"locloom/internal/provider"
 	_ "locloom/internal/providers"
 	"locloom/internal/sheet"
-	"locloom/internal/tsxml"
 )
 
 // App holds the workbench UI state and coordinates background I/O/translation tasks
@@ -30,9 +30,8 @@ type App struct {
 	netPool *netpool.Pool
 	cache   *provider.Cache
 	catalog *domain.Catalog
-	bundle  *tsxml.Bundle
+	bundle  *format.Bundle
 	plan    *planner.MatrixPlan
-
 	extraEntries []domain.EntryKey
 	defaultCtx   string
 
@@ -68,12 +67,16 @@ type App struct {
 	showClearMenu   bool
 
 	// Provider UI state
+	expandedProvider  map[string]bool
+	revealedSecrets   map[string]bool
 	providerTestMsg   map[string]string
 	providerTestErr   map[string]bool
 	providerTesting   map[string]bool
 	discoveredModels  map[string][]string
 	discoveringModels map[string]bool
 
+	// Locale sidebar search
+	localeSearchQuery string
 	// Custom locale form
 	newLocID   string
 	newLocName string
@@ -81,11 +84,11 @@ type App struct {
 
 	// Concurrent translation state
 	translating         bool
+	translatingRow      bool
 	cancelTranslate     context.CancelFunc
 	translateStatuses   map[string]provider.LocaleStatus
 	translateDoneCount  int
 	translateTotalCount int
-
 	// Logs & status banner
 	logs            []provider.LogEvent
 	statusBanner    string
@@ -131,6 +134,8 @@ func NewWithConfig(cfg config.AppConfig) *App {
 		catalog:           domain.NewCatalog(),
 		selectedRow:       -1,
 		matrixHeightPct:   64,
+		expandedProvider:  make(map[string]bool),
+		revealedSecrets:   make(map[string]bool),
 		providerTestMsg:   make(map[string]string),
 		providerTestErr:   make(map[string]bool),
 		providerTesting:   make(map[string]bool),
@@ -138,7 +143,6 @@ func NewWithConfig(cfg config.AppConfig) *App {
 		discoveringModels: make(map[string]bool),
 		translateStatuses: make(map[string]provider.LocaleStatus),
 	}
-
 	a.tableState.Selected = &a.selectedRow
 	a.tableState.Key = func(i int) any {
 		if a.plan == nil || i < 0 || i >= len(a.filteredRows) {
@@ -268,9 +272,15 @@ func (a *App) setStatus(msg string, isErr bool) {
 	a.statusBannerErr = isErr
 }
 
-// LoadTSTarget loads a .ts directory or .zip archive into the workbench.
-func (a *App) LoadTSTarget(dirOrZip string) error {
-	bundle, err := tsxml.LoadBundle(dirOrZip, a.cfg.FilePattern, a.cfg.Locales)
+// LoadTSTarget loads any supported localization file, directory, or .zip archive into the workbench.
+// Kept as a compatibility alias for CLI flags and existing tests.
+func (a *App) LoadTSTarget(path string) error {
+	return a.LoadProject(path)
+}
+
+// LoadProject auto-detects and loads a localization file, directory, or .zip archive.
+func (a *App) LoadProject(path string) error {
+	bundle, err := format.Load(path, a.cfg.FilePattern, a.cfg.Locales)
 	if err != nil {
 		msg := fmt.Sprintf(a.tr().ErrLoadTSFmt, err)
 		a.setStatus(msg, true)
@@ -281,25 +291,77 @@ func (a *App) LoadTSTarget(dirOrZip string) error {
 	return nil
 }
 
-func (a *App) applyLoadedBundle(bundle *tsxml.Bundle) {
+func (a *App) applyLoadedBundle(bundle *format.Bundle) {
 	a.bundle = bundle
 	a.cfg.LastTSPath = bundle.SourcePath
 
-	discovered := make([]string, 0, len(bundle.Files))
-	for _, tf := range bundle.Files {
-		if tf.LocaleID != "" {
-			discovered = append(discovered, tf.LocaleID)
+	discovered := make([]string, 0, len(bundle.Locales)+len(bundle.Docs))
+	discovered = append(discovered, bundle.Locales...)
+	for _, doc := range bundle.Docs {
+		if doc.LocaleID != "" {
+			discovered = append(discovered, doc.LocaleID)
 		}
+		discovered = append(discovered, doc.Locales...)
 	}
 	merged, added := locale.MergeDiscovered(a.cfg.Locales, discovered)
 	a.cfg.Locales = merged
+
+	// Smart Project Sync: align reference and enabled target locales with the loaded bundle.
+	if len(bundle.Locales) > 0 {
+		inBundle := make(map[string]bool, len(bundle.Locales))
+		for _, id := range bundle.Locales {
+			inBundle[id] = true
+		}
+		targetInBundle := 0
+		for _, loc := range a.cfg.Locales {
+			if !loc.IsRef && inBundle[loc.ID] && loc.ID != bundle.SourceLocale {
+				targetInBundle++
+			}
+		}
+		if targetInBundle > 0 {
+			firstInBundle := ""
+			for i := range a.cfg.Locales {
+				id := a.cfg.Locales[i].ID
+				if a.cfg.Locales[i].IsRef {
+					a.cfg.Locales[i].Enabled = inBundle[id]
+					continue
+				}
+				present := inBundle[id] && id != bundle.SourceLocale
+				a.cfg.Locales[i].Enabled = present
+				if present && firstInBundle == "" {
+					firstInBundle = id
+				}
+			}
+			if firstInBundle != "" {
+				a.focusedLocale = firstInBundle
+				a.activeEditLocale = firstInBundle
+			}
+		} else {
+			// Single-template project (e.g. en.json or .pot): ensure at least one target locale is enabled.
+			anyEnabled := false
+			for _, loc := range a.cfg.Locales {
+				if !loc.IsRef && loc.Enabled {
+					anyEnabled = true
+					break
+				}
+			}
+			if !anyEnabled {
+				for i := range a.cfg.Locales {
+					if !a.cfg.Locales[i].IsRef {
+						a.cfg.Locales[i].Enabled = true
+						break
+					}
+				}
+			}
+		}
+	}
 
 	a.contextFilter = ""
 	a.selectedRow = 0
 	a.rebuildPlan()
 
 	tr := a.tr()
-	msg := fmt.Sprintf(tr.StatusLoadedBundleFmt, filepath.Base(bundle.SourcePath), len(bundle.Files), a.plan.Summary.TotalRows)
+	msg := fmt.Sprintf(tr.StatusLoadedBundleFmt, filepath.Base(bundle.SourcePath), len(bundle.Docs), a.plan.Summary.TotalRows)
 	if len(added) > 0 {
 		msg += fmt.Sprintf(tr.StatusDiscoveredLocalesFmt, added)
 	}
@@ -307,7 +369,6 @@ func (a *App) applyLoadedBundle(bundle *tsxml.Bundle) {
 	a.appendLog("info", "", "", msg)
 	a.scheduleConfigSave()
 }
-
 // ImportFromExcelFile reads an .xlsx workbook and populates the workspace catalog.
 func (a *App) ImportFromExcelFile(xlsxPath, sheetName string, skipRef bool) error {
 	wb, err := sheet.LoadExcel(xlsxPath, sheetName, a.cfg.Locales, skipRef)
@@ -331,8 +392,9 @@ func (a *App) applyLoadedWorkbook(wb *sheet.WorkbookData, skipRef bool) {
 	// Collect extra entries from Excel rows in case AppendMissing is enabled.
 	extra := make([]domain.EntryKey, 0, len(wb.Rows))
 	for _, r := range wb.Rows {
-		if r.Source != "" {
+		if r.Source != "" || r.KeyID != "" {
 			extra = append(extra, domain.EntryKey{
+				ID:      r.KeyID,
 				Context: r.Context,
 				Source:  r.Source,
 				Comment: r.Comment,
@@ -340,7 +402,6 @@ func (a *App) applyLoadedWorkbook(wb *sheet.WorkbookData, skipRef bool) {
 		}
 	}
 	a.extraEntries = extra
-	a.rebuildPlan()
 
 	msg := fmt.Sprintf(a.tr().StatusImportedExcelFmt, filepath.Base(wb.FilePath), wb.SheetName, count)
 	a.setStatus(msg, false)
@@ -384,10 +445,10 @@ func (a *App) View(c *ui.Context) {
 
 	// Cross-platform keyboard shortcuts
 	if c.Shortcut(ui.Cmd, ui.KeyO) {
-		a.openTSDirAsync()
+		a.openDirAsync()
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) {
-		a.writeTSAsync()
+		a.writeBackAsync()
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyE) {
 		a.showExportModal = true
@@ -395,7 +456,21 @@ func (a *App) View(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyF) {
 		a.searchHandle.Focus(c)
 	}
-
+	if !c.FocusTakesText() {
+		if c.Shortcut(0, ui.KeyEscape) {
+			if a.showHelp {
+				a.showHelp = false
+			} else if a.showExportModal {
+				a.showExportModal = false
+			}
+		}
+		if c.Shortcut(0, ui.KeyF3) || c.Shortcut(ui.Alt, ui.KeyDown) {
+			a.jumpGap(1)
+		}
+		if c.Shortcut(ui.Shift, ui.KeyF3) || c.Shortcut(ui.Alt, ui.KeyUp) {
+			a.jumpGap(-1)
+		}
+	}
 	root := ui.Column(c).Fill().Background(t.Background)
 	if files := root.DroppedFiles(); len(files) > 0 {
 		a.handleDroppedPaths(files)

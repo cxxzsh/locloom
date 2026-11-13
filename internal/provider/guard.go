@@ -7,7 +7,15 @@ import (
 	"strings"
 )
 
-var reMaskToken = regexp.MustCompile(`%L?[1-9][0-9]?|%n|\n|\t`)
+var reMaskToken = regexp.MustCompile(
+	`<ph\b[^>]*>[\s\S]*?</ph>|<x\b[^/>]*/>|<xliff:g\b[^>]*>[\s\S]*?</xliff:g>|</?[bui]>|<br\s*/?>|` +
+		`\{\{-?\s*[a-zA-Z0-9_.-]+\s*\}\}|` +
+		`%\{[a-zA-Z0-9_]+\}|` +
+		`%#@?[a-zA-Z0-9_]+@|` +
+		`%(?:[1-9][0-9]*\$)?(?:l{1,2}[duoxX]|[@sduoxXfFeEgGc])|` +
+		`%\([a-zA-Z0-9_]+\)[sduoxXfFeEgG]|` +
+		`%L?[1-9][0-9]?|%n|\{(?:[0-9]+(?::[^}\n]+)?|[a-zA-Z_][a-zA-Z0-9_]*)\}|\n|\t`,
+)
 
 // MaskedText holds a placeholder-masked string along with original tokens and edge spaces.
 type MaskedText struct {

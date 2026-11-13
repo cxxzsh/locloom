@@ -21,8 +21,8 @@ func main() {
 	openHelp := flag.Bool("open-help", false, "Open usage documentation modal on startup")
 	langFlag := flag.String("lang", "", "Optional UI language override: auto, zh, en")
 	themeFlag := flag.String("theme", "", "Optional theme override: system, light, dark")
-	srcDir := flag.String("src", "", "Optional initial localization directory or .zip archive path")
-	tsDir := flag.String("ts", "", "Alias for -src: optional initial .ts directory or .zip path")
+	srcDir := flag.String("src", "", "Optional initial localization file, directory, or .zip archive path")
+	tsDir := flag.String("ts", "", "Alias for -src: optional initial localization file, directory, or .zip path")
 	xlsxFile := flag.String("xlsx", "", "Optional initial .xlsx file path")
 	width := flag.Int("width", 1280, "Initial window width")
 	height := flag.Int("height", 820, "Initial window height")
@@ -49,7 +49,7 @@ func main() {
 		targetSrc = *tsDir
 	}
 	if targetSrc != "" {
-		_ = application.LoadTSTarget(targetSrc)
+		_ = application.LoadProject(targetSrc)
 	}
 	if *xlsxFile != "" {
 		_ = application.ImportFromExcelFile(*xlsxFile, "", true)
