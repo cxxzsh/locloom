@@ -58,6 +58,11 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 			if ui.Checkbox(c, &a.cfg.CreateBackup, tr.CheckCreateBackup).Changed() {
 				a.scheduleConfigSave()
 			}
+			if ui.Checkbox(c, &a.cfg.EnablePluralForms, tr.CheckPluralForms).Changed() {
+				a.editBoundLocale = ""
+				a.syncEditorFromSelection()
+				a.scheduleConfigSave()
+			}
 
 			ui.Divider(c)
 

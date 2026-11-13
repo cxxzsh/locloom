@@ -27,6 +27,7 @@ type AppConfig struct {
 	AppendMissing    bool                         `json:"append_missing"`
 	AppendContext    string                       `json:"append_context"`
 	CreateBackup     bool                         `json:"create_backup"`
+	EnablePluralForms bool                        `json:"enable_plural_forms"`
 	BypassCache      bool                         `json:"bypass_cache"`
 	Concurrency      int                          `json:"concurrency"`
 	LastTSPath       string                       `json:"last_ts_path,omitempty"`

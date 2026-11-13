@@ -216,6 +216,11 @@ func ApplyPatches(tf *TSFile, patches []PatchItem) (*PatchResult, error) {
 		if isNumerus && len(m.NumerusForms) > len(forms) {
 			padded := make([]string, len(m.NumerusForms))
 			copy(padded, forms)
+			if len(forms) == 1 && forms[0] != "" {
+				for k := 1; k < len(padded); k++ {
+					padded[k] = forms[0]
+				}
+			}
 			forms = padded
 		}
 

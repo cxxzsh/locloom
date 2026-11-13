@@ -66,7 +66,12 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 						ui.Text(c, tr.LabelCommentPrefix+row.Key.Comment).FontSize(11).TextColor(t.TextMuted).SingleLine()
 					}
 					if row.Numerus {
-						ui.Badge(c, tr.BadgeNumerus)
+						ui.Badge(c, tr.BadgeNumerus).Shrink(0)
+						if ui.Checkbox(c, &a.cfg.EnablePluralForms, tr.CheckPluralForms).Changed() {
+							a.editBoundLocale = ""
+							a.syncEditorFromSelection()
+							a.scheduleConfigSave()
+						}
 					}
 				})
 
@@ -152,7 +157,7 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 					}
 				})
 
-				if row.Numerus {
+				if row.Numerus && a.cfg.EnablePluralForms {
 					labels := locale.PluralFormLabels(a.activeEditLocale, a.UILang(), max(cell.PluralCount, len(a.pluralEditBufs)))
 					if len(a.pluralEditBufs) < len(labels) {
 						grown := make([]string, len(labels))

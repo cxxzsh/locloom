@@ -179,7 +179,11 @@ func (a *App) syncEditorFromSelection() {
 	a.editBoundRowKey = row.Key
 	a.editBoundLocale = a.activeEditLocale
 	cell := row.Cells[a.activeEditLocale]
-	a.editBuf = cell.Effective
+	if row.Numerus && !a.cfg.EnablePluralForms && strings.Contains(cell.Effective, domain.PluralSeparator) {
+		a.editBuf = domain.SplitNumerus(cell.Effective)[0]
+	} else {
+		a.editBuf = cell.Effective
+	}
 	a.syncPluralBufs(row, cell)
 }
 

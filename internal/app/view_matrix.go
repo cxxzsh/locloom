@@ -129,7 +129,11 @@ func (a *App) viewFocusedMatrixTable(c *ui.Context) {
 			cell := r.Cells[targetLoc]
 			txt := cell.Effective
 			if r.Numerus && txt != "" {
-				txt = domain.FormatNumerusPreview(txt)
+				if a.cfg.EnablePluralForms {
+					txt = domain.FormatNumerusPreview(txt)
+				} else if parts := domain.SplitNumerus(txt); len(parts) > 0 {
+					txt = parts[0]
+				}
 			}
 			el := ui.Text(c, txt).FontSize(12).SingleLine()
 			if txt == "" {
@@ -257,11 +261,15 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 					if sel {
 						tagFg = t.AccentText
 					}
-					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(tagFg).SingleLine()
+					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(tagFg).SingleLine().Shrink(0)
 				}
 				txt := cell.Effective
 				if r.Numerus && txt != "" {
-					txt = domain.FormatNumerusPreview(txt)
+					if a.cfg.EnablePluralForms {
+						txt = domain.FormatNumerusPreview(txt)
+					} else if parts := domain.SplitNumerus(txt); len(parts) > 0 {
+						txt = parts[0]
+					}
 				}
 				if txt == "" {
 					txt = "-"

@@ -114,6 +114,7 @@ type Catalog struct {
 	CheckAppendMissing    string
 	PlaceholderDefaultCtx string
 	CheckCreateBackup     string
+	CheckPluralForms      string
 	SectionContextNavFmt  string
 	AllContextsFmt        string
 	NoContextLabel        string
@@ -351,6 +352,7 @@ var zhCatalog = Catalog{
 	CheckAppendMissing:    "追加词表新增词条",
 	PlaceholderDefaultCtx: "默认上下文 (留空使用 Common)",
 	CheckCreateBackup:     "写回前备份 .bak",
+	CheckPluralForms:      "启用复数多词形编辑",
 	SectionContextNavFmt:  "上下文导航 (%d)",
 	AllContextsFmt:        "全部上下文 (%d)",
 	NoContextLabel:        "(无上下文)",
@@ -582,6 +584,7 @@ var enCatalog = Catalog{
 	CheckAppendMissing:    "Append Missing Entries",
 	PlaceholderDefaultCtx: "Default context (blank = Common)",
 	CheckCreateBackup:     "Backup .bak before write",
+	CheckPluralForms:      "Enable Plural Forms Editing",
 	SectionContextNavFmt:  "Contexts (%d)",
 	AllContextsFmt:        "All Contexts (%d)",
 	NoContextLabel:        "(No Context)",
