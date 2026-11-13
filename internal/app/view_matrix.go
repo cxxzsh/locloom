@@ -139,10 +139,23 @@ func (a *App) viewFocusedMatrixTable(c *ui.Context) {
 			}
 			cell := r.Cells[targetLoc]
 			badge, fg := formatCellStatusBadge(c, cell, tr)
-			lbl := ui.Text(c, badge).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
-			if len(cell.Warnings) > 0 {
-				lbl.Tooltip(strings.Join(cell.Warnings, "\n"))
+			pillBg := fg.Alpha(0.12)
+			pillFg := fg
+			if sel {
+				pillBg = t.AccentText.Alpha(0.22)
+				pillFg = t.AccentText
 			}
+			pill := ui.Row(c).
+				Padding(t.Space(0.5), t.Space(1.5)).
+				Radius(t.Radius).
+				Background(pillBg).
+				AlignItems(ui.Center)
+			if len(cell.Warnings) > 0 {
+				pill.Tooltip(strings.Join(cell.Warnings, "\n"))
+			}
+			pill.Children(func() {
+				ui.Text(c, badge).FontSize(11).FontWeight(600).TextColor(pillFg).SingleLine()
+			})
 		}
 	}).Grow(1).MinHeight(0)
 
@@ -184,16 +197,23 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 
 	tbl := ui.Table(c, &a.tableState, cols, len(a.filteredRows), func(row, col int) {
 		r := &a.plan.Rows[a.filteredRows[row]]
+		sel := row == a.selectedRow
+		mutedOrSel := func(el ui.Element) ui.Element {
+			if !sel {
+				el.TextColor(t.TextMuted)
+			}
+			return el
+		}
 		switch col {
 		case 0:
-			ui.Text(c, strconv.Itoa(r.Index+1)).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			mutedOrSel(ui.Text(c, strconv.Itoa(r.Index+1)).FontSize(12).SingleLine())
 		case 1:
 			ctxName := formatRowCtxOrKey(r)
-			ui.Text(c, ctxName).FontSize(12).TextColor(t.TextMuted).SingleLine().Tooltip(ctxName)
+			mutedOrSel(ui.Text(c, ctxName).FontSize(12).SingleLine()).Tooltip(ctxName)
 		case 2:
 			ui.Text(c, r.Key.Source).FontSize(12).SingleLine().Tooltip(r.Key.Source)
 		case 3:
-			ui.Text(c, r.RefText).FontSize(12).TextColor(t.TextMuted).SingleLine().Tooltip(r.RefText)
+			mutedOrSel(ui.Text(c, r.RefText).FontSize(12).SingleLine()).Tooltip(r.RefText)
 		default:
 			locIdx := col - 4
 			if locIdx < 0 || locIdx >= len(locs) {
@@ -204,10 +224,10 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 			tag, fg := shortMatrixTag(c, cell, tr)
 			bg := ui.Transparent
 			if a.activeEditLocale == locID {
-				if a.selectedRow == row {
-					bg = t.Accent.Alpha(0.14)
+				if sel {
+					bg = t.AccentText.Alpha(0.18)
 				} else {
-					bg = t.Accent.Alpha(0.05)
+					bg = t.Accent.Alpha(0.08)
 				}
 			}
 			tip := cell.Effective
@@ -230,7 +250,11 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 				Tooltip(tip)
 			cellRow.Children(func() {
 				if tag != "" {
-					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(fg).SingleLine()
+					tagFg := fg
+					if sel {
+						tagFg = t.AccentText
+					}
+					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(tagFg).SingleLine()
 				}
 				txt := cell.Effective
 				if txt == "" {
@@ -319,6 +343,18 @@ func originLabel(origin string, tr *i18n.Catalog) string {
 		return tr.OriginManual
 	case domain.OriginCache:
 		return tr.OriginCache
+	case domain.OriginBing:
+		return "Bing"
+	case domain.OriginDeepL:
+		return "DeepL"
+	case domain.OriginMyMemory:
+		return "MyMemory"
+	case domain.OriginLibre:
+		return "Lingva"
+	case domain.OriginBaidu:
+		return "Baidu"
+	case domain.OriginNiutrans:
+		return "Niutrans"
 	default:
 		if origin == "" {
 			return "-"
