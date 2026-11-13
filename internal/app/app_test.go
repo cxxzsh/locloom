@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/xuri/excelize/v2"
 	"locloom/internal/config"
+	"locloom/internal/domain"
 	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/sheet"
@@ -407,5 +408,65 @@ func TestFullMatrixCellClickAndGapNavigation(t *testing.T) {
 	}
 	if a.editBuf != "Save" {
 		t.Fatalf("expected editBuf to be Save after Use Src, got %q", a.editBuf)
+	}
+}
+
+func TestMatrixRowRightClickContextMenuClearAndRevert(t *testing.T) {
+	a := newTestApp()
+	jsonDir := writeHermeticJSONBundle(t)
+	if err := a.LoadProject(jsonDir); err != nil {
+		t.Fatalf("LoadProject failed: %v", err)
+	}
+	tt := ui.NewTester(a.View, 1280, 820)
+
+	// Right-click row "Hello" (which has existing translations ja_JP="こんにちは", fr_FR="Bonjour")
+	if err := tt.RightClick("Hello"); err != nil {
+		t.Fatalf("RightClick on Hello failed: %v", err)
+	}
+	if err := tt.ChooseMenuItem("清空整行所有语种译文"); err != nil {
+		t.Fatalf("ChooseMenuItem Clear Entire Row failed: %v", err)
+	}
+
+	// Both ja_JP and fr_FR on row 0 should now be cleared (ActionOverwrite with Effective=="")
+	row0 := a.plan.Rows[0]
+	if row0.Cells["ja_JP"].Effective != "" || row0.Cells["fr_FR"].Effective != "" {
+		t.Fatalf("expected row 0 cells cleared, got ja=%q fr=%q", row0.Cells["ja_JP"].Effective, row0.Cells["fr_FR"].Effective)
+	}
+	if row0.Cells["ja_JP"].Action != domain.ActionOverwrite {
+		t.Fatalf("expected ActionOverwrite when clearing finished cell, got %s", row0.Cells["ja_JP"].Action)
+	}
+
+	// Right-click again and revert the entire row back to file original
+	if err := tt.RightClick("Hello"); err != nil {
+		t.Fatalf("RightClick on Hello (2nd) failed: %v", err)
+	}
+	if err := tt.ChooseMenuItem("还原整行至文件原值"); err != nil {
+		t.Fatalf("ChooseMenuItem Revert Entire Row failed: %v", err)
+	}
+	row0 = a.plan.Rows[0]
+	if row0.Cells["ja_JP"].Effective != "こんにちは" || row0.Cells["fr_FR"].Effective != "Bonjour" {
+		t.Fatalf("expected row 0 reverted to file originals, got ja=%q fr=%q", row0.Cells["ja_JP"].Effective, row0.Cells["fr_FR"].Effective)
+	}
+
+	// Fill source into single cell via right-click on "Save" row (row 1)
+	if err := tt.RightClick("Save"); err != nil {
+		t.Fatalf("RightClick on Save failed: %v", err)
+	}
+	if err := tt.ChooseMenuItem("将原文填入此格 (ja_JP)"); err != nil {
+		t.Fatalf("ChooseMenuItem Fill Source failed: %v", err)
+	}
+	if a.plan.Rows[1].Cells["ja_JP"].Effective != "Save" {
+		t.Fatalf("expected ja_JP on Save row to be filled with Save, got %q", a.plan.Rows[1].Cells["ja_JP"].Effective)
+	}
+
+	// Clear just that single cell via right-click
+	if err := tt.RightClick("Save"); err != nil {
+		t.Fatalf("RightClick on Save (2nd) failed: %v", err)
+	}
+	if err := tt.ChooseMenuItem("清空此格译文 (ja_JP)"); err != nil {
+		t.Fatalf("ChooseMenuItem Clear Cell failed: %v", err)
+	}
+	if a.plan.Rows[1].Cells["ja_JP"].Effective != "" {
+		t.Fatalf("expected ja_JP on Save row cleared, got %q", a.plan.Rows[1].Cells["ja_JP"].Effective)
 	}
 }

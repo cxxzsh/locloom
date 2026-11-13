@@ -4,8 +4,9 @@ import "sort"
 
 // TranslationEntry holds a candidate translation and its provenance.
 type TranslationEntry struct {
-	Text   string `json:"text"`
-	Origin string `json:"origin"`
+	Text    string `json:"text"`
+	Origin  string `json:"origin"`
+	Cleared bool   `json:"cleared,omitempty"`
 }
 
 // Catalog stores workspace translations per locale keyed by EntryKey.
@@ -57,6 +58,50 @@ func (c *Catalog) Set(localeID string, key EntryKey, text, origin string) {
 		c.byLocale[localeID] = m
 	}
 	m[key] = TranslationEntry{Text: text, Origin: origin}
+}
+
+// SetCleared marks localeID and key as explicitly cleared to empty, overriding both
+// existing file translations and context-less glossary fallbacks.
+func (c *Catalog) SetCleared(localeID string, key EntryKey, origin string) {
+	if localeID == "" || (key.Source == "" && key.ID == "") {
+		return
+	}
+	m, ok := c.byLocale[localeID]
+	if !ok {
+		m = make(map[EntryKey]TranslationEntry)
+		c.byLocale[localeID] = m
+	}
+	m[key] = TranslationEntry{Origin: origin, Cleared: true}
+}
+
+// DeleteKeyVariants removes staged overrides matching key, ContextSource, or IDContext for localeID.
+func (c *Catalog) DeleteKeyVariants(localeID string, key EntryKey) bool {
+	if c == nil {
+		return false
+	}
+	m, ok := c.byLocale[localeID]
+	if !ok {
+		return false
+	}
+	removed := false
+	for _, cand := range []EntryKey{key, key.ContextSource()} {
+		if _, exists := m[cand]; exists {
+			delete(m, cand)
+			removed = true
+		}
+	}
+	if key.ID != "" {
+		for k := range m {
+			if k.ID == key.ID && k.Context == key.Context {
+				delete(m, k)
+				removed = true
+			}
+		}
+	}
+	if len(m) == 0 {
+		delete(c.byLocale, localeID)
+	}
+	return removed
 }
 
 // Delete removes an exact key override for localeID.

@@ -376,3 +376,170 @@ func originLabel(origin string, tr *i18n.Catalog) string {
 		return origin
 	}
 }
+
+func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
+	if a.plan == nil || row < 0 || row >= len(a.filteredRows) {
+		return
+	}
+	planRowIdx := a.filteredRows[row]
+	if planRowIdx < 0 || planRowIdx >= len(a.plan.Rows) {
+		return
+	}
+	r := &a.plan.Rows[planRowIdx]
+	tr := a.tr()
+
+	locID := a.focusedLocale
+	if a.cfg.MatrixViewMode == 1 {
+		locs := a.enabledNonRefLocales()
+		if col >= 4 && col-4 < len(locs) {
+			locID = locs[col-4].ID
+		} else if a.activeEditLocale != "" {
+			locID = a.activeEditLocale
+		}
+	}
+
+	focusHere := func() {
+		a.selectedRow = row
+		if locID != "" {
+			a.focusedLocale = locID
+			a.activeEditLocale = locID
+		}
+		a.editBoundLocale = ""
+		a.syncEditorFromSelection()
+	}
+
+	busy := a.translating || a.translatingRow
+	if m.Item(tr.CtxTranslateRow).Disabled(busy).Chosen() {
+		focusHere()
+		a.translateRowAtAsync(planRowIdx, "")
+	}
+	if locID != "" {
+		if m.Item(fmt.Sprintf(tr.CtxRetranslateCellFmt, locID)).Disabled(busy).Chosen() {
+			focusHere()
+			a.translateRowAtAsync(planRowIdx, locID)
+		}
+	}
+
+	m.Separator()
+
+	if locID != "" {
+		cell := r.Cells[locID]
+		_, hasExact := a.catalog.LookupExact(locID, r.Key)
+		canClearCell := cell.Effective != "" || hasExact
+		if m.Item(fmt.Sprintf(tr.CtxClearCellFmt, locID)).Disabled(!canClearCell).Chosen() {
+			focusHere()
+			a.clearCellAt(planRowIdx, locID)
+		}
+	}
+	rowHasAnyText := false
+	rowHasAnyStaged := false
+	for _, loc := range a.enabledNonRefLocales() {
+		if c, ok := r.Cells[loc.ID]; ok && c.Effective != "" {
+			rowHasAnyText = true
+		}
+		if _, ok := a.catalog.LookupExact(loc.ID, r.Key); ok {
+			rowHasAnyStaged = true
+		}
+	}
+	if m.Item(tr.CtxClearRow).Disabled(!rowHasAnyText && !rowHasAnyStaged).Chosen() {
+		focusHere()
+		a.clearRowAt(planRowIdx)
+	}
+
+	if locID != "" {
+		_, hasStagedCell := a.catalog.LookupExact(locID, r.Key)
+		if m.Item(fmt.Sprintf(tr.CtxRevertCellFmt, locID)).Disabled(!hasStagedCell).Chosen() {
+			focusHere()
+			a.revertCellAt(planRowIdx, locID)
+		}
+	}
+	if m.Item(tr.CtxRevertRow).Disabled(!rowHasAnyStaged).Chosen() {
+		focusHere()
+		a.revertRowAt(planRowIdx)
+	}
+
+	m.Separator()
+
+	if locID != "" {
+		if m.Item(fmt.Sprintf(tr.CtxUseSrcFmt, locID)).Disabled(r.Key.Source == "").Chosen() {
+			focusHere()
+			a.catalog.Set(locID, r.Key, r.Key.Source, domain.OriginManual)
+			planner.UpdateCell(a.plan, planRowIdx, locID, a.catalog)
+			a.editBoundLocale = ""
+			a.syncEditorFromSelection()
+		}
+	}
+	if m.Item(tr.CtxCopySource).Disabled(r.Key.Source == "").Chosen() {
+		focusHere()
+		a.copySourceToClipboard()
+	}
+	if locID != "" {
+		targetTxt := r.Cells[locID].Effective
+		if m.Item(fmt.Sprintf(tr.CtxCopyTargetFmt, locID)).Disabled(targetTxt == "").Chosen() {
+			focusHere()
+			a.copyText(targetTxt)
+		}
+	}
+	if m.Item(tr.CtxCopyRef).Disabled(r.RefText == "").Chosen() {
+		focusHere()
+		a.copyText(r.RefText)
+	}
+	ctxOrKey := formatRowCtxOrKey(r)
+	if ctxOrKey != "-" {
+		if m.Item(tr.CtxCopyKeyCtx).Chosen() {
+			focusHere()
+			a.copyText(ctxOrKey)
+		}
+	}
+
+	if r.Key.Context != "" {
+		m.Separator()
+		if a.contextFilter == r.Key.Context {
+			if m.Item(tr.CtxClearContextFilter).Chosen() {
+				a.contextFilter = ""
+				a.refilterRows()
+			}
+		} else {
+			if m.Item(fmt.Sprintf(tr.CtxFilterContextFmt, r.Key.Context)).Chosen() {
+				a.contextFilter = r.Key.Context
+				a.refilterRows()
+			}
+		}
+	}
+}
+
+func (a *App) buildMatrixHeaderMenu(m *ui.Menu, col int) {
+	if a.plan == nil {
+		return
+	}
+	tr := a.tr()
+	var locID string
+	if a.cfg.MatrixViewMode == 1 {
+		locs := a.enabledNonRefLocales()
+		if col >= 4 && col-4 < len(locs) {
+			locID = locs[col-4].ID
+		}
+	} else if col == 4 {
+		locID = a.focusedLocale
+	}
+	if locID == "" {
+		return
+	}
+	if a.cfg.MatrixViewMode == 1 {
+		if m.Item(fmt.Sprintf(tr.CtxHeaderFocusFmt, locID)).Chosen() {
+			a.cfg.MatrixViewMode = 0
+			a.focusedLocale = locID
+			a.activeEditLocale = locID
+			a.editBoundLocale = ""
+			a.syncEditorFromSelection()
+			a.scheduleConfigSave()
+		}
+	}
+	if m.Item(fmt.Sprintf(tr.CtxHeaderRevertColFmt, locID)).Chosen() {
+		a.catalog.ClearLocale(locID)
+		a.editBoundLocale = ""
+		a.rebuildPlan()
+		a.syncEditorFromSelection()
+		a.setStatus(fmt.Sprintf(tr.StatusRevertedColFmt, locID), false)
+	}
+}

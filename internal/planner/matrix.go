@@ -371,6 +371,20 @@ func evalCellPlan(
 		cand, hasCand = cat.Lookup(localeID, key)
 	}
 
+	if hasCand && cand.Cleared {
+		if oldText != "" {
+			cp.Action = domain.ActionOverwrite
+			cp.NewText = ""
+			cp.Effective = ""
+			cp.Origin = cand.Origin
+		} else {
+			cp.Action = domain.ActionNone
+			cp.NewText = ""
+			cp.Effective = ""
+		}
+		return cp
+	}
+
 	switch {
 	case status == domain.StatusMissing:
 		if hasCand && cand.Text != "" {
@@ -388,7 +402,7 @@ func evalCellPlan(
 		}
 	case status == domain.StatusFinished:
 		if hasCand && cand.Text != "" && cand.Text != oldText {
-			if mode == domain.ModeOverwriteExisting {
+			if mode == domain.ModeOverwriteExisting || cand.Origin == domain.OriginManual {
 				cp.Action = domain.ActionOverwrite
 				cp.NewText = cand.Text
 				cp.Effective = cand.Text
@@ -411,6 +425,9 @@ func evalCellPlan(
 func cellIsGapAfter(cp CellPlan) bool {
 	if cp.Status == domain.StatusVanished {
 		return false
+	}
+	if cp.Effective == "" && cp.Action == domain.ActionOverwrite {
+		return true
 	}
 	return isUntranslatedStatus(cp.Status) && !cp.Action.Mutates()
 }

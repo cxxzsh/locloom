@@ -157,6 +157,8 @@ func NewWithConfig(cfg config.AppConfig) *App {
 		}
 		return a.plan.Rows[a.filteredRows[i]].Key.Source
 	}
+	a.tableState.CellMenu = a.buildMatrixCellMenu
+	a.tableState.HeaderMenu = a.buildMatrixHeaderMenu
 
 	a.logListState.FollowEnd = true
 

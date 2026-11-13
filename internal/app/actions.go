@@ -960,11 +960,19 @@ func (a *App) useSourceAsTranslation() {
 }
 
 func (a *App) translateCurrentRowAsync() {
+	rowIdx, _ := a.currentMatrixRow()
+	a.translateRowAtAsync(rowIdx, "")
+}
+
+func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 	if a.translating || a.translatingRow || a.plan == nil {
 		return
 	}
-	_, row := a.currentMatrixRow()
-	if row == nil || (strings.TrimSpace(row.Key.Source) == "" && strings.TrimSpace(row.RefText) == "") {
+	if planRowIdx < 0 || planRowIdx >= len(a.plan.Rows) {
+		return
+	}
+	row := &a.plan.Rows[planRowIdx]
+	if strings.TrimSpace(row.Key.Source) == "" && strings.TrimSpace(row.RefText) == "" {
 		return
 	}
 	cfg := a.cfg.Clone()
@@ -987,6 +995,16 @@ func (a *App) translateCurrentRowAsync() {
 	}
 
 	targetLocales := a.enabledNonRefLocales()
+	if forceLocaleID != "" {
+		var single []locale.LocaleSpec
+		for _, l := range a.cfg.Locales {
+			if l.ID == forceLocaleID {
+				single = append(single, l)
+				break
+			}
+		}
+		targetLocales = single
+	}
 	if len(targetLocales) == 0 {
 		a.setStatus(a.tr().ErrNoTargetLocale, true)
 		return
@@ -995,12 +1013,14 @@ func (a *App) translateCurrentRowAsync() {
 	tasks := make(map[string][]provider.SourceItem)
 	refID := a.plan.RefLocaleID
 	for _, loc := range targetLocales {
-		cell, ok := row.Cells[loc.ID]
-		if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
-			continue
-		}
-		if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
-			continue
+		if forceLocaleID == "" {
+			cell, ok := row.Cells[loc.ID]
+			if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
+				continue
+			}
+			if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
+				continue
+			}
 		}
 		tasks[loc.ID] = []provider.SourceItem{{
 			ID:        row.Key.Canonical(),
@@ -1026,13 +1046,17 @@ func (a *App) translateCurrentRowAsync() {
 			Locales:     targetLocales,
 			Tasks:       tasks,
 			Concurrency: cfg.Concurrency,
-			BypassCache: cfg.BypassCache,
+			BypassCache: cfg.BypassCache || forceLocaleID != "",
 		}
 		res := provider.RunConcurrent(ctx, opts)
 		a.dispatchUI(func() {
 			a.translatingRow = false
 			for _, cell := range res.Cells {
-				a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+				origin := cell.ProviderID
+				if forceLocaleID != "" {
+					origin = domain.OriginManual
+				}
+				a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, origin)
 			}
 			for _, ev := range res.Events {
 				a.logs = append(a.logs, ev)
@@ -1046,4 +1070,61 @@ func (a *App) translateCurrentRowAsync() {
 			a.setStatus(fmt.Sprintf(a.tr().StatusTranslateRowDoneFmt, len(res.Cells)), false)
 		})
 	}()
+}
+
+func (a *App) clearCellAt(planRowIdx int, locID string) {
+	if a.plan == nil || planRowIdx < 0 || planRowIdx >= len(a.plan.Rows) || locID == "" {
+		return
+	}
+	row := &a.plan.Rows[planRowIdx]
+	a.catalog.SetCleared(locID, row.Key, domain.OriginManual)
+	planner.UpdateCell(a.plan, planRowIdx, locID, a.catalog)
+	a.editBoundLocale = ""
+	a.syncEditorFromSelection()
+	a.setStatus(fmt.Sprintf(a.tr().StatusClearedCellFmt, locID), false)
+}
+
+func (a *App) clearRowAt(planRowIdx int) {
+	if a.plan == nil || planRowIdx < 0 || planRowIdx >= len(a.plan.Rows) {
+		return
+	}
+	row := &a.plan.Rows[planRowIdx]
+	for _, loc := range a.enabledNonRefLocales() {
+		a.catalog.SetCleared(loc.ID, row.Key, domain.OriginManual)
+		planner.UpdateCell(a.plan, planRowIdx, loc.ID, a.catalog)
+	}
+	a.editBoundLocale = ""
+	a.syncEditorFromSelection()
+	a.setStatus(a.tr().StatusClearedRow, false)
+}
+
+func (a *App) revertCellAt(planRowIdx int, locID string) {
+	if a.plan == nil || planRowIdx < 0 || planRowIdx >= len(a.plan.Rows) || locID == "" {
+		return
+	}
+	row := &a.plan.Rows[planRowIdx]
+	a.catalog.DeleteKeyVariants(locID, row.Key)
+	planner.UpdateCell(a.plan, planRowIdx, locID, a.catalog)
+	a.editBoundLocale = ""
+	a.syncEditorFromSelection()
+	a.setStatus(fmt.Sprintf(a.tr().StatusRevertedCellFmt, locID), false)
+}
+
+func (a *App) revertRowAt(planRowIdx int) {
+	if a.plan == nil || planRowIdx < 0 || planRowIdx >= len(a.plan.Rows) {
+		return
+	}
+	row := &a.plan.Rows[planRowIdx]
+	for _, loc := range a.enabledNonRefLocales() {
+		a.catalog.DeleteKeyVariants(loc.ID, row.Key)
+		planner.UpdateCell(a.plan, planRowIdx, loc.ID, a.catalog)
+	}
+	a.editBoundLocale = ""
+	a.syncEditorFromSelection()
+	a.setStatus(a.tr().StatusRevertedRow, false)
+}
+
+func (a *App) copyText(s string) {
+	_ = mygo.Clipboard.Write(transfer.TextData(s))
+	a.setStatus(a.tr().StatusCopiedText, false)
 }

@@ -72,8 +72,19 @@ func renderTranslationElement(forms []string, newText string, numerus bool, inde
 		if len(forms) == 0 {
 			forms = []string{""}
 		}
+		allEmpty := true
+		for _, f := range forms {
+			if f != "" {
+				allEmpty = false
+				break
+			}
+		}
 		var buf bytes.Buffer
-		buf.WriteString("<translation>")
+		if allEmpty {
+			buf.WriteString(`<translation type="unfinished">`)
+		} else {
+			buf.WriteString("<translation>")
+		}
 		for _, f := range forms {
 			buf.WriteString(le)
 			buf.WriteString(indent)
@@ -85,6 +96,9 @@ func renderTranslationElement(forms []string, newText string, numerus bool, inde
 		buf.WriteString(indent)
 		buf.WriteString("</translation>")
 		return buf.Bytes()
+	}
+	if newText == "" {
+		return []byte(`<translation type="unfinished"></translation>`)
 	}
 	return []byte("<translation>" + applyLineEnding(EscapeXMLText(newText), le) + "</translation>")
 }

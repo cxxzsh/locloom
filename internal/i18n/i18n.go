@@ -297,6 +297,27 @@ type Catalog struct {
 	StatusTranslateRowDoneFmt  string
 	StatusNoGapsFound          string
 	StatusRowNoGaps            string
+	CtxTranslateRow           string
+	CtxRetranslateCellFmt     string
+	CtxClearCellFmt           string
+	CtxClearRow               string
+	CtxRevertCellFmt          string
+	CtxRevertRow              string
+	CtxUseSrcFmt              string
+	CtxCopySource             string
+	CtxCopyTargetFmt          string
+	CtxCopyRef                string
+	CtxCopyKeyCtx             string
+	CtxFilterContextFmt       string
+	CtxClearContextFilter     string
+	CtxHeaderFocusFmt         string
+	CtxHeaderRevertColFmt     string
+	StatusClearedCellFmt      string
+	StatusClearedRow          string
+	StatusRevertedCellFmt     string
+	StatusRevertedRow         string
+	StatusRevertedColFmt      string
+	StatusCopiedText          string
 }
 
 var zhCatalog = Catalog{
@@ -529,6 +550,27 @@ var zhCatalog = Catalog{
 	StatusTranslateRowDoneFmt: "单行翻译完成：更新 %d 个语种",
 	StatusNoGapsFound:         "未找到待办或告警行",
 	StatusRowNoGaps:           "当前行所有已启用语种均已有译文",
+	CtxTranslateRow:           "⚡ 翻译此行（所有待补语种）",
+	CtxRetranslateCellFmt:     "⚡ 重新翻译此格 (%s)",
+	CtxClearCellFmt:           "清空此格译文 (%s)",
+	CtxClearRow:               "清空整行所有语种译文",
+	CtxRevertCellFmt:          "还原此格至文件原值 (%s)",
+	CtxRevertRow:              "还原整行至文件原值",
+	CtxUseSrcFmt:              "将原文填入此格 (%s)",
+	CtxCopySource:             "复制英文原文",
+	CtxCopyTargetFmt:          "复制此格译文 (%s)",
+	CtxCopyRef:                "复制参考译文",
+	CtxCopyKeyCtx:             "复制键名 / 上下文",
+	CtxFilterContextFmt:       "仅看此上下文 (%s)",
+	CtxClearContextFilter:     "取消上下文筛选（显示全部）",
+	CtxHeaderFocusFmt:         "聚焦此语种 (%s)",
+	CtxHeaderRevertColFmt:     "还原此列全部暂存变更 (%s)",
+	StatusClearedCellFmt:      "已清空 %s 单元格译文",
+	StatusClearedRow:          "已清空当前行所有目标语种译文",
+	StatusRevertedCellFmt:     "已还原 %s 单元格至文件原值",
+	StatusRevertedRow:         "已还原当前行至文件原值",
+	StatusRevertedColFmt:      "已还原 %s 列全部暂存变更",
+	StatusCopiedText:          "已复制到剪贴板",
 }
 
 var enCatalog = Catalog{
@@ -761,4 +803,25 @@ var enCatalog = Catalog{
 	StatusTranslateRowDoneFmt: "Row translated: updated %d locale(s)",
 	StatusNoGapsFound:         "No gap or warning rows found",
 	StatusRowNoGaps:           "Current row has no gaps for enabled locales",
+	CtxTranslateRow:           "⚡ Translate Row (All Gaps)",
+	CtxRetranslateCellFmt:     "⚡ Retranslate Cell (%s)",
+	CtxClearCellFmt:           "Clear Cell Translation (%s)",
+	CtxClearRow:               "Clear Entire Row (All Locales)",
+	CtxRevertCellFmt:          "Revert Cell to File (%s)",
+	CtxRevertRow:              "Revert Entire Row to File",
+	CtxUseSrcFmt:              "Fill Source into Cell (%s)",
+	CtxCopySource:             "Copy Source Text",
+	CtxCopyTargetFmt:          "Copy Cell Translation (%s)",
+	CtxCopyRef:                "Copy Reference Text",
+	CtxCopyKeyCtx:             "Copy Key / Context",
+	CtxFilterContextFmt:       "Filter by Context (%s)",
+	CtxClearContextFilter:     "Show All Contexts",
+	CtxHeaderFocusFmt:         "Focus Locale (%s)",
+	CtxHeaderRevertColFmt:     "Revert All Staged in Column (%s)",
+	StatusClearedCellFmt:      "Cleared translation for %s",
+	StatusClearedRow:          "Cleared translations across all target locales for row",
+	StatusRevertedCellFmt:     "Reverted %s cell to file original",
+	StatusRevertedRow:         "Reverted row to file original",
+	StatusRevertedColFmt:      "Reverted all staged changes in %s",
+	StatusCopiedText:          "Copied to clipboard",
 }
