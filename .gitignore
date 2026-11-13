@@ -1,0 +1,9 @@
+/locloom
+/locloom.exe
+locloom.json
+locloom-cache.json
+config.json
+translation-cache.json
+*.bak
+*.dmp
+.DS_Store
