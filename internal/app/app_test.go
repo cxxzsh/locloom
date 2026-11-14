@@ -470,3 +470,84 @@ func TestMatrixRowRightClickContextMenuClearAndRevert(t *testing.T) {
 		t.Fatalf("expected ja_JP on Save row cleared, got %q", a.plan.Rows[1].Cells["ja_JP"].Effective)
 	}
 }
+
+func TestMatrixRightClickFilterByContextNoPanicInFullMatrix(t *testing.T) {
+	a := newTestApp()
+	a.cfg.MatrixViewMode = 1 // Full Matrix mode (exact crash scenario)
+	dir := t.TempDir()
+
+	// Build a multi-context .ts file with 12 entries where "MainWindow" only has 2 rows,
+	// reproducing the exact 12 -> 2 mid-frame shrink that caused index out of range [7].
+	zhTS := `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="zh_CN">
+<context>
+    <name>MainWindow</name>
+    <message><source>Open</source><translation>打开</translation></message>
+    <message><source>Save</source><translation>保存</translation></message>
+</context>
+<context>
+    <name>SettingsDialog</name>
+    <message><source>Item1</source><translation>项1</translation></message>
+    <message><source>Item2</source><translation>项2</translation></message>
+    <message><source>Item3</source><translation>项3</translation></message>
+    <message><source>Item4</source><translation>项4</translation></message>
+    <message><source>Item5</source><translation>项5</translation></message>
+    <message><source>Item6</source><translation>项6</translation></message>
+    <message><source>Item7</source><translation>项7</translation></message>
+    <message><source>Item8</source><translation>项8</translation></message>
+    <message><source>Item9</source><translation>项9</translation></message>
+    <message><source>Item10</source><translation>项10</translation></message>
+</context>
+</TS>`
+	jaTS := `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="ja_JP">
+<context>
+    <name>MainWindow</name>
+    <message><source>Open</source><translation>開く</translation></message>
+    <message><source>Save</source><translation type="unfinished"></translation></message>
+</context>
+</TS>`
+	if err := os.WriteFile(filepath.Join(dir, "app_zh_CN.ts"), []byte(zhTS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app_ja_JP.ts"), []byte(jaTS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.LoadProject(dir); err != nil {
+		t.Fatalf("LoadProject failed: %v", err)
+	}
+	if len(a.filteredRows) != 12 {
+		t.Fatalf("expected 12 initial rows, got %d", len(a.filteredRows))
+	}
+
+	tt := ui.NewTester(a.View, 1280, 820)
+	if err := tt.RightClick("Save"); err != nil {
+		t.Fatalf("RightClick on Save failed: %v", err)
+	}
+	if err := tt.ChooseMenuItem("仅看此上下文 (MainWindow)"); err != nil {
+		t.Fatalf("ChooseMenuItem Filter by Context failed: %v", err)
+	}
+	if a.contextFilter != "MainWindow" {
+		t.Fatalf("expected contextFilter MainWindow, got %q", a.contextFilter)
+	}
+	if len(a.filteredRows) != 2 {
+		t.Fatalf("expected 2 filtered rows for MainWindow, got %d", len(a.filteredRows))
+	}
+	if a.selectedKey.Source != "Save" {
+		t.Fatalf("expected clicked row Save to stay selected, got %q", a.selectedKey.Source)
+	}
+
+	// Clear context filter back to all 12 rows via right-click
+	if err := tt.RightClick("Save"); err != nil {
+		t.Fatalf("RightClick on Save (unfilter) failed: %v", err)
+	}
+	if err := tt.ChooseMenuItem("取消上下文筛选（显示全部）"); err != nil {
+		t.Fatalf("ChooseMenuItem Clear Context Filter failed: %v", err)
+	}
+	if len(a.filteredRows) != 12 {
+		t.Fatalf("expected 12 rows after clearing context filter, got %d", len(a.filteredRows))
+	}
+	if a.WindowTitle() != "LocLoom" {
+		t.Fatalf("expected clean WindowTitle 'LocLoom', got %q", a.WindowTitle())
+	}
+}

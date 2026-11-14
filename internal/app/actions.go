@@ -69,13 +69,14 @@ func (a *App) rebuildPlan() {
 }
 
 func (a *App) refilterRows() {
-	a.filteredRows = a.filteredRows[:0]
 	if a.plan == nil {
+		a.filteredRows = nil
 		a.selectedRow = -1
 		a.syncEditorFromSelection()
 		return
 	}
 
+	filtered := make([]int, 0, len(a.plan.Rows))
 	q := strings.ToLower(strings.TrimSpace(a.searchQuery))
 	for i := range a.plan.Rows {
 		row := &a.plan.Rows[i]
@@ -99,8 +100,9 @@ func (a *App) refilterRows() {
 		if q != "" && !rowMatchesQuery(row, q, a.focusedLocale) {
 			continue
 		}
-		a.filteredRows = append(a.filteredRows, i)
+		filtered = append(filtered, i)
 	}
+	a.filteredRows = filtered
 
 	// Preserve selected row by EntryKey when possible.
 	newSel := -1

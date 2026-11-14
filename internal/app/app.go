@@ -59,6 +59,7 @@ type App struct {
 	ctxListState  ui.ListState
 	logListState  ui.ListState
 
+	pendingTableOps []func()
 	// Modals & popovers
 	showHelp        bool
 	helpMarkdown    string

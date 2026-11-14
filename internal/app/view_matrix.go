@@ -72,6 +72,7 @@ func (a *App) viewMatrix(c *ui.Context) {
 		} else {
 			a.viewFocusedMatrixTable(c)
 		}
+		a.flushTableOps(c)
 	})
 }
 
@@ -102,8 +103,17 @@ func (a *App) viewFocusedMatrixTable(c *ui.Context) {
 		{ID: "status", Title: tr.ColStatus, Width: 105, MinWidth: 85},
 	}
 
-	tbl := ui.Table(c, &a.tableState, cols, len(a.filteredRows), func(row, col int) {
-		r := &a.plan.Rows[a.filteredRows[row]]
+	plan := a.plan
+	rows := a.filteredRows
+	tbl := ui.Table(c, &a.tableState, cols, len(rows), func(row, col int) {
+		if plan == nil || row < 0 || row >= len(rows) {
+			return
+		}
+		rowIdx := rows[row]
+		if rowIdx < 0 || rowIdx >= len(plan.Rows) {
+			return
+		}
+		r := &plan.Rows[rowIdx]
 		sel := row == a.selectedRow
 		mutedOrSel := func(el ui.Element) ui.Element {
 			if !sel {
@@ -202,8 +212,17 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 		})
 	}
 
-	tbl := ui.Table(c, &a.tableState, cols, len(a.filteredRows), func(row, col int) {
-		r := &a.plan.Rows[a.filteredRows[row]]
+	plan := a.plan
+	rows := a.filteredRows
+	tbl := ui.Table(c, &a.tableState, cols, len(rows), func(row, col int) {
+		if plan == nil || row < 0 || row >= len(rows) {
+			return
+		}
+		rowIdx := rows[row]
+		if rowIdx < 0 || rowIdx >= len(plan.Rows) {
+			return
+		}
+		r := &plan.Rows[rowIdx]
 		sel := row == a.selectedRow
 		mutedOrSel := func(el ui.Element) ui.Element {
 			if !sel {
@@ -377,6 +396,22 @@ func originLabel(origin string, tr *i18n.Catalog) string {
 	}
 }
 
+func (a *App) deferTableOp(fn func()) {
+	a.pendingTableOps = append(a.pendingTableOps, fn)
+}
+
+func (a *App) flushTableOps(c *ui.Context) {
+	if len(a.pendingTableOps) == 0 {
+		return
+	}
+	ops := a.pendingTableOps
+	a.pendingTableOps = nil
+	for _, fn := range ops {
+		fn()
+	}
+	c.Invalidate()
+}
+
 func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 	if a.plan == nil || row < 0 || row >= len(a.filteredRows) {
 		return
@@ -386,6 +421,11 @@ func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 		return
 	}
 	r := &a.plan.Rows[planRowIdx]
+	rowKey := r.Key
+	rowSource := r.Key.Source
+	rowContext := r.Key.Context
+	rowRefText := r.RefText
+	ctxOrKey := formatRowCtxOrKey(r)
 	tr := a.tr()
 
 	locID := a.focusedLocale
@@ -398,8 +438,14 @@ func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 		}
 	}
 
-	focusHere := func() {
-		a.selectedRow = row
+	focusRowKey := func() {
+		a.selectedKey = rowKey
+		for idx, rIdx := range a.filteredRows {
+			if rIdx == planRowIdx {
+				a.selectedRow = idx
+				break
+			}
+		}
 		if locID != "" {
 			a.focusedLocale = locID
 			a.activeEditLocale = locID
@@ -410,13 +456,18 @@ func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 
 	busy := a.translating || a.translatingRow
 	if m.Item(tr.CtxTranslateRow).Disabled(busy).Chosen() {
-		focusHere()
-		a.translateRowAtAsync(planRowIdx, "")
+		a.deferTableOp(func() {
+			focusRowKey()
+			a.translateRowAtAsync(planRowIdx, "")
+		})
 	}
 	if locID != "" {
 		if m.Item(fmt.Sprintf(tr.CtxRetranslateCellFmt, locID)).Disabled(busy).Chosen() {
-			focusHere()
-			a.translateRowAtAsync(planRowIdx, locID)
+			targetLoc := locID
+			a.deferTableOp(func() {
+				focusRowKey()
+				a.translateRowAtAsync(planRowIdx, targetLoc)
+			})
 		}
 	}
 
@@ -424,11 +475,14 @@ func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 
 	if locID != "" {
 		cell := r.Cells[locID]
-		_, hasExact := a.catalog.LookupExact(locID, r.Key)
+		_, hasExact := a.catalog.LookupExact(locID, rowKey)
 		canClearCell := cell.Effective != "" || hasExact
 		if m.Item(fmt.Sprintf(tr.CtxClearCellFmt, locID)).Disabled(!canClearCell).Chosen() {
-			focusHere()
-			a.clearCellAt(planRowIdx, locID)
+			targetLoc := locID
+			a.deferTableOp(func() {
+				focusRowKey()
+				a.clearCellAt(planRowIdx, targetLoc)
+			})
 		}
 	}
 	rowHasAnyText := false
@@ -437,72 +491,97 @@ func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 		if c, ok := r.Cells[loc.ID]; ok && c.Effective != "" {
 			rowHasAnyText = true
 		}
-		if _, ok := a.catalog.LookupExact(loc.ID, r.Key); ok {
+		if _, ok := a.catalog.LookupExact(loc.ID, rowKey); ok {
 			rowHasAnyStaged = true
 		}
 	}
 	if m.Item(tr.CtxClearRow).Disabled(!rowHasAnyText && !rowHasAnyStaged).Chosen() {
-		focusHere()
-		a.clearRowAt(planRowIdx)
+		a.deferTableOp(func() {
+			focusRowKey()
+			a.clearRowAt(planRowIdx)
+		})
 	}
 
 	if locID != "" {
-		_, hasStagedCell := a.catalog.LookupExact(locID, r.Key)
+		_, hasStagedCell := a.catalog.LookupExact(locID, rowKey)
 		if m.Item(fmt.Sprintf(tr.CtxRevertCellFmt, locID)).Disabled(!hasStagedCell).Chosen() {
-			focusHere()
-			a.revertCellAt(planRowIdx, locID)
+			targetLoc := locID
+			a.deferTableOp(func() {
+				focusRowKey()
+				a.revertCellAt(planRowIdx, targetLoc)
+			})
 		}
 	}
 	if m.Item(tr.CtxRevertRow).Disabled(!rowHasAnyStaged).Chosen() {
-		focusHere()
-		a.revertRowAt(planRowIdx)
+		a.deferTableOp(func() {
+			focusRowKey()
+			a.revertRowAt(planRowIdx)
+		})
 	}
 
 	m.Separator()
 
 	if locID != "" {
-		if m.Item(fmt.Sprintf(tr.CtxUseSrcFmt, locID)).Disabled(r.Key.Source == "").Chosen() {
-			focusHere()
-			a.catalog.Set(locID, r.Key, r.Key.Source, domain.OriginManual)
-			planner.UpdateCell(a.plan, planRowIdx, locID, a.catalog)
-			a.editBoundLocale = ""
-			a.syncEditorFromSelection()
+		if m.Item(fmt.Sprintf(tr.CtxUseSrcFmt, locID)).Disabled(rowSource == "").Chosen() {
+			targetLoc := locID
+			a.deferTableOp(func() {
+				focusRowKey()
+				a.catalog.Set(targetLoc, rowKey, rowSource, domain.OriginManual)
+				planner.UpdateCell(a.plan, planRowIdx, targetLoc, a.catalog)
+				a.editBoundLocale = ""
+				a.syncEditorFromSelection()
+			})
 		}
 	}
-	if m.Item(tr.CtxCopySource).Disabled(r.Key.Source == "").Chosen() {
-		focusHere()
-		a.copySourceToClipboard()
+	if m.Item(tr.CtxCopySource).Disabled(rowSource == "").Chosen() {
+		a.deferTableOp(func() {
+			focusRowKey()
+			a.copySourceToClipboard()
+		})
 	}
 	if locID != "" {
 		targetTxt := r.Cells[locID].Effective
 		if m.Item(fmt.Sprintf(tr.CtxCopyTargetFmt, locID)).Disabled(targetTxt == "").Chosen() {
-			focusHere()
-			a.copyText(targetTxt)
+			txt := targetTxt
+			a.deferTableOp(func() {
+				focusRowKey()
+				a.copyText(txt)
+			})
 		}
 	}
-	if m.Item(tr.CtxCopyRef).Disabled(r.RefText == "").Chosen() {
-		focusHere()
-		a.copyText(r.RefText)
+	if m.Item(tr.CtxCopyRef).Disabled(rowRefText == "").Chosen() {
+		a.deferTableOp(func() {
+			focusRowKey()
+			a.copyText(rowRefText)
+		})
 	}
-	ctxOrKey := formatRowCtxOrKey(r)
 	if ctxOrKey != "-" {
 		if m.Item(tr.CtxCopyKeyCtx).Chosen() {
-			focusHere()
-			a.copyText(ctxOrKey)
+			val := ctxOrKey
+			a.deferTableOp(func() {
+				focusRowKey()
+				a.copyText(val)
+			})
 		}
 	}
 
-	if r.Key.Context != "" {
+	if rowContext != "" {
 		m.Separator()
-		if a.contextFilter == r.Key.Context {
+		if a.contextFilter == rowContext {
 			if m.Item(tr.CtxClearContextFilter).Chosen() {
-				a.contextFilter = ""
-				a.refilterRows()
+				a.deferTableOp(func() {
+					a.selectedKey = rowKey
+					a.contextFilter = ""
+					a.refilterRows()
+				})
 			}
 		} else {
-			if m.Item(fmt.Sprintf(tr.CtxFilterContextFmt, r.Key.Context)).Chosen() {
-				a.contextFilter = r.Key.Context
-				a.refilterRows()
+			if m.Item(fmt.Sprintf(tr.CtxFilterContextFmt, rowContext)).Chosen() {
+				a.deferTableOp(func() {
+					a.selectedKey = rowKey
+					a.contextFilter = rowContext
+					a.refilterRows()
+				})
 			}
 		}
 	}
@@ -527,19 +606,25 @@ func (a *App) buildMatrixHeaderMenu(m *ui.Menu, col int) {
 	}
 	if a.cfg.MatrixViewMode == 1 {
 		if m.Item(fmt.Sprintf(tr.CtxHeaderFocusFmt, locID)).Chosen() {
-			a.cfg.MatrixViewMode = 0
-			a.focusedLocale = locID
-			a.activeEditLocale = locID
-			a.editBoundLocale = ""
-			a.syncEditorFromSelection()
-			a.scheduleConfigSave()
+			targetLoc := locID
+			a.deferTableOp(func() {
+				a.cfg.MatrixViewMode = 0
+				a.focusedLocale = targetLoc
+				a.activeEditLocale = targetLoc
+				a.editBoundLocale = ""
+				a.syncEditorFromSelection()
+				a.scheduleConfigSave()
+			})
 		}
 	}
 	if m.Item(fmt.Sprintf(tr.CtxHeaderRevertColFmt, locID)).Chosen() {
-		a.catalog.ClearLocale(locID)
-		a.editBoundLocale = ""
-		a.rebuildPlan()
-		a.syncEditorFromSelection()
-		a.setStatus(fmt.Sprintf(tr.StatusRevertedColFmt, locID), false)
+		targetLoc := locID
+		a.deferTableOp(func() {
+			a.catalog.ClearLocale(targetLoc)
+			a.editBoundLocale = ""
+			a.rebuildPlan()
+			a.syncEditorFromSelection()
+			a.setStatus(fmt.Sprintf(tr.StatusRevertedColFmt, targetLoc), false)
+		})
 	}
 }

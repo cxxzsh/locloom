@@ -321,11 +321,11 @@ type Catalog struct {
 }
 
 var zhCatalog = Catalog{
-	WindowTitle:       "LocLoom — 跨平台本地化工作台",
+	WindowTitle:       "LocLoom",
 	BtnClose:          "关闭",
 	BtnCancel:         "取消",
 	DropHint:          "松开即可加载本地化文件 / 目录 / .zip / .xlsx 词表",
-	LogWorkbenchReady: "工作台已就绪，可拖拽本地化文件 / 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。",
+	LogWorkbenchReady: "已就绪，可拖拽本地化文件 / 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。",
 
 	ErrLoadTSFmt:               "加载本地化项目失败: %v",
 	StatusLoadedBundleFmt:      "已加载 %s（%d 个文件，%d 条词条）",
@@ -494,7 +494,7 @@ var zhCatalog = Catalog{
 	BtnClearLogs:        "清空日志",
 
 	HelpModalTitle:      "LocLoom 使用指南",
-	HelpFallbackMD:      "# LocLoom\n\n跨平台多语言并发翻译与无损回填工作台。",
+	HelpFallbackMD:      "# LocLoom\n\n跨平台多语言并发翻译与原位无损回填工具。",
 	ExportModalTitle:    "导出 Excel 词条表 (.xlsx)",
 	LabelExportScope:    "选择导出范围：",
 	ExportScopeAll:      "全部词条",
@@ -574,11 +574,11 @@ var zhCatalog = Catalog{
 }
 
 var enCatalog = Catalog{
-	WindowTitle:       "LocLoom — Cross-Platform Localization Workbench",
+	WindowTitle:       "LocLoom",
 	BtnClose:          "Close",
 	BtnCancel:         "Cancel",
 	DropHint:          "Drop to load localization file(s) / folder / .zip / .xlsx",
-	LogWorkbenchReady: "Workbench ready. Drag & drop localization files, folder, .zip, or .xlsx onto the window, or use the top toolbar buttons.",
+	LogWorkbenchReady: "Ready. Drag & drop localization files, folder, .zip, or .xlsx onto the window, or use the top toolbar buttons.",
 
 	ErrLoadTSFmt:               "Failed to load localization project: %v",
 	StatusLoadedBundleFmt:      "Loaded %s (%d files, %d entries)",
