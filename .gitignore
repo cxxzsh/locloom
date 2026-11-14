@@ -8,3 +8,7 @@ translation-cache.json
 *.dmp
 .DS_Store
 /playground/
+/build/
+/dist/
+/.mygo/
+mygo_windows_*.syso

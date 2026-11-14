@@ -45,6 +45,13 @@ CGO_ENABLED=0 go build -ldflags="-s -w -H=windowsgui" -o locloom.exe .
 CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 ```
 
+#### Desktop Installers (`mygo.json`)
+
+```bash
+# Build native installers (.dmg, NSIS setup .exe, .deb, .rpm, .tar.gz)
+go tool mygo build -platform darwin/universal,windows/amd64,linux/amd64
+```
+
 #### CLI Flags
 
 | Flag | Description | Example |
@@ -138,6 +145,13 @@ CGO_ENABLED=0 go build -ldflags="-s -w -H=windowsgui" -o locloom.exe .
 
 # Linux
 CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
+```
+
+#### 桌面安装包打包（`mygo.json`）
+
+```bash
+# 构建各平台原生安装包（.dmg、NSIS setup .exe、.deb、.rpm、.tar.gz）
+go tool mygo build -platform darwin/universal,windows/amd64,linux/amd64
 ```
 
 #### 命令行启动参数

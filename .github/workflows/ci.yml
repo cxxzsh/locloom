@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: Test, Vet & Smoke Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Cross-platform vet and compile check
+        run: |
+          for target in darwin/arm64 darwin/amd64 windows/amd64 windows/arm64 linux/amd64 linux/arm64; do
+            GOOS="${target%/*}"
+            GOARCH="${target#*/}"
+            echo "Checking $GOOS/$GOARCH..."
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go vet -tags mygo_noinspector ./...
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build ./...
+          done
+
+      - name: Run unit and integration tests with race detector
+        run: go test -race ./...
+
+      - name: Headless UI render smoke check
+        run: |
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/locloom .
+          /tmp/locloom -headless-render /tmp/smoke.png
+          test -s /tmp/smoke.png
+
+      - name: Install NSIS for packaging smoke check
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis
+
+      - name: Verify installer packaging config
+        run: |
+          go tool mygo build -platform "linux/amd64,windows/amd64"
+          VERSION="$(jq -r '.version' mygo.json)"
+          test -f "build/linux-amd64/locloom_${VERSION}_amd64.deb"
+          test -f "build/linux-amd64/locloom-${VERSION}-1.x86_64.rpm"
+          test -f "build/windows-amd64/locloom-setup-${VERSION}-amd64.exe"

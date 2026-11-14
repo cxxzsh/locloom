@@ -1,0 +1,19 @@
+{
+  "name": "LocLoom",
+  "slug": "locloom",
+  "identifier": "io.github.cxxzsh.locloom",
+  "version": "0.1.0",
+  "copyright": "Copyright © 2026 cxxzsh",
+  "publisher": "cxxzsh",
+  "license": "MIT",
+  "icon": "assets/icon.png",
+  "out": "build",
+  "linux": {
+    "maintainer": "cxxzsh <recovxy@gmail.com>",
+    "comment": "Cross-platform lossless localization workbench",
+    "categories": ["Development", "Utility"],
+    "webview": false,
+    "command": "locloom",
+    "formats": ["deb", "rpm"]
+  }
+}

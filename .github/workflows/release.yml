@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0, must match version in mygo.json)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Draft Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag and version
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if [[ "$TAG" != v* ]]; then
+            echo "::error::Release tag must start with 'v' (got '$TAG')"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          CONFIG_VERSION="$(jq -r '.version' mygo.json)"
+          if [[ "$VERSION" != "$CONFIG_VERSION" ]]; then
+            echo "::error::Tag version ($VERSION) does not match mygo.json version ($CONFIG_VERSION)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run test suite before packaging
+        run: go test -race ./...
+
+      - name: Create or verify draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; assets will be uploaded/updated."
+            exit 0
+          fi
+          FLAGS=(--draft --title "LocLoom $TAG" --generate-notes)
+          if [[ "$VERSION" == *-* ]]; then
+            FLAGS+=(--prerelease)
+          fi
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            FLAGS+=(--verify-tag)
+          else
+            FLAGS+=(--target "$GITHUB_SHA")
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" "${FLAGS[@]}"
+
+  package:
+    needs: prepare
+    name: Package (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            platform: "darwin/universal,darwin/arm64,darwin/amd64"
+          - name: Windows
+            os: ubuntu-latest
+            platform: "windows/amd64,windows/arm64"
+          - name: Linux
+            os: ubuntu-latest
+            platform: "linux/amd64,linux/arm64"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install NSIS and zip for Windows packaging
+        if: matrix.name == 'Windows'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nsis zip
+
+      - name: Build installers with mygo
+        run: go tool mygo build -platform "${{ matrix.platform }}"
+
+      - name: Collect release assets
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          MATRIX_NAME: ${{ matrix.name }}
+        run: |
+          mkdir -p dist-assets
+          case "$MATRIX_NAME" in
+            macOS)
+              cp "build/darwin-universal/locloom-${VERSION}.dmg" "dist-assets/locloom-${VERSION}-macos-universal.dmg"
+              cp "build/darwin-arm64/locloom-${VERSION}-arm64.dmg" "dist-assets/locloom-${VERSION}-macos-arm64.dmg"
+              cp "build/darwin-amd64/locloom-${VERSION}-amd64.dmg" "dist-assets/locloom-${VERSION}-macos-amd64.dmg"
+              ;;
+            Windows)
+              cp "build/windows-amd64/locloom-setup-${VERSION}-amd64.exe" "dist-assets/"
+              cp "build/windows-arm64/locloom-setup-${VERSION}-arm64.exe" "dist-assets/"
+              (cd build/windows-amd64 && zip -9 -q "../../dist-assets/locloom-${VERSION}-windows-amd64-portable.zip" LocLoom.exe)
+              (cd build/windows-arm64 && zip -9 -q "../../dist-assets/locloom-${VERSION}-windows-arm64-portable.zip" LocLoom.exe)
+              ;;
+            Linux)
+              cp "build/linux-amd64/locloom_${VERSION}_amd64.deb" "dist-assets/"
+              cp "build/linux-arm64/locloom_${VERSION}_arm64.deb" "dist-assets/"
+              cp "build/linux-amd64/locloom-${VERSION}-1.x86_64.rpm" "dist-assets/"
+              cp "build/linux-arm64/locloom-${VERSION}-1.aarch64.rpm" "dist-assets/"
+              cp "build/linux-amd64/locloom-${VERSION}-linux-amd64.tar.gz" "dist-assets/"
+              cp "build/linux-arm64/locloom-${VERSION}-linux-arm64.tar.gz" "dist-assets/"
+              ;;
+          esac
+          ls -lh dist-assets/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.name }}
+          path: dist-assets/*
+          if-no-files-found: error
+
+  publish-draft:
+    needs: [prepare, package]
+    name: Upload Assets to Draft Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Generate SHA256SUMS.txt and upload to Draft Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber *
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,assets
