@@ -43,11 +43,12 @@ type ConfigField struct {
 
 // SourceItem represents a single string to be translated.
 type SourceItem struct {
-	ID        string
-	Key       domain.EntryKey
-	RefLocale string
-	RefText   string
-	Numerus   bool
+	ID           string
+	Key          domain.EntryKey
+	SourceLocale string
+	RefLocale    string
+	RefText      string
+	Numerus      bool
 }
 
 // Request is passed to a Provider for translating a batch of strings into one target locale.
@@ -81,6 +82,27 @@ type LocalizedProvider interface {
 	LocalizedName(lang string) string
 	LocalizedDescription(lang string) string
 	LocalizedConfigSchema(lang string) []ConfigField
+}
+
+// CacheKeyer is an optional interface implemented by providers whose output depends on
+// configuration parameters (such as model name, API mode, endpoint, or domain prompt).
+// The returned namespace differentiates cache entries without storing secrets.
+type CacheKeyer interface {
+	CacheNamespace() string
+}
+
+// ProviderCacheID returns the cache key prefix for p, scoped by CacheNamespace() when non-empty.
+func ProviderCacheID(p Provider) string {
+	if p == nil {
+		return ""
+	}
+	id := p.ID()
+	if ck, ok := p.(CacheKeyer); ok {
+		if ns := ck.CacheNamespace(); ns != "" {
+			return id + "@" + ns
+		}
+	}
+	return id
 }
 
 // ProviderName returns the localized name of p for lang, falling back to p.Name().

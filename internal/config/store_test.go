@@ -159,3 +159,32 @@ func TestUILangPersistenceAndNormalization(t *testing.T) {
 		t.Fatalf("invalid UILang = %q, want zh", loadedInvalid.UILang)
 	}
 }
+
+func TestUILangAutoNormalizedPreserved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	cfg := Default()
+	cfg.UILang = "auto"
+	if err := SaveTo(path, cfg); err != nil {
+		t.Fatalf("SaveTo failed: %v", err)
+	}
+	loaded, _, err := loadFromPath(path)
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	if loaded.UILang != "auto" {
+		t.Fatalf("loaded UILang = %q, want auto", loaded.UILang)
+	}
+
+	if err := os.WriteFile(path, []byte(`{"ui_lang":"AUTO"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loadedUpper, _, err := loadFromPath(path)
+	if err != nil {
+		t.Fatalf("loadFromPath upper failed: %v", err)
+	}
+	if loadedUpper.UILang != "auto" {
+		t.Fatalf("normalized AUTO UILang = %q, want auto", loadedUpper.UILang)
+	}
+}

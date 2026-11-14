@@ -66,6 +66,14 @@ func (p *bingWebProvider) LocalizedDescription(lang string) string {
 
 func (p *bingWebProvider) Kind() provider.Kind { return provider.KindEngine }
 
+func (p *bingWebProvider) CacheNamespace() string {
+	p.mu.RLock()
+	mode := p.mode
+	endpoint := p.endpointURL
+	p.mu.RUnlock()
+	return mode + "|" + strings.TrimRight(endpoint, "/")
+}
+
 func (p *bingWebProvider) ConfigSchema() []provider.ConfigField {
 	return []provider.ConfigField{
 		{

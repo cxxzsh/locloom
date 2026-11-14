@@ -1,6 +1,7 @@
 package app
 
 import (
+	"archive/zip"
 	"bytes"
 	"image/png"
 	"os"
@@ -611,5 +612,250 @@ func TestAppIconPNGDarkAndLightVariants(t *testing.T) {
 	}
 	if !(lr > dr*4) {
 		t.Fatalf("expected light squircle luminance >> dark squircle luminance, got lightR=%d darkR=%d", lr>>8, dr>>8)
+	}
+}
+
+func TestWriteModeSegmentedPersistence(t *testing.T) {
+	a := newTestApp()
+	if a.cfg.WriteMode != domain.ModeFillUnfinished {
+		t.Fatalf("expected initial ModeFillUnfinished, got %v", a.cfg.WriteMode)
+	}
+	tt := ui.NewTester(a.View, 1280, 820)
+	if err := tt.Click(a.tr().WriteModeOverwrite); err != nil {
+		t.Fatalf("click WriteModeOverwrite failed: %v", err)
+	}
+	if a.cfg.WriteMode != domain.ModeOverwriteExisting {
+		t.Fatalf("expected cfg.WriteMode ModeOverwriteExisting, got %v", a.cfg.WriteMode)
+	}
+	if err := tt.Click(a.tr().WriteModeFill); err != nil {
+		t.Fatalf("click WriteModeFill failed: %v", err)
+	}
+	if a.cfg.WriteMode != domain.ModeFillUnfinished {
+		t.Fatalf("expected cfg.WriteMode ModeFillUnfinished, got %v", a.cfg.WriteMode)
+	}
+}
+
+func TestScaffoldMultiFormatAndDiskPersistence(t *testing.T) {
+	// 1. Single-file en.json upgrades to directory and persists scaffolded ja_JP.json to disk.
+	jsonDir := t.TempDir()
+	enJSONPath := filepath.Join(jsonDir, "en.json")
+	if err := os.WriteFile(enJSONPath, []byte("{\"hello\": \"Hello\"}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a1 := NewWithConfig(config.AppConfig{
+		Locales: []locale.LocaleSpec{
+			{ID: "en", Name: "English", Enabled: true, IsRef: true},
+			{ID: "ja_JP", Name: "Japanese", Enabled: true},
+		},
+	})
+	if err := a1.LoadProject(enJSONPath); err != nil {
+		t.Fatalf("LoadProject(en.json) failed: %v", err)
+	}
+	if !a1.bundle.IsSingleFile {
+		t.Fatal("expected IsSingleFile=true before scaffold")
+	}
+	a1.scaffoldMissingLocaleFiles()
+	if a1.bundle.IsSingleFile || a1.bundle.SourcePath != jsonDir {
+		t.Fatalf("expected upgrade to directory %q, got IsSingleFile=%v SourcePath=%q", jsonDir, a1.bundle.IsSingleFile, a1.bundle.SourcePath)
+	}
+	if _, err := os.Stat(filepath.Join(jsonDir, "ja_JP.json")); err != nil {
+		t.Fatalf("expected scaffolded ja_JP.json written to disk: %v", err)
+	}
+
+	// 2. Android values/strings.xml -> values-fr-rFR/strings.xml on disk.
+	androidDir := t.TempDir()
+	valuesDir := filepath.Join(androidDir, "values")
+	if err := os.MkdirAll(valuesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(valuesDir, "strings.xml"), []byte(`<?xml version="1.0" encoding="utf-8"?><resources><string name="ok">OK</string></resources>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a2 := NewWithConfig(config.AppConfig{
+		Locales: []locale.LocaleSpec{
+			{ID: "en", Name: "English", Enabled: true, IsRef: true},
+			{ID: "fr_FR", Name: "French", Enabled: true},
+		},
+	})
+	if err := a2.LoadProject(androidDir); err != nil {
+		t.Fatalf("LoadProject(androidDir) failed: %v", err)
+	}
+	a2.scaffoldMissingLocaleFiles()
+	if _, err := os.Stat(filepath.Join(androidDir, "values-fr-rFR", "strings.xml")); err != nil {
+		t.Fatalf("expected scaffolded Android strings.xml on disk: %v", err)
+	}
+
+	// 3. Gettext .pot template -> de_DE.po on disk (not .pot).
+	poDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(poDir, "messages.pot"), []byte("msgid \"Hello\"\nmsgstr \"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a3 := NewWithConfig(config.AppConfig{
+		Locales: []locale.LocaleSpec{
+			{ID: "en", Name: "English", Enabled: true, IsRef: true},
+			{ID: "de_DE", Name: "German", Enabled: true},
+		},
+	})
+	if err := a3.LoadProject(poDir); err != nil {
+		t.Fatalf("LoadProject(poDir) failed: %v", err)
+	}
+	a3.scaffoldMissingLocaleFiles()
+	poData, err := os.ReadFile(filepath.Join(poDir, "de_DE.po"))
+	if err != nil {
+		t.Fatalf("expected scaffolded de_DE.po on disk: %v", err)
+	}
+	if !strings.Contains(string(poData), `"Language: de_DE\n"`) {
+		t.Fatalf("expected Language: de_DE header in scaffolded PO, got:\n%s", string(poData))
+	}
+
+	// 4. Apple .xcstrings (TopologyMultiLocale) is a safe no-op, and normalized duplicate en-US vs en_US is skipped.
+	xcDir := t.TempDir()
+	xcPath := filepath.Join(xcDir, "Localizable.xcstrings")
+	xcRaw := `{"sourceLanguage":"en","strings":{"hi":{"localizations":{"en-US":{"stringUnit":{"state":"translated","value":"Hi"}}}}},"version":"1.0"}`
+	if err := os.WriteFile(xcPath, []byte(xcRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a4 := NewWithConfig(config.AppConfig{
+		Locales: []locale.LocaleSpec{
+			{ID: "en_US", Name: "English US", Enabled: true, IsRef: true},
+			{ID: "ja_JP", Name: "Japanese", Enabled: true},
+		},
+	})
+	if err := a4.LoadProject(xcDir); err != nil {
+		t.Fatalf("LoadProject(xcDir) failed: %v", err)
+	}
+	if a4.bundle.Topology != format.TopologyMultiLocale {
+		t.Fatalf("expected TopologyMultiLocale, got %v", a4.bundle.Topology)
+	}
+	a4.scaffoldMissingLocaleFiles()
+	if len(a4.bundle.Docs) != 1 {
+		t.Fatalf("expected no extra docs scaffolded for TopologyMultiLocale, got %d", len(a4.bundle.Docs))
+	}
+
+	// Normalized duplicate check on per-locale JSON folder: existing en-US.json skips scaffolding en_US.
+	dupDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dupDir, "en-US.json"), []byte(`{"hello":"Hello"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a5 := NewWithConfig(config.AppConfig{
+		Locales: []locale.LocaleSpec{
+			{ID: "en_US", Name: "English US", Enabled: true},
+		},
+	})
+	if err := a5.LoadProject(dupDir); err != nil {
+		t.Fatalf("LoadProject(dupDir) failed: %v", err)
+	}
+	a5.scaffoldMissingLocaleFiles()
+	if len(a5.bundle.Docs) != 1 {
+		t.Fatalf("expected normalized en-US to prevent duplicate en_US scaffold, got %d docs", len(a5.bundle.Docs))
+	}
+}
+
+func TestZipWriteBackResetsPendingChanges(t *testing.T) {
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "project.zip")
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	wEn, _ := zw.Create("en.json")
+	_, _ = wEn.Write([]byte("{\"hello\":\"Hello\"}\n"))
+	wJa, _ := zw.Create("ja.json")
+	_, _ = wJa.Write([]byte("{\"hello\":\"\"}\n"))
+	_ = zw.Close()
+	if err := os.WriteFile(zipPath, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := NewWithConfig(config.AppConfig{
+		Locales: []locale.LocaleSpec{
+			{ID: "en", Name: "English", Enabled: true, IsRef: true},
+			{ID: "ja", Name: "Japanese", Enabled: true},
+		},
+	})
+	if err := a.LoadProject(zipPath); err != nil {
+		t.Fatalf("LoadProject(zip) failed: %v", err)
+	}
+	a.catalog.Set("ja", domain.EntryKey{ID: "hello", Source: "Hello"}, "こんにちは", domain.OriginManual)
+	a.rebuildPlan()
+	if a.PendingChangeCount() != 1 || !a.HasUnsavedChanges() {
+		t.Fatalf("expected 1 pending change before write-back, got %d", a.PendingChangeCount())
+	}
+
+	a.writeBackAsync()
+	a.bgWG.Wait()
+
+	outZip := filepath.Join(dir, "project_updated.zip")
+	if _, err := os.Stat(outZip); err != nil {
+		t.Fatalf("expected %q on disk: %v", outZip, err)
+	}
+	if a.PendingChangeCount() != 0 || a.HasUnsavedChanges() {
+		t.Fatalf("expected PendingChangeCount == 0 after zip write-back, got %d", a.PendingChangeCount())
+	}
+	if a.bundle.SourcePath != zipPath {
+		t.Fatalf("expected original SourcePath %q preserved, got %q", zipPath, a.bundle.SourcePath)
+	}
+}
+
+func TestCLIOverridesDoNotPolluteConfig(t *testing.T) {
+	cfg := config.Default()
+	cfg.UILang = "zh"
+	cfg.ThemeMode = 1
+
+	a := NewWithConfig(cfg)
+	a.ApplyCLILang("en")
+	a.ApplyCLITheme(2)
+
+	if a.UILang() != "en" {
+		t.Fatalf("expected transient CLI lang en, got %q", a.UILang())
+	}
+	if a.effectiveThemeMode() != 2 || !a.IsDarkTheme() {
+		t.Fatalf("expected transient dark theme mode 2, got %d (dark=%v)", a.effectiveThemeMode(), a.IsDarkTheme())
+	}
+	if a.cfg.UILang != "zh" || a.cfg.ThemeMode != 1 {
+		t.Fatalf("CLI overrides polluted cfg: UILang=%q ThemeMode=%d", a.cfg.UILang, a.cfg.ThemeMode)
+	}
+
+	// Interactive UI changes clear CLI overrides and persist to cfg.
+	a.SetUILang("auto")
+	a.SetThemeMode(0)
+	if a.cliLangOverride != "" || a.cfg.UILang != "auto" {
+		t.Fatalf("expected SetUILang(auto) to store auto and clear CLI override, got cfg=%q override=%q", a.cfg.UILang, a.cliLangOverride)
+	}
+	if a.cliThemeOverride != -1 || a.cfg.ThemeMode != 0 {
+		t.Fatalf("expected SetThemeMode(0) to clear CLI override and store 0, got cfg=%d override=%d", a.cfg.ThemeMode, a.cliThemeOverride)
+	}
+}
+
+func TestCloudProxyBulkToggle(t *testing.T) {
+	a := newTestApp()
+	a.cfg.ProviderConfigs[domain.OriginLLM] = map[string]string{
+		"base_url": "http://localhost:11434/v1",
+	}
+
+	a.setCloudProvidersUseProxy(true)
+	if !a.allCloudProvidersUseProxy() {
+		t.Fatal("expected allCloudProvidersUseProxy() true after enabling")
+	}
+	for _, remoteID := range []string{domain.OriginGoogle, domain.OriginBing, domain.OriginBaidu, domain.OriginNiutrans, domain.OriginMyMemory, domain.OriginLibre} {
+		if got := a.cfg.ProviderConfigs[remoteID]["use_proxy"]; got != "true" {
+			t.Fatalf("expected remote provider %s use_proxy=true, got %q", remoteID, got)
+		}
+	}
+	if got := a.cfg.ProviderConfigs[domain.OriginDeepL]["use_proxy"]; got == "true" {
+		t.Fatalf("expected default local DeepLX (127.0.0.1:1188) to be skipped, got %q", got)
+	}
+	if got := a.cfg.ProviderConfigs[domain.OriginLLM]["use_proxy"]; got == "true" {
+		t.Fatalf("expected localhost Ollama LLM to be skipped, got %q", got)
+	}
+
+	// Switching LLM back to cloud API includes it in subsequent bulk toggle.
+	a.cfg.ProviderConfigs[domain.OriginLLM]["base_url"] = "https://api.openai.com/v1"
+	a.setCloudProvidersUseProxy(true)
+	if got := a.cfg.ProviderConfigs[domain.OriginLLM]["use_proxy"]; got != "true" {
+		t.Fatalf("expected cloud OpenAI endpoint to receive use_proxy=true, got %q", got)
+	}
+	a.setCloudProvidersUseProxy(false)
+	if a.allCloudProvidersUseProxy() || a.anyCloudProviderUsesProxy() {
+		t.Fatal("expected all cloud providers proxy disabled after toggle false")
 	}
 }

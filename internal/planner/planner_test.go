@@ -295,3 +295,68 @@ func TestBuildPlanMultiLocaleXCStringsMissingLocalesFillGap(t *testing.T) {
 		t.Fatalf("fr Action = %s, want %s", frCell.Action, domain.ActionFillGap)
 	}
 }
+
+func TestUpdateCellByKey(t *testing.T) {
+	fb := &format.Bundle{
+		Format:       format.FormatXLIFF,
+		Topology:     format.TopologyPerLocale,
+		SourceLocale: "en",
+		Docs: []*format.DocRecord{
+			{
+				FormatID: format.FormatXLIFF,
+				LocaleID: "en",
+				Entries: []format.NormalizedEntry{
+					{Key: domain.EntryKey{ID: "menu.save", Source: "Save"}, LocaleID: "en", Text: "Save", Status: domain.StatusFinished},
+					{Key: domain.EntryKey{Source: "Plain Source"}, LocaleID: "en", Text: "Plain Source", Status: domain.StatusFinished},
+				},
+			},
+			{
+				FormatID: format.FormatXLIFF,
+				LocaleID: "ja",
+				Entries: []format.NormalizedEntry{
+					{Key: domain.EntryKey{ID: "menu.save", Source: "Save"}, LocaleID: "ja", Text: "", Status: domain.StatusEmpty},
+					{Key: domain.EntryKey{Source: "Plain Source"}, LocaleID: "ja", Text: "", Status: domain.StatusEmpty},
+				},
+			},
+		},
+	}
+	locales := []locale.LocaleSpec{
+		{ID: "en", Name: "English", Enabled: true, IsRef: true},
+		{ID: "ja", Name: "Japanese", Enabled: true},
+	}
+	cat := domain.NewCatalog()
+	plan := BuildPlan(PlanInput{
+		FormatBundle: fb,
+		Catalog:      cat,
+		Locales:      locales,
+		WriteMode:    domain.ModeFillUnfinished,
+	})
+	if plan.Summary.LocaleStats["ja"].Translated != 0 {
+		t.Fatalf("expected 0 initial translated ja cells, got %d", plan.Summary.LocaleStats["ja"].Translated)
+	}
+
+	// Update via direct EntryKey.
+	plainKey := domain.EntryKey{Source: "Plain Source"}
+	cat.Set("ja", plainKey, "プレーン原文", domain.OriginLLM)
+	if !UpdateCellByKey(plan, plainKey, "ja", cat) {
+		t.Fatal("expected UpdateCellByKey to match direct EntryKey")
+	}
+	if plan.Rows[1].Cells["ja"].Effective != "プレーン原文" {
+		t.Fatalf("unexpected row 1 effective text %q", plan.Rows[1].Cells["ja"].Effective)
+	}
+
+	// Update via IDContext fallback when Source differs.
+	idKey := domain.EntryKey{ID: "menu.save", Source: "Save"}
+	cat.Set("ja", idKey, "保存", domain.OriginManual)
+	if !UpdateCellByKey(plan, domain.EntryKey{ID: "menu.save"}, "ja", cat) {
+		t.Fatal("expected UpdateCellByKey to match IDContext fallback")
+	}
+	if plan.Rows[0].Cells["ja"].Effective != "保存" || plan.Summary.LocaleStats["ja"].Translated != 2 {
+		t.Fatalf("unexpected id row update: cell=%+v stats=%+v", plan.Rows[0].Cells["ja"], plan.Summary.LocaleStats["ja"])
+	}
+
+	// Unknown key returns false without mutating plan.
+	if UpdateCellByKey(plan, domain.EntryKey{ID: "missing"}, "ja", cat) {
+		t.Fatal("expected false for unknown EntryKey")
+	}
+}

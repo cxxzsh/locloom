@@ -136,3 +136,47 @@ func TestPoolConcurrency(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestPoolClientReuseAndCloseOnUpdate(t *testing.T) {
+	p := New(ProxyConfig{ProxyURL: "http://127.0.0.1:8080"})
+
+	d1, err := p.Client(false)
+	if err != nil {
+		t.Fatalf("Client(false) 1 failed: %v", err)
+	}
+	d2, err := p.Client(false)
+	if err != nil {
+		t.Fatalf("Client(false) 2 failed: %v", err)
+	}
+	if d1 != d2 {
+		t.Fatal("expected cached direct *http.Client to be reused across calls")
+	}
+
+	px1, err := p.Client(true)
+	if err != nil {
+		t.Fatalf("Client(true) 1 failed: %v", err)
+	}
+	px2, err := p.Client(true)
+	if err != nil {
+		t.Fatalf("Client(true) 2 failed: %v", err)
+	}
+	if px1 != px2 {
+		t.Fatal("expected cached proxied *http.Client to be reused across calls")
+	}
+
+	p.Update(ProxyConfig{ProxyURL: "http://127.0.0.1:9999"})
+	d3, err := p.Client(false)
+	if err != nil {
+		t.Fatalf("Client(false) after Update failed: %v", err)
+	}
+	if d3 == d1 {
+		t.Fatal("expected fresh direct *http.Client after Update")
+	}
+	px3, err := p.Client(true)
+	if err != nil {
+		t.Fatalf("Client(true) after Update failed: %v", err)
+	}
+	if px3 == px1 {
+		t.Fatal("expected fresh proxied *http.Client after Update")
+	}
+}

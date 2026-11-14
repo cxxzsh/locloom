@@ -87,6 +87,8 @@ type MatrixPlan struct {
 	RefLocaleID string
 	EnabledIDs  []string
 	UILang      string
+	keyIndex    map[domain.EntryKey]int
+	idCtxIndex  map[domain.EntryKey]int
 }
 
 // BuildPlan constructs a MatrixPlan by merging all .ts bundle entries, optional extra entries
@@ -336,6 +338,8 @@ func BuildPlan(in PlanInput) *MatrixPlan {
 
 	finalizeCompletions(&plan.Summary)
 	plan.Rows = rows
+	plan.keyIndex = seenKeys
+	plan.idCtxIndex = seenIDCtx
 	return plan
 }
 
@@ -517,6 +521,32 @@ func UpdateCell(plan *MatrixPlan, rowIdx int, localeID string, cat *domain.Catal
 	}
 	recomputeRowFlags(row)
 	return true
+}
+
+// UpdateCellByKey updates a single cell by EntryKey and localeID in O(1) via BuildPlan's key index.
+func UpdateCellByKey(plan *MatrixPlan, key domain.EntryKey, localeID string, cat *domain.Catalog) bool {
+	if plan == nil {
+		return false
+	}
+	if plan.keyIndex == nil {
+		plan.keyIndex = make(map[domain.EntryKey]int, len(plan.Rows))
+		plan.idCtxIndex = make(map[domain.EntryKey]int, len(plan.Rows))
+		for i := range plan.Rows {
+			rk := plan.Rows[i].Key
+			plan.keyIndex[rk] = i
+			if rk.ID != "" {
+				plan.idCtxIndex[rk.IDContext()] = i
+			}
+		}
+	}
+	idx, ok := plan.keyIndex[key]
+	if !ok && key.ID != "" && plan.idCtxIndex != nil {
+		idx, ok = plan.idCtxIndex[key.IDContext()]
+	}
+	if !ok {
+		return false
+	}
+	return UpdateCell(plan, idx, localeID, cat)
 }
 
 // BuildPatchesForFile extracts ordered tsxml.PatchItems for localeID from plan.

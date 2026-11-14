@@ -65,6 +65,18 @@ func (p *deepLProvider) LocalizedDescription(lang string) string {
 
 func (p *deepLProvider) Kind() provider.Kind { return provider.KindEngine }
 
+func (p *deepLProvider) CacheNamespace() string {
+	p.mu.RLock()
+	mode := p.mode
+	baseURL := p.baseURL
+	apiKey := p.apiKey
+	p.mu.RUnlock()
+	if ep, err := resolveDeepLEndpoint(mode, baseURL, apiKey); err == nil {
+		return mode + "|" + ep
+	}
+	return mode + "|" + strings.TrimRight(baseURL, "/")
+}
+
 func (p *deepLProvider) ConfigSchema() []provider.ConfigField {
 	return []provider.ConfigField{
 		{

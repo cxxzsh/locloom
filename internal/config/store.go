@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"locloom/internal/domain"
@@ -211,7 +212,8 @@ func loadFromPath(primaryPath string) (AppConfig, string, error) {
 
 func normalizeLoaded(cfg *AppConfig) {
 	def := Default()
-	if cfg.UILang != "zh" && cfg.UILang != "en" {
+	cfg.UILang = strings.ToLower(strings.TrimSpace(cfg.UILang))
+	if cfg.UILang != "zh" && cfg.UILang != "en" && cfg.UILang != "auto" {
 		cfg.UILang = def.UILang
 	}
 	if cfg.LeftPaneWidth <= 0 {

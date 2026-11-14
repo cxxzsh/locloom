@@ -134,9 +134,10 @@ func (a *App) viewHeader(c *ui.Context) {
 			// Utility Buttons
 			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Shrink(0).Children(func() {
 				themeLabels := []string{tr.ThemeSystem, tr.ThemeLight, tr.ThemeDark}
-				lbl := themeLabels[a.cfg.ThemeMode%3]
+				curTheme := a.effectiveThemeMode()
+				lbl := themeLabels[curTheme%3]
 				if headerBtn(c, iconTheme, lbl, tr.TipTheme).Clicked() {
-					a.SetThemeMode((a.cfg.ThemeMode + 1) % 3)
+					a.SetThemeMode((curTheme + 1) % 3)
 				}
 
 				if ui.Button(c, tr.BtnLangToggle).

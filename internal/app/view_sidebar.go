@@ -8,6 +8,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"locloom/internal/domain"
+	"locloom/internal/format"
 	"locloom/internal/provider"
 )
 
@@ -38,6 +40,7 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 			ui.Text(c, tr.SectionWriteStrategy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			wm := int(a.cfg.WriteMode)
 			if ui.Segmented(c, &wm, tr.WriteModeFill, tr.WriteModeOverwrite).FillEqually().Changed() {
+				a.cfg.WriteMode = domain.WriteMode(wm)
 				a.rebuildPlan()
 				a.scheduleConfigSave()
 			}
@@ -210,15 +213,26 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 
 			// Network & Proxy
 			ui.Text(c, tr.SectionNetworkProxy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			prevProxyEmpty := strings.TrimSpace(a.cfg.Proxy.ProxyURL) == ""
 			if ui.TextInput(c, &a.cfg.Proxy.ProxyURL).
 				Placeholder(tr.PlaceholderProxy).
 				Changed() {
 				a.netPool.Update(a.cfg.Proxy)
+				if prevProxyEmpty && strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" && !a.anyCloudProviderUsesProxy() {
+					a.setCloudProvidersUseProxy(true)
+				}
 				a.scheduleConfigSave()
 			}
 			if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).Changed() {
 				a.netPool.Update(a.cfg.Proxy)
 				a.scheduleConfigSave()
+			}
+			if strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" {
+				useCloudProxy := a.allCloudProvidersUseProxy()
+				if ui.Checkbox(c, &useCloudProxy, tr.CheckProxyAllCloud).Changed() {
+					a.setCloudProvidersUseProxy(useCloudProxy)
+					a.scheduleConfigSave()
+				}
 			}
 
 			ui.Divider(c)
@@ -470,7 +484,10 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 				if ui.TextInput(c, &a.cfg.FilePattern).Placeholder("{id}.ts").MinWidth(0).Changed() {
 					a.scheduleConfigSave()
 				}
-				if ui.Button(c, tr.BtnScaffoldTS).Padding(t.Space(1), t.Space(2)).Disabled(a.bundle == nil).Clicked() {
+				if ui.Button(c, tr.BtnScaffoldTS).
+					Padding(t.Space(1), t.Space(2)).
+					Disabled(a.bundle == nil || a.bundle.Topology == format.TopologyMultiLocale).
+					Clicked() {
 					a.scaffoldMissingLocaleFiles()
 				}
 			})

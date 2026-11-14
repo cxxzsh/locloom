@@ -61,6 +61,14 @@ func (p *libreTranslateProvider) LocalizedDescription(lang string) string {
 
 func (p *libreTranslateProvider) Kind() provider.Kind { return provider.KindEngine }
 
+func (p *libreTranslateProvider) CacheNamespace() string {
+	p.mu.RLock()
+	mode := p.mode
+	baseURL := p.baseURL
+	p.mu.RUnlock()
+	return mode + "|" + strings.TrimRight(baseURL, "/")
+}
+
 func (p *libreTranslateProvider) ConfigSchema() []provider.ConfigField {
 	return []provider.ConfigField{
 		{

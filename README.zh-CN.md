@@ -49,6 +49,18 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 go tool mygo build -platform darwin/universal,windows/amd64,linux/amd64
 ```
 
+社区预编译安装包暂未附带商业 Apple Developer 或 Authenticode 代码签名，首次运行时请按平台放行：
+
+- **macOS (`.dmg`)**：将 `LocLoom.app` 拖入 `/Applications`（应用程序）后，若 Gatekeeper 提示「已损坏」或「无法验证开发者」，执行一次以下命令移除隔离属性后重新打开：
+
+  ```bash
+  sudo xattr -cr /Applications/LocLoom.app
+  ```
+
+  或前往 **系统设置 → 隐私与安全性** 点击 **仍要打开**。
+- **Windows (`.exe` / `.zip`)**：若 SmartScreen 弹出「Windows 已保护你的电脑」，点击 **更多信息 → 仍要运行**。
+- **Linux (`.deb` / `.rpm` / `.tar.gz`)**：可通过 `sudo apt install ./locloom_*_amd64.deb` 或 `sudo rpm -Uvh ./locloom-*.rpm` 安装，或直接解压便携压缩包运行。
+
 ### 命令行启动参数
 
 | 参数 | 说明 | 示例 |

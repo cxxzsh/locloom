@@ -3,7 +3,10 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 
@@ -325,4 +328,159 @@ func TestLocalizedProviderHelpers(t *testing.T) {
 	if got := ProviderSchema(loc, "zh"); len(got) != 1 || got[0].Label != "中文标签" {
 		t.Fatalf("loc ProviderSchema(zh) = %+v", got)
 	}
+}
+
+func TestRestorePlaceholdersSinglePassNoCascade(t *testing.T) {
+	// NBSP (\u00a0) at edges must be preserved and restored cleanly.
+	nbspSrc := "\u00a0Wait %1 then %s\u00a0"
+	m1 := MaskPlaceholders(nbspSrc)
+	if m1.LeadingWS != "\u00a0" || m1.TrailingWS != "\u00a0" {
+		t.Fatalf("expected NBSP edge spaces preserved, got lead=%q trail=%q", m1.LeadingWS, m1.TrailingWS)
+	}
+	restored1 := RestorePlaceholders(" 请等待 [[0]] 再看 [[1]] ", m1)
+	if restored1 != "\u00a0请等待 %1 再看 %s\u00a0" {
+		t.Fatalf("unexpected NBSP restore: %q", restored1)
+	}
+
+	// Single-pass restoration must not cascade when token [0] contains literal "[1]".
+	cascadeMask := MaskedText{
+		Masked:     "A [[0]] B [[1]]",
+		Tokens:     []string{"[1]", "%s"},
+		LeadingWS:  "\u00a0",
+		TrailingWS: "\u00a0",
+	}
+	restoredCascade := RestorePlaceholders(" A [[0]] B [[1]] ", cascadeMask)
+	if restoredCascade != "\u00a0A [1] B %s\u00a0" {
+		t.Fatalf("cascade corruption occurred: got %q, want %q", restoredCascade, "\u00a0A [1] B %s\u00a0")
+	}
+
+	// Literal single-bracket [0] in source must stay literal even in single-bracket fallback pass.
+	litMask := MaskPlaceholders("Array [0] %1 %2")
+	restoredLit := RestorePlaceholders("数组 [0] %1 [1]", litMask)
+	if restoredLit != "数组 [0] %1 %2" {
+		t.Fatalf("literal [0] or fallback restore failed: %q", restoredLit)
+	}
+}
+
+type namespacedStubProvider struct {
+	stubProvider
+	ns string
+}
+
+func (n *namespacedStubProvider) CacheNamespace() string { return n.ns }
+
+func TestCacheNamespaceIsolationAndPermissions(t *testing.T) {
+	baseDir := t.TempDir()
+	cacheDir := filepath.Join(baseDir, "locloom")
+	cachePath := filepath.Join(cacheDir, "translation-cache.json")
+	cache := NewCache(cachePath)
+
+	nsProv := &namespacedStubProvider{
+		stubProvider: stubProvider{id: "test_ns", kind: KindEngine},
+		ns:           "gpt-4o|https://api.openai.com/v1|promptA",
+	}
+	nsProv.translate = func(_ context.Context, req Request) (map[string]string, error) {
+		out := make(map[string]string, len(req.Items))
+		for _, it := range req.Items {
+			out[it.ID] = nsProv.ns + ":" + it.RefText
+		}
+		return out, nil
+	}
+
+	reg := NewRegistry()
+	reg.Register(nsProv)
+
+	item := SourceItem{
+		ID:        domain.EntryKey{Source: "Open"}.Canonical(),
+		Key:       domain.EntryKey{Source: "Open"},
+		RefLocale: "en",
+		RefText:   "Open",
+	}
+	locs := []locale.LocaleSpec{{ID: "ja", Enabled: true}}
+	tasks := map[string][]SourceItem{"ja": {item}}
+
+	res1 := RunConcurrent(context.Background(), DispatchOptions{
+		Registry:    reg,
+		Cache:       cache,
+		ProviderIDs: []string{"test_ns"},
+		Locales:     locs,
+		Tasks:       tasks,
+		Concurrency: 1,
+	})
+	if len(res1.Cells) != 1 || nsProv.calls.Load() != 1 {
+		t.Fatalf("expected 1 cell & 1 call, got cells=%d calls=%d", len(res1.Cells), nsProv.calls.Load())
+	}
+
+	// Switching CacheNamespace must miss old cache and compute a fresh translation.
+	nsProv.ns = "gpt-4o-mini|https://api.openai.com/v1|promptB"
+	res2 := RunConcurrent(context.Background(), DispatchOptions{
+		Registry:    reg,
+		Cache:       cache,
+		ProviderIDs: []string{"test_ns"},
+		Locales:     locs,
+		Tasks:       tasks,
+		Concurrency: 1,
+	})
+	if len(res2.Cells) != 1 || nsProv.calls.Load() != 2 || !containsSubstring(res2.Cells[0].Text, "gpt-4o-mini") {
+		t.Fatalf("expected cache miss on namespace change, got calls=%d cells=%+v", nsProv.calls.Load(), res2.Cells)
+	}
+
+	// Same new namespace hits cache without incrementing call count.
+	res3 := RunConcurrent(context.Background(), DispatchOptions{
+		Registry:    reg,
+		Cache:       cache,
+		ProviderIDs: []string{"test_ns"},
+		Locales:     locs,
+		Tasks:       tasks,
+		Concurrency: 1,
+	})
+	if nsProv.calls.Load() != 2 || res3.Statuses["ja"].CacheHits != 1 {
+		t.Fatalf("expected cache hit on matching namespace, got calls=%d statuses=%+v", nsProv.calls.Load(), res3.Statuses)
+	}
+
+	if err := cache.Save(); err != nil {
+		t.Fatalf("cache.Save() failed: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		dirInfo, err := os.Stat(cacheDir)
+		if err != nil {
+			t.Fatalf("stat cache dir failed: %v", err)
+		}
+		if dirInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("expected 0700 cache dir perms, got %o", dirInfo.Mode().Perm())
+		}
+		fileInfo, err := os.Stat(cachePath)
+		if err != nil {
+			t.Fatalf("stat cache file failed: %v", err)
+		}
+		if fileInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("expected 0600 cache file perms, got %o", fileInfo.Mode().Perm())
+		}
+	}
+
+	// Verify FIFO eviction keeps cache bounded at maxCacheEntries.
+	bounded := NewCache("")
+	for i := 0; i < maxCacheEntries+3; i++ {
+		bounded.Put("p", "ja", fmt.Sprintf("src-%d", i), "", fmt.Sprintf("tr-%d", i))
+	}
+	if len(bounded.data) != maxCacheEntries {
+		t.Fatalf("expected cache bounded at %d entries, got %d", maxCacheEntries, len(bounded.data))
+	}
+	if _, ok := bounded.Get("p", "ja", "src-0", ""); ok {
+		t.Fatal("expected oldest entry src-0 to be evicted")
+	}
+	if _, ok := bounded.Get("p", "ja", fmt.Sprintf("src-%d", maxCacheEntries+2), ""); !ok {
+		t.Fatal("expected newest entry to remain in cache")
+	}
+}
+
+func containsSubstring(s, sub string) bool {
+	return len(sub) == 0 || (len(s) >= len(sub) && func() bool {
+		for i := 0; i <= len(s)-len(sub); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+		return false
+	}())
 }

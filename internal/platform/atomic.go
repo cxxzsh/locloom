@@ -10,8 +10,18 @@ import (
 // AtomicWriteFile writes data to a temporary file in filepath.Dir(path), syncs, closes, and renames over path.
 func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	dirPerm := os.FileMode(0o755)
+	if perm&0o077 == 0 {
+		dirPerm = 0o700
+	}
+	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return fmt.Errorf("create parent dir %q: %w", dir, err)
+	}
+	if perm&0o077 == 0 {
+		// Tighten directory permissions if it already existed with broader access, ignoring errors if shared (e.g., TempDir).
+		if base := filepath.Base(dir); base == AppDirName {
+			_ = os.Chmod(dir, 0o700)
+		}
 	}
 
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")

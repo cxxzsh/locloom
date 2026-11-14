@@ -190,7 +190,6 @@ func (p *googleWebProvider) Translate(ctx context.Context, req provider.Request)
 	if tl == "" {
 		tl = req.TargetLocale.ID
 	}
-	sl := "auto"
 
 	out := make(map[string]string, len(req.Items))
 	for start := 0; start < len(req.Items); start += batchSize {
@@ -201,12 +200,29 @@ func (p *googleWebProvider) Translate(ctx context.Context, req provider.Request)
 		chunk := req.Items[start:end]
 
 		texts := make([]string, len(chunk))
+		chunkSL := ""
+		consistentSL := true
 		for i, it := range chunk {
+			var itemSL string
 			if it.Key.Source != "" {
 				texts[i] = it.Key.Source
+				itemSL = normalizeGoogleSourceLang(it.SourceLocale)
 			} else {
 				texts[i] = it.RefText
+				itemSL = normalizeGoogleSourceLang(it.RefLocale)
 			}
+			if itemSL == "" {
+				itemSL = "auto"
+			}
+			if i == 0 {
+				chunkSL = itemSL
+			} else if itemSL != chunkSL {
+				consistentSL = false
+			}
+		}
+		sl := "auto"
+		if consistentSL && chunkSL != "" {
+			sl = chunkSL
 		}
 
 		translated, err := p.translateBatchWithFallback(ctx, client, host, ep, sl, tl, texts)

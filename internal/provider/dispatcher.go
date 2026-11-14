@@ -199,6 +199,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 				}, nil, nil)
 
 				engineCode := locale.ResolveEngineCode(loc, pid)
+				cachePID := ProviderCacheID(p)
 
 				if p.Kind() == KindLocal {
 					outMap, err := p.Translate(ctx, Request{
@@ -262,7 +263,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 						if cacheSrc == "" {
 							cacheSrc = item.RefText
 						}
-						if cached, hit := cache.Get(pid, loc.ID, cacheSrc, item.Key.Context); hit {
+						if cached, hit := cache.Get(cachePID, loc.ID, cacheSrc, item.Key.Context); hit {
 							cacheCells = append(cacheCells, TranslatedCell{
 								LocaleID:   loc.ID,
 								Key:        item.Key,
@@ -332,10 +333,11 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 								mk := item.Key
 								mk.Source = m.Masked
 								maskedItems = append(maskedItems, SourceItem{
-									ID:        subID,
-									Key:       mk,
-									RefLocale: item.RefLocale,
-									Numerus:   true,
+									ID:           subID,
+									Key:          mk,
+									SourceLocale: item.SourceLocale,
+									RefLocale:    item.RefLocale,
+									Numerus:      true,
 								})
 							}
 							plans = append(plans, pl)
@@ -351,11 +353,12 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 					mk := item.Key
 					mk.Source = m.Masked
 					maskedItems = append(maskedItems, SourceItem{
-						ID:        item.ID,
-						Key:       mk,
-						RefLocale: item.RefLocale,
-						RefText:   item.RefText,
-						Numerus:   item.Numerus,
+						ID:           item.ID,
+						Key:          mk,
+						SourceLocale: item.SourceLocale,
+						RefLocale:    item.RefLocale,
+						RefText:      item.RefText,
+						Numerus:      item.Numerus,
 					})
 				}
 
@@ -391,7 +394,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 							if cacheSrc == "" {
 								cacheSrc = pl.orig.RefText
 							}
-							cache.Put(pid, loc.ID, cacheSrc, pl.orig.Key.Context, restored)
+							cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, restored)
 							newCells = append(newCells, TranslatedCell{
 								LocaleID:   loc.ID,
 								Key:        pl.orig.Key,
@@ -419,7 +422,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 							if cacheSrc == "" {
 								cacheSrc = pl.orig.RefText
 							}
-							cache.Put(pid, loc.ID, cacheSrc, pl.orig.Key.Context, joined)
+							cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, joined)
 							newCells = append(newCells, TranslatedCell{
 								LocaleID:   loc.ID,
 								Key:        pl.orig.Key,

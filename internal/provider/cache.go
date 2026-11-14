@@ -3,19 +3,24 @@ package provider
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"sync"
 
 	"locloom/internal/platform"
 )
 
-const cacheFileName = "translation-cache.json"
+const (
+	cacheFileName   = "translation-cache.json"
+	maxCacheEntries = 50000
+)
 
 // Cache provides thread-safe in-memory and persistent disk caching for engine translations.
 type Cache struct {
 	mu    sync.RWMutex
 	dirty bool
 	path  string
-	data  map[string]string // key: providerID + "\x00" + targetLocale + "\x00" + contextName + "\x00" + source
+	data  map[string]string // key: cacheProviderID + "\x00" + targetLocale + "\x00" + contextName + "\x00" + source
+	order []string
 }
 
 var (
@@ -34,10 +39,41 @@ func NewCache(path string) *Cache {
 			var loaded map[string]string
 			if json.Unmarshal(raw, &loaded) == nil && loaded != nil {
 				c.data = loaded
+				c.order = make([]string, 0, len(loaded))
+				for k := range loaded {
+					c.order = append(c.order, k)
+				}
+				c.evictExcessLocked()
 			}
 		}
 	}
 	return c
+}
+
+func (c *Cache) evictExcessLocked() {
+	if len(c.data) <= maxCacheEntries {
+		return
+	}
+	head := 0
+	for len(c.data) > maxCacheEntries && head < len(c.order) {
+		k := c.order[head]
+		head++
+		delete(c.data, k)
+	}
+	if head > 0 {
+		if head >= len(c.order) {
+			c.order = nil
+		} else {
+			c.order = slices.Clone(c.order[head:])
+		}
+	}
+	for k := range c.data {
+		if len(c.data) <= maxCacheEntries {
+			break
+		}
+		delete(c.data, k)
+	}
+	c.dirty = true
 }
 
 // GlobalCache returns the singleton translation cache persisted at platform.ResolveCachePath("translation-cache.json").
@@ -73,8 +109,13 @@ func (c *Cache) Put(providerID, targetLocale, source, contextName, translated st
 	if translated == "" {
 		return
 	}
+	k := cacheKey(providerID, targetLocale, contextName, source)
 	c.mu.Lock()
-	c.data[cacheKey(providerID, targetLocale, contextName, source)] = translated
+	if _, exists := c.data[k]; !exists {
+		c.order = append(c.order, k)
+	}
+	c.data[k] = translated
+	c.evictExcessLocked()
 	c.dirty = true
 	c.mu.Unlock()
 }
@@ -104,7 +145,7 @@ func (c *Cache) Save() error {
 		c.mu.Unlock()
 		return err
 	}
-	if err := platform.AtomicWriteFile(path, raw, 0644); err != nil {
+	if err := platform.AtomicWriteFile(path, raw, 0o600); err != nil {
 		c.mu.Lock()
 		c.dirty = true
 		c.mu.Unlock()
@@ -117,6 +158,7 @@ func (c *Cache) Save() error {
 func (c *Cache) Clear() error {
 	c.mu.Lock()
 	c.data = make(map[string]string)
+	c.order = nil
 	c.dirty = false
 	path := c.path
 	c.mu.Unlock()

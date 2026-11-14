@@ -49,6 +49,18 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o locloom .
 go tool mygo build -platform darwin/universal,windows/amd64,linux/amd64
 ```
 
+Prebuilt community installers do not yet carry commercial Apple Developer or Authenticode signatures. On first launch:
+
+- **macOS (`.dmg`)**: Drag `LocLoom.app` into `/Applications`. If Gatekeeper reports the app is damaged or unverified, remove the quarantine attribute once and relaunch:
+
+  ```bash
+  sudo xattr -cr /Applications/LocLoom.app
+  ```
+
+  Alternatively, open **System Settings → Privacy & Security** and click **Open Anyway**.
+- **Windows (`.exe` / `.zip`)**: If Windows SmartScreen shows *"Windows protected your PC"*, click **More info → Run anyway**.
+- **Linux (`.deb` / `.rpm` / `.tar.gz`)**: Install with `sudo apt install ./locloom_*_amd64.deb` or `sudo rpm -Uvh ./locloom-*.rpm`, or extract the tarball.
+
 ### CLI Flags
 
 | Flag | Description | Example |

@@ -69,8 +69,12 @@ type xliffDoc struct {
 }
 
 var (
-	reXLIFFInlineTag = regexp.MustCompile(`<(?:/)?(?:x|ph|g|bx|ex|bpt|ept|it|mrk|sc|ec|pc)\b[^>]*>`)
-	reSegStateAttr   = regexp.MustCompile(`(\bstate\s*=\s*)(["'])[^"']*["']`)
+	reXLIFFInlineTag     = regexp.MustCompile(`<(?:/)?(?:x|ph|g|bx|ex|bpt|ept|it|mrk|sc|ec|pc)\b[^>]*>`)
+	reSegStateAttr       = regexp.MustCompile(`(\bstate\s*=\s*)(["'])[^"']*["']`)
+	reXLIFFOpenTag       = regexp.MustCompile(`<xliff\b[^>]*>`)
+	reFileOpenTag        = regexp.MustCompile(`<file\b[^>]*>`)
+	reAttrTrgLang        = regexp.MustCompile(`(?i)\btrgLang\s*=\s*(["'])[^"']*["']`)
+	reAttrTargetLanguage = regexp.MustCompile(`(?i)\btarget-language\s*=\s*(["'])[^"']*["']`)
 )
 
 func unescapeXLIFFInner(raw string) string {
@@ -620,6 +624,21 @@ func (a *xliffAdapter) NewLocaleDoc(template *DocRecord, target locale.LocaleSpe
 
 	var edits []byteSpanEdit
 	for idx, it := range xdoc.items {
+		if it.isV2 && it.segTagEnd > it.segTagStart && reSegStateAttr.MatchString(it.segRawTag) {
+			updatedSeg := reSegStateAttr.ReplaceAllStringFunc(it.segRawTag, func(s string) string {
+				loc := reSegStateAttr.FindStringSubmatchIndex(s)
+				if len(loc) >= 4 {
+					return s[loc[2]:loc[3]] + `"initial"`
+				}
+				return s
+			})
+			edits = append(edits, byteSpanEdit{
+				start: it.segTagStart,
+				end:   it.segTagEnd,
+				order: idx * 2,
+				data:  []byte(updatedSeg),
+			})
+		}
 		if it.hasTarget && it.targetElemEnd > it.targetElemStart {
 			repl := `<target state="needs-translation"></target>`
 			if it.isV2 {
@@ -628,18 +647,75 @@ func (a *xliffAdapter) NewLocaleDoc(template *DocRecord, target locale.LocaleSpe
 			edits = append(edits, byteSpanEdit{
 				start: it.targetElemStart,
 				end:   it.targetElemEnd,
-				order: idx,
+				order: idx*2 + 1,
 				data:  []byte(repl),
 			})
 		}
 	}
-	out := applyByteSpanEdits(template.Raw, edits, template.HasBOM)
+	out := applyByteSpanEdits(template.Raw, edits, false)
+	out = updateXLIFFTargetLang(out, bcp, xdoc.isV2)
+	if template.HasBOM {
+		out = append([]byte{0xEF, 0xBB, 0xBF}, out...)
+	}
 	doc, err := a.ParseDoc(newRelPath, out, "", []locale.LocaleSpec{target})
 	if err != nil {
 		return nil, err
 	}
 	doc.LocaleID = target.ID
 	return doc, nil
+}
+
+func updateXLIFFTargetLang(raw []byte, bcp string, isV2 bool) []byte {
+	escaped := escapeXMLAttr(bcp)
+	if isV2 {
+		loc := reXLIFFOpenTag.FindIndex(raw)
+		if loc == nil {
+			return raw
+		}
+		tag := string(raw[loc[0]:loc[1]])
+		var updated string
+		if reAttrTrgLang.MatchString(tag) {
+			updated = reAttrTrgLang.ReplaceAllStringFunc(tag, func(string) string {
+				return `trgLang="` + escaped + `"`
+			})
+		} else if strings.HasSuffix(tag, "/>") {
+			updated = tag[:len(tag)-2] + ` trgLang="` + escaped + `"/>`
+		} else {
+			updated = tag[:len(tag)-1] + ` trgLang="` + escaped + `">`
+		}
+		var buf bytes.Buffer
+		buf.Grow(len(raw) + len(updated))
+		buf.Write(raw[:loc[0]])
+		buf.WriteString(updated)
+		buf.Write(raw[loc[1]:])
+		return buf.Bytes()
+	}
+
+	locs := reFileOpenTag.FindAllIndex(raw, -1)
+	if len(locs) == 0 {
+		return raw
+	}
+	var buf bytes.Buffer
+	buf.Grow(len(raw) + len(locs)*32)
+	cursor := 0
+	for _, loc := range locs {
+		buf.Write(raw[cursor:loc[0]])
+		tag := string(raw[loc[0]:loc[1]])
+		var updated string
+		if reAttrTargetLanguage.MatchString(tag) {
+			updated = reAttrTargetLanguage.ReplaceAllStringFunc(tag, func(string) string {
+				return `target-language="` + escaped + `"`
+			})
+		} else if strings.HasSuffix(tag, "/>") {
+			updated = tag[:len(tag)-2] + ` target-language="` + escaped + `"/>`
+		} else {
+			updated = tag[:len(tag)-1] + ` target-language="` + escaped + `">`
+		}
+		buf.WriteString(updated)
+		cursor = loc[1]
+	}
+	buf.Write(raw[cursor:])
+	return buf.Bytes()
 }
 
 func (a *xliffAdapter) PreviewDiff(key domain.EntryKey, localeID, oldText, newText string, oldStatus domain.TransStatus, numerus bool) (string, string) {

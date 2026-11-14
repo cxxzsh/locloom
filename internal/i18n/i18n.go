@@ -3,6 +3,7 @@ package i18n
 import (
 	"os"
 	"strings"
+	"sync"
 )
 
 const (
@@ -10,9 +11,29 @@ const (
 	LangZH = "zh"
 	// LangEN represents English.
 	LangEN = "en"
-	// LangAuto resolves the UI language from OS environment variables.
+	// LangAuto resolves the UI language from OS environment variables or platform locale.
 	LangAuto = "auto"
 )
+
+var (
+	sysLocaleMu  sync.RWMutex
+	systemLocale string
+)
+
+// SetSystemLocale sets the OS-reported preferred locale tag used when LangAuto cannot resolve via env vars.
+func SetSystemLocale(tag string) {
+	sysLocaleMu.Lock()
+	systemLocale = strings.TrimSpace(tag)
+	sysLocaleMu.Unlock()
+}
+
+// SystemLocale returns the OS-reported preferred locale tag, if set.
+func SystemLocale() string {
+	sysLocaleMu.RLock()
+	tag := systemLocale
+	sysLocaleMu.RUnlock()
+	return tag
+}
 
 // Resolve normalizes a language tag ("en", "zh", "auto", etc.) to LangEN or LangZH.
 func Resolve(lang string) string {
@@ -44,6 +65,12 @@ func resolveFromEnv() string {
 		// Any other explicit non-Chinese locale falls back to English.
 		return LangEN
 	}
+	if sys := strings.ToLower(strings.TrimSpace(SystemLocale())); sys != "" && sys != "c" && sys != "posix" {
+		if strings.HasPrefix(sys, "zh") {
+			return LangZH
+		}
+		return LangEN
+	}
 	return LangZH
 }
 
@@ -58,11 +85,15 @@ func Of(lang string) *Catalog {
 // Catalog holds all localized UI strings and format templates for a single language.
 type Catalog struct {
 	// Window & general
-	WindowTitle       string
-	BtnClose          string
-	BtnCancel         string
-	DropHint          string
-	LogWorkbenchReady string
+	WindowTitle                string
+	BtnClose                   string
+	BtnCancel                  string
+	DropHint                   string
+	LogWorkbenchReady          string
+	ConfirmCloseTitle          string
+	ConfirmCloseMsgFmt         string
+	ConfirmCloseTranslatingMsg string
+	BtnDiscardAndClose         string
 
 	// App-level status & errors
 	ErrLoadTSFmt               string
@@ -131,6 +162,7 @@ type Catalog struct {
 	SectionNetworkProxy     string
 	PlaceholderProxy        string
 	CheckSkipTLS            string
+	CheckProxyAllCloud      string
 	SectionWaterfall        string
 	BadgeLocal              string
 	BadgeEngine             string
@@ -321,11 +353,15 @@ type Catalog struct {
 }
 
 var zhCatalog = Catalog{
-	WindowTitle:       "LocLoom",
-	BtnClose:          "关闭",
-	BtnCancel:         "取消",
-	DropHint:          "松开即可加载本地化文件 / 目录 / .zip / .xlsx 词表",
-	LogWorkbenchReady: "已就绪，可拖拽本地化文件 / 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。",
+	WindowTitle:                "LocLoom",
+	BtnClose:                   "关闭",
+	BtnCancel:                  "取消",
+	DropHint:                   "松开即可加载本地化文件 / 目录 / .zip / .xlsx 词表",
+	LogWorkbenchReady:          "已就绪，可拖拽本地化文件 / 目录 / .zip / .xlsx 到窗口，或通过顶部按钮加载项目。",
+	ConfirmCloseTitle:          "尚有未保存的本地化变更",
+	ConfirmCloseMsgFmt:         "当前有 %d 处待写回变更尚未保存，确定直接关闭吗？",
+	ConfirmCloseTranslatingMsg: "并发翻译任务正在运行中，关闭窗口将中止任务并丢失未写回的译文。",
+	BtnDiscardAndClose:         "放弃并关闭",
 
 	ErrLoadTSFmt:               "加载本地化项目失败: %v",
 	StatusLoadedBundleFmt:      "已加载 %s（%d 个文件，%d 条词条）",
@@ -389,6 +425,7 @@ var zhCatalog = Catalog{
 	SectionNetworkProxy:     "网络与代理",
 	PlaceholderProxy:        "http://127.0.0.1:8080 或 socks5://127.0.0.1:1080",
 	CheckSkipTLS:            "跳过 TLS 证书校验",
+	CheckProxyAllCloud:      "对所有云端引擎启用此代理",
 	SectionWaterfall:        "翻译引擎瀑布流（按顺序回退）",
 	BadgeLocal:              "本地",
 	BadgeEngine:             "引擎",
@@ -542,7 +579,7 @@ var zhCatalog = Catalog{
 	ErrScaffoldLoadFirst:      "请先加载项目再补全骨架文件",
 	LogScaffoldErrFmt:         "生成骨架失败: %v",
 	StatusAllLocalesHaveTS:    "所有已启用语种均已有对应文件",
-	StatusScaffoldDoneFmt:     "已为 %d 个缺失语种生成骨架文件（写回时将一并保存）",
+	StatusScaffoldDoneFmt:     "已为 %d 个缺失语种生成骨架文件",
 	ErrEnterLocaleID:          "请输入语种 ID（例如 nl_NL）",
 	ErrLocaleExistsFmt:        "语种 ID 已存在: %s",
 	StatusCopiedLogs:          "已复制运行日志到剪贴板",
@@ -574,11 +611,15 @@ var zhCatalog = Catalog{
 }
 
 var enCatalog = Catalog{
-	WindowTitle:       "LocLoom",
-	BtnClose:          "Close",
-	BtnCancel:         "Cancel",
-	DropHint:          "Drop to load localization file(s) / folder / .zip / .xlsx",
-	LogWorkbenchReady: "Ready. Drag & drop localization files, folder, .zip, or .xlsx onto the window, or use the top toolbar buttons.",
+	WindowTitle:                "LocLoom",
+	BtnClose:                   "Close",
+	BtnCancel:                  "Cancel",
+	DropHint:                   "Drop to load localization file(s) / folder / .zip / .xlsx",
+	LogWorkbenchReady:          "Ready. Drag & drop localization files, folder, .zip, or .xlsx onto the window, or use the top toolbar buttons.",
+	ConfirmCloseTitle:          "Unsaved Localization Changes",
+	ConfirmCloseMsgFmt:         "You have %d unsaved change(s). Close without saving?",
+	ConfirmCloseTranslatingMsg: "A translation job is still running. Closing now will abort it and discard unsaved translations.",
+	BtnDiscardAndClose:         "Discard & Close",
 
 	ErrLoadTSFmt:               "Failed to load localization project: %v",
 	StatusLoadedBundleFmt:      "Loaded %s (%d files, %d entries)",
@@ -642,6 +683,7 @@ var enCatalog = Catalog{
 	SectionNetworkProxy:     "Network & Proxy",
 	PlaceholderProxy:        "http://127.0.0.1:8080 or socks5://127.0.0.1:1080",
 	CheckSkipTLS:            "Skip TLS verification",
+	CheckProxyAllCloud:      "Route all cloud engines through this proxy",
 	SectionWaterfall:        "Waterfall Providers (Priority Order)",
 	BadgeLocal:              "Local",
 	BadgeEngine:             "Cloud",
@@ -795,7 +837,7 @@ var enCatalog = Catalog{
 	ErrScaffoldLoadFirst:      "Load a project before scaffolding",
 	LogScaffoldErrFmt:         "Scaffold failed: %v",
 	StatusAllLocalesHaveTS:    "All enabled locales already have files",
-	StatusScaffoldDoneFmt:     "Scaffolded %d missing locale file(s) (will save on Save Back)",
+	StatusScaffoldDoneFmt:     "Scaffolded %d missing locale file(s)",
 	ErrEnterLocaleID:          "Enter a locale ID (e.g. nl_NL)",
 	ErrLocaleExistsFmt:        "Locale ID already exists: %s",
 	StatusCopiedLogs:          "Logs copied to clipboard",

@@ -409,3 +409,151 @@ func TestLoaderZipRoundTripAndScaffold(t *testing.T) {
 		t.Fatalf("missing expected zip entries: %+v", names)
 	}
 }
+
+func TestXLIFFNewLocaleDocUpdatesTargetLang(t *testing.T) {
+	a, ok := GetAdapter(FormatXLIFF)
+	if !ok {
+		t.Fatal("FormatXLIFF adapter not registered")
+	}
+
+	// XLIFF 1.2: update target-language and clear target/state.
+	xlf12 := `<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="app" source-language="en" target-language="de-DE" datatype="plaintext">
+    <body>
+      <trans-unit id="greeting">
+        <source>Hello</source>
+        <target state="translated">Hallo</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>
+`
+	doc12, err := a.ParseDoc("de.xlf", []byte(xlf12), "", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("ParseDoc 1.2 failed: %v", err)
+	}
+	new12, err := a.NewLocaleDoc(doc12, locale.LocaleSpec{ID: "fr_FR"}, "fr_FR.xlf")
+	if err != nil {
+		t.Fatalf("NewLocaleDoc 1.2 failed: %v", err)
+	}
+	raw12 := string(new12.Raw)
+	if !strings.Contains(raw12, `target-language="fr-FR"`) || strings.Contains(raw12, `target-language="de-DE"`) {
+		t.Fatalf("expected XLIFF 1.2 target-language updated to fr-FR, got:\n%s", raw12)
+	}
+	if strings.Contains(raw12, "Hallo") {
+		t.Fatalf("expected old target translation cleared, got:\n%s", raw12)
+	}
+
+	// XLIFF 2.0: update trgLang and reset <segment state> to "initial".
+	xlf20 := `<?xml version="1.0" encoding="utf-8"?>
+<xliff version="2.0" srcLang="en" trgLang="de-DE">
+  <file id="f1">
+    <unit id="u1">
+      <segment state="translated">
+        <source>Save</source>
+        <target>Speichern</target>
+      </segment>
+    </unit>
+  </file>
+</xliff>
+`
+	doc20, err := a.ParseDoc("de.xliff", []byte(xlf20), "", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("ParseDoc 2.0 failed: %v", err)
+	}
+	new20, err := a.NewLocaleDoc(doc20, locale.LocaleSpec{ID: "ja_JP"}, "ja_JP.xliff")
+	if err != nil {
+		t.Fatalf("NewLocaleDoc 2.0 failed: %v", err)
+	}
+	raw20 := string(new20.Raw)
+	if !strings.Contains(raw20, `trgLang="ja-JP"`) || strings.Contains(raw20, `trgLang="de-DE"`) {
+		t.Fatalf("expected XLIFF 2.0 trgLang updated to ja-JP, got:\n%s", raw20)
+	}
+	if !strings.Contains(raw20, `<segment state="initial">`) || strings.Contains(raw20, "Speichern") {
+		t.Fatalf("expected XLIFF 2.0 segment reset to initial and target cleared, got:\n%s", raw20)
+	}
+}
+
+func TestPONewLocaleDocUpdatesLanguageHeader(t *testing.T) {
+	a, ok := GetAdapter(FormatGettextPO)
+	if !ok {
+		t.Fatal("FormatGettextPO adapter not registered")
+	}
+
+	// Case 1: Existing PO file with Language header.
+	poRaw := strings.Join([]string{
+		`msgid ""`,
+		`msgstr ""`,
+		`"Content-Type: text/plain; charset=UTF-8\n"`,
+		`"Language: ja_JP\n"`,
+		``,
+		`#, fuzzy`,
+		`msgid "Save"`,
+		`msgstr "保存"`,
+		``,
+	}, "\n")
+	docPO, err := a.ParseDoc("ja_JP.po", []byte(poRaw), "", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("ParseDoc PO failed: %v", err)
+	}
+	newPO, err := a.NewLocaleDoc(docPO, locale.LocaleSpec{ID: "fr_FR"}, "fr_FR.po")
+	if err != nil {
+		t.Fatalf("NewLocaleDoc PO failed: %v", err)
+	}
+	gotPO := string(newPO.Raw)
+	if !strings.Contains(gotPO, `"Language: fr_FR\n"`) || strings.Contains(gotPO, "ja_JP") {
+		t.Fatalf("expected Language header updated to fr_FR, got:\n%s", gotPO)
+	}
+	if strings.Contains(gotPO, "保存") || strings.Contains(gotPO, "fuzzy") {
+		t.Fatalf("expected msgstr and fuzzy cleared, got:\n%s", gotPO)
+	}
+
+	// Case 2: Headerless .pot template gets a minimal Language header inserted.
+	potRaw := "msgid \"Hello\"\nmsgstr \"\"\n"
+	docPOT, err := a.ParseDoc("messages.pot", []byte(potRaw), "", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("ParseDoc POT failed: %v", err)
+	}
+	newFromPOT, err := a.NewLocaleDoc(docPOT, locale.LocaleSpec{ID: "de_DE"}, "de_DE.po")
+	if err != nil {
+		t.Fatalf("NewLocaleDoc from POT failed: %v", err)
+	}
+	if !strings.Contains(string(newFromPOT.Raw), `"Language: de_DE\n"`) || newFromPOT.LocaleID != "de_DE" {
+		t.Fatalf("expected Language header de_DE inserted from POT, got LocaleID=%q raw:\n%s", newFromPOT.LocaleID, string(newFromPOT.Raw))
+	}
+}
+
+func TestZipPathTraversalAndSizeGuard(t *testing.T) {
+	dir := t.TempDir()
+
+	// Mixed zip containing a traversal entry (../evil.json) must fail immediately.
+	mixedZip := filepath.Join(dir, "mixed.zip")
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	evilW, _ := zw.Create("../evil.json")
+	_, _ = evilW.Write([]byte(`{"evil":"1"}`))
+	safeW, _ := zw.Create("en.json")
+	_, _ = safeW.Write([]byte(`{"hello":"Hello"}`))
+	_ = zw.Close()
+	if err := os.WriteFile(mixedZip, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(mixedZip, "", locale.DefaultLocales()); err == nil || !strings.Contains(err.Error(), "unsafe zip entry") {
+		t.Fatalf("expected unsafe zip entry error on ../evil.json, got err=%v", err)
+	}
+
+	// Direct drive-letter path in zip also rejected cleanly.
+	driveZip := filepath.Join(dir, "drive.zip")
+	buf.Reset()
+	zw2 := zip.NewWriter(&buf)
+	dw, _ := zw2.Create("C:evil.json")
+	_, _ = dw.Write([]byte(`{"evil":"1"}`))
+	_ = zw2.Close()
+	if err := os.WriteFile(driveZip, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(driveZip, "", locale.DefaultLocales()); err == nil || !strings.Contains(err.Error(), "unsafe zip entry") {
+		t.Fatalf("expected unsafe zip entry error on drive-qualified entry, got err=%v", err)
+	}
+}

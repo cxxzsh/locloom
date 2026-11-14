@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +19,11 @@ import (
 	"locloom/internal/locale"
 	"locloom/internal/platform"
 	"locloom/internal/tsxml"
+)
+
+const (
+	maxZipEntryBytes = 64 << 20  // 64 MiB per entry
+	maxZipTotalBytes = 256 << 20 // 256 MiB cumulative decompressed zip limit
 )
 
 // SupportedExtensions returns all supported localization file extensions without leading dots
@@ -302,20 +308,34 @@ func loadZip(zipPath string, filePattern string, known []locale.LocaleSpec) (*Bu
 
 	extras := make(map[string][]byte)
 	var all []rawCandidate
+	var totalRead int64
 
 	for _, zf := range zr.File {
 		if zf.FileInfo().IsDir() {
 			continue
 		}
-		relSlash := strings.TrimPrefix(strings.ReplaceAll(zf.Name, "\\", "/"), "./")
+		relSlash, cleanErr := sanitizeRelPath(zf.Name)
+		if cleanErr != nil {
+			return nil, fmt.Errorf("unsafe zip entry %q: %w", zf.Name, cleanErr)
+		}
+		if zf.UncompressedSize64 > maxZipEntryBytes {
+			return nil, fmt.Errorf("zip entry %q exceeds size limit (%d bytes)", relSlash, maxZipEntryBytes)
+		}
 		rc, err := zf.Open()
 		if err != nil {
 			return nil, fmt.Errorf("open zip entry %q: %w", relSlash, err)
 		}
-		data, readErr := io.ReadAll(rc)
+		data, readErr := io.ReadAll(io.LimitReader(rc, maxZipEntryBytes+1))
 		_ = rc.Close()
 		if readErr != nil {
 			return nil, fmt.Errorf("read zip entry %q: %w", relSlash, readErr)
+		}
+		if int64(len(data)) > maxZipEntryBytes {
+			return nil, fmt.Errorf("zip entry %q exceeds max entry size (%d bytes)", relSlash, maxZipEntryBytes)
+		}
+		totalRead += int64(len(data))
+		if totalRead > maxZipTotalBytes {
+			return nil, fmt.Errorf("zip archive decompressed size exceeds limit (%d bytes)", maxZipTotalBytes)
 		}
 
 		if adapter, ok := DetectAdapter(relSlash, data); ok {
@@ -808,6 +828,7 @@ func writeBundleOutput(bundle *Bundle, patched map[string][]byte, opts SaveOptio
 		outDir = bundle.SourcePath
 	}
 	report.OutputPath = outDir
+	cleanOutDir := filepath.Clean(outDir)
 
 	relKeys := make([]string, 0, len(patched))
 	for k := range patched {
@@ -816,20 +837,69 @@ func writeBundleOutput(bundle *Bundle, patched map[string][]byte, opts SaveOptio
 	sort.Strings(relKeys)
 
 	for _, relPath := range relKeys {
-		targetPath := filepath.Join(outDir, filepath.FromSlash(relPath))
+		cleanRel, relErr := sanitizeRelPath(relPath)
+		if relErr != nil {
+			return nil, fmt.Errorf("unsafe output relative path %q: %w", relPath, relErr)
+		}
+		targetPath := filepath.Join(cleanOutDir, filepath.FromSlash(cleanRel))
+		cleanTarget := filepath.Clean(targetPath)
+		relCheck, checkErr := filepath.Rel(cleanOutDir, cleanTarget)
+		if checkErr != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("output path %q escapes target directory %q", relPath, cleanOutDir)
+		}
 		if opts.CreateBackup {
-			if bakPath, err := writeBackupIfExists(targetPath); err != nil {
+			if bakPath, err := writeBackupIfExists(cleanTarget); err != nil {
 				return nil, err
 			} else if bakPath != "" {
 				report.BackupPaths = append(report.BackupPaths, bakPath)
 			}
 		}
-		if err := platform.AtomicWriteFile(targetPath, patched[relPath], 0o644); err != nil {
-			return nil, fmt.Errorf("write %q: %w", targetPath, err)
+		if err := platform.AtomicWriteFile(cleanTarget, patched[relPath], 0o644); err != nil {
+			return nil, fmt.Errorf("write %q: %w", cleanTarget, err)
 		}
 		report.FilesWritten++
 	}
 	return report, nil
+}
+
+func sanitizeRelPath(rawName string) (string, error) {
+	s := strings.ReplaceAll(strings.TrimSpace(rawName), "\\", "/")
+	if strings.ContainsRune(s, 0) {
+		return "", fmt.Errorf("contains NUL byte")
+	}
+	s = strings.TrimLeft(s, "/")
+	for strings.HasPrefix(s, "./") {
+		s = strings.TrimPrefix(s, "./")
+	}
+	if s == "" || s == "." {
+		return "", fmt.Errorf("empty relative path")
+	}
+	if len(s) >= 2 && s[1] == ':' && ((s[0] >= 'A' && s[0] <= 'Z') || (s[0] >= 'a' && s[0] <= 'z')) {
+		return "", fmt.Errorf("drive-qualified path not allowed")
+	}
+	for _, seg := range strings.Split(s, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("path traversal segment '..' not allowed")
+		}
+	}
+	cleaned := path.Clean(s)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") || strings.HasPrefix(cleaned, "/") {
+		return "", fmt.Errorf("invalid normalized relative path %q", cleaned)
+	}
+	return cleaned, nil
+}
+
+// PickTemplateForScaffold picks the best source or fallback template document for scaffolding a missing locale.
+func PickTemplateForScaffold(bundle *Bundle) *DocRecord {
+	if bundle == nil {
+		return nil
+	}
+	return pickTemplateForScaffold(bundle)
+}
+
+// ScaffoldRelPath computes the format-appropriate relative file path for scaffolding target spec.
+func ScaffoldRelPath(fid FormatID, tmpl *DocRecord, spec locale.LocaleSpec, filePattern string) string {
+	return scaffoldRelPath(fid, tmpl, spec, filePattern)
 }
 
 func writeBackupIfExists(targetPath string) (string, error) {
@@ -925,7 +995,7 @@ func scaffoldRelPath(fid FormatID, tmpl *DocRecord, spec locale.LocaleSpec, file
 			ext = ".xlf"
 		}
 		if base != "" {
-			if e := filepath.Ext(base); e != "" {
+			if e := filepath.Ext(base); e != "" && !(fid == FormatGettextPO && strings.EqualFold(e, ".pot")) {
 				ext = e
 			}
 		}

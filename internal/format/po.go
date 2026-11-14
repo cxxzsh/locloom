@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"locloom/internal/domain"
 	"locloom/internal/locale"
 )
+
+var rePOHeaderLanguage = regexp.MustCompile(`(?i)"Language\s*:[^"\\]*(?:\\.[^"\\]*)*"`)
 
 type poAdapter struct{}
 
@@ -62,7 +65,10 @@ type poBlock struct {
 }
 
 type poDoc struct {
-	blocks []poBlock
+	blocks      []poBlock
+	hasHeader   bool
+	headerStart int
+	headerEnd   int
 }
 
 func splitPOLines(raw []byte) []poLine {
@@ -103,6 +109,9 @@ func (a *poAdapter) ParseDoc(relPath string, raw []byte, filePattern string, kno
 	var blocks []poBlock
 	var entries []NormalizedEntry
 	var headerLang string
+	var hasHeader bool
+	var headerStart int
+	var headerEnd int
 
 	i := 0
 	for i < len(lines) {
@@ -129,6 +138,11 @@ func (a *poAdapter) ParseDoc(relPath string, raw []byte, filePattern string, kno
 			if hdrLang != "" {
 				headerLang = hdrLang
 			}
+			if !hasHeader && blk.msgstrEnd > blk.msgstrStart {
+				hasHeader = true
+				headerStart = blk.msgstrStart
+				headerEnd = blk.msgstrEnd
+			}
 			continue
 		}
 		blocks = append(blocks, blk)
@@ -152,7 +166,12 @@ func (a *poAdapter) ParseDoc(relPath string, raw []byte, filePattern string, kno
 		LineEnding: le,
 		Raw:        utf8Bytes,
 		Entries:    entries,
-		Opaque:     &poDoc{blocks: blocks},
+		Opaque: &poDoc{
+			blocks:      blocks,
+			hasHeader:   hasHeader,
+			headerStart: headerStart,
+			headerEnd:   headerEnd,
+		},
 	}, nil
 }
 
@@ -636,6 +655,27 @@ func (a *poAdapter) NewLocaleDoc(template *DocRecord, target locale.LocaleSpec, 
 	}
 
 	var edits []byteSpanEdit
+	if pdoc.hasHeader && pdoc.headerEnd > pdoc.headerStart {
+		hdrSpan := string(template.Raw[pdoc.headerStart:pdoc.headerEnd])
+		updatedHdr := updatePOHeaderLanguage(hdrSpan, target.ID, le)
+		if updatedHdr != hdrSpan {
+			edits = append(edits, byteSpanEdit{
+				start: pdoc.headerStart,
+				end:   pdoc.headerEnd,
+				order: -1,
+				data:  []byte(updatedHdr),
+			})
+		}
+	} else {
+		hdr := fmt.Sprintf(`msgid ""%smsgstr ""%s"Content-Type: text/plain; charset=UTF-8\n"%s"Language: %s\n"%s%s`,
+			le, le, le, escapePOString(target.ID), le, le)
+		edits = append(edits, byteSpanEdit{
+			start: 0,
+			end:   0,
+			order: -1,
+			data:  []byte(hdr),
+		})
+	}
 	for idx, blk := range pdoc.blocks {
 		if blk.fuzzy {
 			for _, fl := range blk.flagLines {
@@ -686,6 +726,22 @@ func (a *poAdapter) NewLocaleDoc(template *DocRecord, target locale.LocaleSpec, 
 	doc.LocaleID = target.ID
 	doc.IsTemplate = false
 	return doc, nil
+}
+
+func updatePOHeaderLanguage(rawSpan, targetID, le string) string {
+	escID := escapePOString(targetID)
+	if rePOHeaderLanguage.MatchString(rawSpan) {
+		return rePOHeaderLanguage.ReplaceAllStringFunc(rawSpan, func(string) string {
+			return fmt.Sprintf(`"Language: %s\n"`, escID)
+		})
+	}
+	reEscapedNL := regexp.MustCompile(`(?i)(\\n)Language\s*:[^"\\]*\\n`)
+	if reEscapedNL.MatchString(rawSpan) {
+		return reEscapedNL.ReplaceAllStringFunc(rawSpan, func(string) string {
+			return fmt.Sprintf(`\nLanguage: %s\n`, escID)
+		})
+	}
+	return rawSpan + le + fmt.Sprintf(`"Language: %s\n"`, escID)
 }
 
 func (a *poAdapter) PreviewDiff(key domain.EntryKey, localeID, oldText, newText string, oldStatus domain.TransStatus, numerus bool) (string, string) {

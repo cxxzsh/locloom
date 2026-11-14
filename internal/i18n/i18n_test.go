@@ -78,3 +78,20 @@ func TestResolveAutoFromEnv(t *testing.T) {
 		t.Fatalf("Resolve(auto) with unset env = %q, want zh", got)
 	}
 }
+
+func TestResolveAutoWithSystemLocale(t *testing.T) {
+	t.Cleanup(func() { SetSystemLocale("") })
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_MESSAGES", "")
+	t.Setenv("LANG", "")
+
+	SetSystemLocale("en-US")
+	if got := Resolve(LangAuto); got != LangEN {
+		t.Fatalf("Resolve(auto) with SystemLocale=en-US = %q, want en", got)
+	}
+
+	SetSystemLocale("zh-Hans-CN")
+	if got := Resolve(LangAuto); got != LangZH {
+		t.Fatalf("Resolve(auto) with SystemLocale=zh-Hans-CN = %q, want zh", got)
+	}
+}

@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +18,7 @@ import (
 	"locloom/internal/format"
 	"locloom/internal/locale"
 	"locloom/internal/planner"
+	"locloom/internal/platform"
 	"locloom/internal/provider"
 	"locloom/internal/sheet"
 )
@@ -66,6 +69,7 @@ func (a *App) rebuildPlan() {
 	}
 
 	a.refilterRows()
+	a.syncWindowEdited()
 }
 
 func (a *App) refilterRows() {
@@ -220,6 +224,7 @@ func (a *App) onEditCell(newText string) {
 	}
 	a.catalog.Set(a.activeEditLocale, row.Key, newText, domain.OriginManual)
 	planner.UpdateCell(a.plan, rowIdx, a.activeEditLocale, a.catalog)
+	a.syncWindowEdited()
 }
 
 func (a *App) resetActiveCell() {
@@ -232,6 +237,7 @@ func (a *App) resetActiveCell() {
 	cell := row.Cells[a.activeEditLocale]
 	a.editBuf = cell.Effective
 	a.syncPluralBufs(row, cell)
+	a.syncWindowEdited()
 }
 
 func (a *App) isProviderActive(id string) bool {
@@ -547,6 +553,10 @@ func (a *App) startTranslation() {
 	tasks := make(map[string][]provider.SourceItem)
 	totalItems := 0
 	refID := a.plan.RefLocaleID
+	bundleSourceLocale := ""
+	if a.bundle != nil {
+		bundleSourceLocale = a.bundle.SourceLocale
+	}
 
 	for _, loc := range targetLocales {
 		var items []provider.SourceItem
@@ -563,11 +573,12 @@ func (a *App) startTranslation() {
 				continue
 			}
 			items = append(items, provider.SourceItem{
-				ID:        row.Key.Canonical(),
-				Key:       row.Key,
-				RefLocale: refID,
-				RefText:   row.RefText,
-				Numerus:   row.Numerus,
+				ID:           row.Key.Canonical(),
+				Key:          row.Key,
+				SourceLocale: bundleSourceLocale,
+				RefLocale:    refID,
+				RefText:      row.RefText,
+				Numerus:      row.Numerus,
 			})
 		}
 		if len(items) > 0 {
@@ -611,7 +622,23 @@ func (a *App) startTranslation() {
 						a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
 					}
 					if len(newCells) > 0 {
-						a.rebuildPlan()
+						updatedAny := false
+						for _, cell := range newCells {
+							if planner.UpdateCellByKey(a.plan, cell.Key, cell.LocaleID, a.catalog) {
+								updatedAny = true
+							}
+							if cell.Key == a.editBoundRowKey && cell.LocaleID == a.activeEditLocale {
+								a.editBoundLocale = ""
+							}
+						}
+						if updatedAny {
+							if a.statusFilter != 0 || strings.TrimSpace(a.searchQuery) != "" {
+								a.refilterRows()
+							} else {
+								a.syncEditorFromSelection()
+							}
+							a.syncWindowEdited()
+						}
 					}
 					for _, ev := range newEvents {
 						a.logs = append(a.logs, ev)
@@ -653,7 +680,9 @@ func (a *App) writeBackAsync() {
 		CreateBackup: a.cfg.CreateBackup,
 	}
 
+	a.bgWG.Add(1)
 	go func() {
+		defer a.bgWG.Done()
 		patchesByLocale := planner.BuildFormatPatches(plan)
 		totalApplied := 0
 		totalAppended := 0
@@ -685,9 +714,12 @@ func (a *App) writeBackAsync() {
 
 		var reloaded *format.Bundle
 		var reloadErr error
-		if !bundle.IsZip && report.OutputPath != "" {
-			if info, statErr := os.Stat(report.OutputPath); statErr == nil && (info.IsDir() || bundle.IsSingleFile) {
+		if report.OutputPath != "" {
+			if info, statErr := os.Stat(report.OutputPath); statErr == nil && (bundle.IsZip || info.IsDir() || bundle.IsSingleFile) {
 				reloaded, reloadErr = format.Load(report.OutputPath, filePattern, locales)
+				if reloadErr == nil && reloaded != nil && bundle.IsZip {
+					reloaded.SourcePath = bundle.SourcePath
+				}
 			}
 		}
 
@@ -696,7 +728,7 @@ func (a *App) writeBackAsync() {
 				report.FilesWritten, totalApplied, totalAppended, filepath.Base(report.OutputPath))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)
-			if reloadErr == nil && reloaded != nil && !bundle.IsZip {
+			if reloadErr == nil && reloaded != nil {
 				a.bundle = reloaded
 				a.rebuildPlan()
 			}
@@ -723,42 +755,75 @@ func (a *App) scaffoldMissingLocaleFiles() {
 		a.setStatus(a.tr().ErrScaffoldLoadFirst, true)
 		return
 	}
+	if a.bundle.Topology == format.TopologyMultiLocale {
+		a.setStatus(a.tr().StatusAllLocalesHaveTS, false)
+		return
+	}
 	ad, ok := format.GetAdapter(a.bundle.Format)
 	if !ok {
 		return
 	}
 	existing := make(map[string]bool)
-	var template *format.DocRecord
+	markExisting := func(id string) {
+		if id == "" {
+			return
+		}
+		existing[id] = true
+		existing[strings.ToLower(strings.ReplaceAll(id, "-", "_"))] = true
+	}
+	markExisting(a.bundle.SourceLocale)
 	for _, doc := range a.bundle.Docs {
-		if doc.LocaleID != "" {
-			existing[doc.LocaleID] = true
-		}
+		markExisting(doc.LocaleID)
 		for _, l := range doc.Locales {
-			existing[l] = true
+			markExisting(l)
 		}
-		if template == nil {
-			template = doc
-		}
+	}
+	template := format.PickTemplateForScaffold(a.bundle)
+
+	baseDir := a.bundle.SourcePath
+	if !a.bundle.IsZip && a.bundle.IsSingleFile {
+		baseDir = filepath.Dir(a.bundle.SourcePath)
 	}
 
 	created := 0
 	for _, loc := range a.cfg.Locales {
-		if !loc.Enabled || existing[loc.ID] {
+		normID := strings.ToLower(strings.ReplaceAll(loc.ID, "-", "_"))
+		if !loc.Enabled || existing[loc.ID] || existing[normID] {
 			continue
 		}
-		relPath := loc.FileName(a.cfg.FilePattern)
+		relPath := format.ScaffoldRelPath(a.bundle.Format, template, loc, a.cfg.FilePattern)
 		newDoc, err := ad.NewLocaleDoc(template, loc, relPath)
 		if err != nil {
 			a.appendLog("error", "", loc.ID, fmt.Sprintf(a.tr().LogScaffoldErrFmt, err))
 			continue
 		}
-		if !a.bundle.IsZip && !a.bundle.IsSingleFile {
-			newDoc.FilePath = filepath.Join(a.bundle.SourcePath, filepath.FromSlash(relPath))
+		if !a.bundle.IsZip {
+			fullPath, pathErr := safeScaffoldTargetPath(baseDir, relPath)
+			if pathErr != nil {
+				a.appendLog("error", "", loc.ID, fmt.Sprintf(a.tr().LogScaffoldErrFmt, pathErr))
+				continue
+			}
+			outBytes := newDoc.Raw
+			if newDoc.HasBOM && !bytes.HasPrefix(outBytes, []byte{0xEF, 0xBB, 0xBF}) {
+				outBytes = append([]byte{0xEF, 0xBB, 0xBF}, outBytes...)
+			}
+			if writeErr := platform.AtomicWriteFile(fullPath, outBytes, 0o644); writeErr != nil {
+				a.appendLog("error", "", loc.ID, fmt.Sprintf(a.tr().LogScaffoldErrFmt, writeErr))
+				continue
+			}
+			newDoc.FilePath = fullPath
+			if a.bundle.IsSingleFile {
+				a.bundle.SourcePath = baseDir
+				a.bundle.IsSingleFile = false
+				a.cfg.LastTSPath = baseDir
+				a.scheduleConfigSave()
+			}
 		}
 		a.bundle.Docs = append(a.bundle.Docs, newDoc)
 		if !slices.Contains(a.bundle.Locales, loc.ID) {
 			a.bundle.Locales = append(a.bundle.Locales, loc.ID)
 		}
+		markExisting(loc.ID)
 		created++
 	}
 
@@ -770,6 +835,125 @@ func (a *App) scaffoldMissingLocaleFiles() {
 	msg := fmt.Sprintf(a.tr().StatusScaffoldDoneFmt, created)
 	a.setStatus(msg, false)
 	a.appendLog("info", "", "", msg)
+}
+
+func safeScaffoldTargetPath(baseDir, relSlash string) (string, error) {
+	s := strings.ReplaceAll(strings.TrimSpace(relSlash), "\\", "/")
+	if strings.ContainsRune(s, 0) || strings.HasPrefix(s, "/") {
+		return "", fmt.Errorf("unsafe relative path %q", relSlash)
+	}
+	if len(s) >= 2 && s[1] == ':' && ((s[0] >= 'A' && s[0] <= 'Z') || (s[0] >= 'a' && s[0] <= 'z')) {
+		return "", fmt.Errorf("unsafe drive-qualified path %q", relSlash)
+	}
+	for _, seg := range strings.Split(s, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("unsafe path traversal in %q", relSlash)
+		}
+	}
+	cleanBase := filepath.Clean(baseDir)
+	full := filepath.Clean(filepath.Join(cleanBase, filepath.FromSlash(s)))
+	relCheck, err := filepath.Rel(cleanBase, full)
+	if err != nil || relCheck == "." || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("scaffold path %q escapes directory %q", relSlash, cleanBase)
+	}
+	return full, nil
+}
+
+func providerHasFieldKey(p provider.Provider, key string) bool {
+	for _, f := range p.ConfigSchema() {
+		if f.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func isCloudProviderLoopback(p provider.Provider, values map[string]string) bool {
+	if p.ID() == domain.OriginDeepL {
+		mode := strings.ToLower(strings.TrimSpace(values["mode"]))
+		if mode == "free" || mode == "pro" {
+			return false
+		}
+	}
+	effectiveURL := ""
+	for _, f := range p.ConfigSchema() {
+		if f.Key == "base_url" || f.Key == "endpoint_url" || f.Key == "host" {
+			v := strings.TrimSpace(values[f.Key])
+			if v == "" {
+				v = strings.TrimSpace(f.Default)
+			}
+			if v != "" {
+				effectiveURL = v
+				break
+			}
+		}
+	}
+	if effectiveURL == "" {
+		return false
+	}
+	if !strings.Contains(effectiveURL, "://") {
+		effectiveURL = "http://" + effectiveURL
+	}
+	u, err := url.Parse(effectiveURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" || strings.HasSuffix(host, ".local")
+}
+
+func (a *App) cloudProxyEligibleProviders() []provider.Provider {
+	var out []provider.Provider
+	for _, p := range provider.Ordered(a.cfg.ProviderOrder) {
+		if p.Kind() != provider.KindEngine || !providerHasFieldKey(p, "use_proxy") {
+			continue
+		}
+		if isCloudProviderLoopback(p, a.cfg.ProviderConfigs[p.ID()]) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func (a *App) anyCloudProviderUsesProxy() bool {
+	for _, p := range a.cloudProxyEligibleProviders() {
+		if a.cfg.ProviderConfigs[p.ID()]["use_proxy"] == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) allCloudProvidersUseProxy() bool {
+	provs := a.cloudProxyEligibleProviders()
+	if len(provs) == 0 {
+		return false
+	}
+	for _, p := range provs {
+		if a.cfg.ProviderConfigs[p.ID()]["use_proxy"] != "true" {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *App) setCloudProvidersUseProxy(on bool) {
+	if a.cfg.ProviderConfigs == nil {
+		a.cfg.ProviderConfigs = make(map[string]map[string]string)
+	}
+	val := "false"
+	if on {
+		val = "true"
+	}
+	for _, p := range a.cloudProxyEligibleProviders() {
+		m := a.cfg.ProviderConfigs[p.ID()]
+		if m == nil {
+			m = make(map[string]string)
+			a.cfg.ProviderConfigs[p.ID()] = m
+		}
+		m["use_proxy"] = val
+	}
 }
 
 func (a *App) applyLocaleProfile(p locale.Profile) {
@@ -1014,6 +1198,10 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 
 	tasks := make(map[string][]provider.SourceItem)
 	refID := a.plan.RefLocaleID
+	bundleSourceLocale := ""
+	if a.bundle != nil {
+		bundleSourceLocale = a.bundle.SourceLocale
+	}
 	for _, loc := range targetLocales {
 		if forceLocaleID == "" {
 			cell, ok := row.Cells[loc.ID]
@@ -1025,11 +1213,12 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 			}
 		}
 		tasks[loc.ID] = []provider.SourceItem{{
-			ID:        row.Key.Canonical(),
-			Key:       row.Key,
-			RefLocale: refID,
-			RefText:   row.RefText,
-			Numerus:   row.Numerus,
+			ID:           row.Key.Canonical(),
+			Key:          row.Key,
+			SourceLocale: bundleSourceLocale,
+			RefLocale:    refID,
+			RefText:      row.RefText,
+			Numerus:      row.Numerus,
 		}}
 	}
 	if len(tasks) == 0 {
@@ -1083,6 +1272,7 @@ func (a *App) clearCellAt(planRowIdx int, locID string) {
 	planner.UpdateCell(a.plan, planRowIdx, locID, a.catalog)
 	a.editBoundLocale = ""
 	a.syncEditorFromSelection()
+	a.syncWindowEdited()
 	a.setStatus(fmt.Sprintf(a.tr().StatusClearedCellFmt, locID), false)
 }
 
@@ -1097,6 +1287,7 @@ func (a *App) clearRowAt(planRowIdx int) {
 	}
 	a.editBoundLocale = ""
 	a.syncEditorFromSelection()
+	a.syncWindowEdited()
 	a.setStatus(a.tr().StatusClearedRow, false)
 }
 
@@ -1109,6 +1300,7 @@ func (a *App) revertCellAt(planRowIdx int, locID string) {
 	planner.UpdateCell(a.plan, planRowIdx, locID, a.catalog)
 	a.editBoundLocale = ""
 	a.syncEditorFromSelection()
+	a.syncWindowEdited()
 	a.setStatus(fmt.Sprintf(a.tr().StatusRevertedCellFmt, locID), false)
 }
 
@@ -1123,6 +1315,7 @@ func (a *App) revertRowAt(planRowIdx int) {
 	}
 	a.editBoundLocale = ""
 	a.syncEditorFromSelection()
+	a.syncWindowEdited()
 	a.setStatus(a.tr().StatusRevertedRow, false)
 }
 

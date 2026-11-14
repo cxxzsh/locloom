@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -100,6 +102,19 @@ type App struct {
 	// Debounced config persistence
 	saveGen   uint64
 	saveTimer *time.Timer
+
+	// Transient CLI overrides (never persisted to config)
+	cliLangOverride  string
+	cliThemeOverride int // -1 = unset, 0..2 = forced ThemeMode
+
+	// Pending Finder/OS file-open paths queued before SetWindow
+	pendingOpenMu    sync.Mutex
+	pendingOpenPaths []string
+
+	// Close confirmation guard & background task tracking for race-free tests
+	forceClose      bool
+	confirmingClose bool
+	bgWG            sync.WaitGroup
 }
 
 // New loads persisted configuration and initializes the workbench.
@@ -128,10 +143,16 @@ func NewWithConfig(cfg config.AppConfig) *App {
 	if len(cfg.Profiles) == 0 {
 		cfg.Profiles = locale.DefaultProfiles()
 	}
-	cfg.UILang = i18n.Resolve(cfg.UILang)
+	rawLang := strings.ToLower(strings.TrimSpace(cfg.UILang))
+	if rawLang == i18n.LangAuto {
+		cfg.UILang = i18n.LangAuto
+	} else {
+		cfg.UILang = i18n.Resolve(rawLang)
+	}
 
 	a := &App{
 		cfg:               cfg,
+		cliThemeOverride:  -1,
 		netPool:           netpool.New(cfg.Proxy),
 		cache:             provider.GlobalCache(),
 		catalog:           domain.NewCatalog(),
@@ -173,16 +194,96 @@ func NewWithConfig(cfg config.AppConfig) *App {
 func (a *App) SetWindow(w *mygo.Window) {
 	a.win = w
 	a.ApplyOSTheme()
+	a.syncWindowEdited()
+	if w != nil {
+		w.OnClose(func(e *mygo.CloseEvent) {
+			if a.forceClose {
+				a.FlushConfigSave()
+				return
+			}
+			pending := a.PendingChangeCount()
+			if !a.translating && pending == 0 {
+				a.FlushConfigSave()
+				return
+			}
+			e.PreventDefault()
+			if a.confirmingClose {
+				return
+			}
+			a.confirmingClose = true
+			tr := a.tr()
+			msg := fmt.Sprintf(tr.ConfirmCloseMsgFmt, pending)
+			if a.translating {
+				if pending > 0 {
+					msg = tr.ConfirmCloseTranslatingMsg + "\n\n" + msg
+				} else {
+					msg = tr.ConfirmCloseTranslatingMsg
+				}
+			}
+			targetWin := w
+			go func() {
+				res, err := mygo.Dialog.Message(mygo.MessageOptions{
+					Parent:             targetWin,
+					Type:               mygo.MessageWarning,
+					Title:              tr.ConfirmCloseTitle,
+					Message:            msg,
+					Buttons:            []string{tr.BtnDiscardAndClose, tr.BtnCancel},
+					DefaultButton:      1,
+					CancelButton:       1,
+					DestructiveButtons: []int{0},
+				})
+				a.dispatchUI(func() {
+					a.confirmingClose = false
+					if err != nil || res.Button != 0 {
+						return
+					}
+					if a.translating {
+						a.stopTranslation()
+					}
+					a.FlushConfigSave()
+					a.forceClose = true
+					targetWin.Close()
+				})
+			}()
+		})
+	}
+	a.drainPendingOpenPaths()
 }
+
 // UILang returns the resolved active UI language ("zh" or "en").
 func (a *App) UILang() string {
+	if a.cliLangOverride != "" {
+		return i18n.Resolve(a.cliLangOverride)
+	}
 	return i18n.Resolve(a.cfg.UILang)
+}
+
+// ApplyCLILang sets a transient CLI language override without modifying or saving config.json.
+func (a *App) ApplyCLILang(lang string) {
+	trimmed := strings.ToLower(strings.TrimSpace(lang))
+	if trimmed == i18n.LangAuto || trimmed == i18n.LangZH || trimmed == i18n.LangEN {
+		a.cliLangOverride = trimmed
+	} else {
+		a.cliLangOverride = i18n.Resolve(trimmed)
+	}
+	if a.win != nil {
+		a.win.SetTitle(a.tr().WindowTitle)
+	}
+	if a.plan != nil {
+		a.rebuildPlan()
+	}
 }
 
 // SetUILang switches the active UI language, updates the window title, rebuilds the plan
 // so validation messages reflect the new language, and schedules config persistence.
 func (a *App) SetUILang(lang string) {
-	a.cfg.UILang = i18n.Resolve(lang)
+	a.cliLangOverride = ""
+	trimmed := strings.ToLower(strings.TrimSpace(lang))
+	if trimmed == i18n.LangAuto {
+		a.cfg.UILang = i18n.LangAuto
+	} else {
+		a.cfg.UILang = i18n.Resolve(trimmed)
+	}
 	if a.win != nil {
 		a.win.SetTitle(a.tr().WindowTitle)
 	}
@@ -190,8 +291,26 @@ func (a *App) SetUILang(lang string) {
 	a.scheduleConfigSave()
 }
 
+// RefreshSystemLocale refreshes window title and validation plan when OS locale changes under "auto" mode.
+func (a *App) RefreshSystemLocale() {
+	if a.win != nil {
+		a.win.SetTitle(a.tr().WindowTitle)
+	}
+	if a.plan != nil && a.plan.UILang != a.UILang() {
+		a.rebuildPlan()
+	}
+	a.invalidate()
+}
+
+// DispatchRefreshLocale posts RefreshSystemLocale onto the UI thread when a window is attached.
+func (a *App) DispatchRefreshLocale() {
+	a.dispatchUI(func() {
+		a.RefreshSystemLocale()
+	})
+}
+
 func (a *App) tr() *i18n.Catalog {
-	return i18n.Of(a.cfg.UILang)
+	return i18n.Of(a.UILang())
 }
 
 // WindowTitle returns the localized window title for the active UI language.
@@ -216,11 +335,28 @@ func (a *App) SetShowHelp(open bool) {
 	a.showHelp = open
 }
 
+func (a *App) effectiveThemeMode() int {
+	if a.cliThemeOverride >= 0 && a.cliThemeOverride <= 2 {
+		return a.cliThemeOverride
+	}
+	return a.cfg.ThemeMode
+}
+
+// ApplyCLITheme sets a transient CLI theme override (0=system, 1=light, 2=dark) without saving to config.json.
+func (a *App) ApplyCLITheme(mode int) {
+	if mode < 0 || mode > 2 {
+		mode = 0
+	}
+	a.cliThemeOverride = mode
+	a.ApplyOSTheme()
+}
+
 // SetThemeMode sets the theme mode (0=system, 1=light, 2=dark).
 func (a *App) SetThemeMode(mode int) {
 	if mode < 0 || mode > 2 {
 		mode = 0
 	}
+	a.cliThemeOverride = -1
 	a.cfg.ThemeMode = mode
 	a.ApplyOSTheme()
 	a.scheduleConfigSave()
@@ -228,7 +364,7 @@ func (a *App) SetThemeMode(mode int) {
 
 // IsDarkTheme reports whether the resolved active theme is dark.
 func (a *App) IsDarkTheme() bool {
-	switch a.cfg.ThemeMode {
+	switch a.effectiveThemeMode() {
 	case 1:
 		return false
 	case 2:
@@ -249,12 +385,12 @@ func (a *App) SyncAppIcon() {
 	}
 }
 
-// ApplyOSTheme synchronizes mygo's OS theme source and Dock/window icon with cfg.ThemeMode.
+// ApplyOSTheme synchronizes mygo's OS theme source and Dock/window icon with the effective theme mode.
 func (a *App) ApplyOSTheme() {
 	if a.win == nil {
 		return
 	}
-	switch a.cfg.ThemeMode {
+	switch a.effectiveThemeMode() {
 	case 1:
 		mygo.Theme.SetSource(mygo.ThemeLight)
 	case 2:
@@ -263,6 +399,54 @@ func (a *App) ApplyOSTheme() {
 		mygo.Theme.SetSource(mygo.ThemeSystem)
 	}
 	a.SyncAppIcon()
+}
+
+// PendingChangeCount returns the number of unsaved write-back changes/appends in the active plan.
+func (a *App) PendingChangeCount() int {
+	if a.plan == nil {
+		return 0
+	}
+	return a.plan.Summary.TotalChanges + a.plan.Summary.TotalAppends
+}
+
+// HasUnsavedChanges reports whether there are pending write-back changes in the active plan.
+func (a *App) HasUnsavedChanges() bool {
+	return a.PendingChangeCount() > 0
+}
+
+func (a *App) syncWindowEdited() {
+	if a.win != nil {
+		a.win.SetDocumentEdited(a.HasUnsavedChanges())
+	}
+}
+
+// OpenExternalPath handles a file or directory opened from OS shell / macOS Finder.
+func (a *App) OpenExternalPath(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+	a.pendingOpenMu.Lock()
+	win := a.win
+	if win == nil {
+		a.pendingOpenPaths = append(a.pendingOpenPaths, path)
+		a.pendingOpenMu.Unlock()
+		return
+	}
+	a.pendingOpenMu.Unlock()
+	a.dispatchUI(func() {
+		a.handleDroppedPaths([]string{path})
+	})
+}
+
+func (a *App) drainPendingOpenPaths() {
+	a.pendingOpenMu.Lock()
+	paths := a.pendingOpenPaths
+	a.pendingOpenPaths = nil
+	a.pendingOpenMu.Unlock()
+	if len(paths) > 0 {
+		a.handleDroppedPaths(paths)
+	}
 }
 
 // dispatchUI executes fn on the mygo main UI thread when a window is attached,
@@ -301,6 +485,16 @@ func (a *App) scheduleConfigSave() {
 			}()
 		})
 	})
+}
+
+// FlushConfigSave cancels any pending debounced config timer and writes config synchronously.
+func (a *App) FlushConfigSave() {
+	a.saveGen++
+	if a.saveTimer != nil {
+		a.saveTimer.Stop()
+		a.saveTimer = nil
+	}
+	_ = config.Save(a.cfg.Clone())
 }
 
 func (a *App) setStatus(msg string, isErr bool) {
@@ -465,7 +659,7 @@ func (a *App) ExportToExcelFile(xlsxPath string, scope sheet.ExportScope) error 
 
 // View renders the entire workbench on the mygo main UI thread without locks.
 func (a *App) View(c *ui.Context) {
-	switch a.cfg.ThemeMode {
+	switch a.effectiveThemeMode() {
 	case 1:
 		c.SetTheme(ui.LightTheme())
 	case 2:

@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"locloom/internal/app"
+	"locloom/internal/i18n"
 )
 
 //go:embed README.md
@@ -33,7 +34,7 @@ func main() {
 
 	application := app.New()
 	if *langFlag != "" {
-		application.SetUILang(*langFlag)
+		application.ApplyCLILang(*langFlag)
 	}
 	application.SetHelpMarkdowns(embeddedReadmeEN, embeddedReadmeZH)
 	if *openHelp {
@@ -41,11 +42,11 @@ func main() {
 	}
 	switch *themeFlag {
 	case "light":
-		application.SetThemeMode(1)
+		application.ApplyCLITheme(1)
 	case "dark":
-		application.SetThemeMode(2)
+		application.ApplyCLITheme(2)
 	case "system":
-		application.SetThemeMode(0)
+		application.ApplyCLITheme(0)
 	}
 	targetSrc := *srcDir
 	if targetSrc == "" {
@@ -79,7 +80,16 @@ func main() {
 			w.Invalidate()
 		}
 	})
+	mygo.App.OnOpenFile(func(path string) {
+		application.OpenExternalPath(path)
+	})
+	mygo.App.OnLocaleChanged(func(loc string) {
+		i18n.SetSystemLocale(loc)
+		application.DispatchRefreshLocale()
+	})
 	mygo.App.WhenReady(func() {
+		syncSystemLocaleFromMyGo()
+		application.RefreshSystemLocale()
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:    application.WindowTitle(),
 			Width:    *width,
@@ -92,5 +102,17 @@ func main() {
 
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func syncSystemLocaleFromMyGo() {
+	for _, lang := range mygo.App.PreferredLanguages() {
+		if lang != "" {
+			i18n.SetSystemLocale(lang)
+			return
+		}
+	}
+	if loc := mygo.App.Locale(); loc != "" {
+		i18n.SetSystemLocale(loc)
 	}
 }

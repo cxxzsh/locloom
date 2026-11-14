@@ -3,6 +3,8 @@ package providers
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,6 +58,20 @@ func (p *openAICompatProvider) LocalizedDescription(lang string) string {
 	return p.Description()
 }
 func (p *openAICompatProvider) Kind() provider.Kind { return provider.KindEngine }
+
+func (p *openAICompatProvider) CacheNamespace() string {
+	p.mu.RLock()
+	baseURL := p.baseURL
+	model := p.model
+	domainPrompt := p.domainPrompt
+	p.mu.RUnlock()
+	promptDigest := ""
+	if domainPrompt != "" {
+		sum := sha256.Sum256([]byte(domainPrompt))
+		promptDigest = hex.EncodeToString(sum[:8])
+	}
+	return strings.TrimRight(baseURL, "/") + "|" + model + "|" + promptDigest
+}
 
 func (p *openAICompatProvider) ConfigSchema() []provider.ConfigField {
 	return []provider.ConfigField{
