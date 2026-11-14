@@ -66,7 +66,21 @@ jobs:
             echo "Release $TAG already exists; assets will be uploaded/updated."
             exit 0
           fi
-          FLAGS=(--draft --title "LocLoom $TAG" --generate-notes)
+          PREV_TAG="$(git tag --list 'v*' --sort=-version:refname | grep -Fxv "$TAG" | head -n 1 || true)"
+          {
+            echo "## Changelog ($TAG)"
+            echo ""
+            if [[ -n "$PREV_TAG" ]]; then
+              echo "Changes since \`$PREV_TAG\`:"
+              echo ""
+              git log --no-merges --pretty=format:"- %s" "${PREV_TAG}..${GITHUB_SHA}"
+            else
+              git log --no-merges --pretty=format:"- %s" "$GITHUB_SHA"
+            fi
+            echo ""
+          } > /tmp/release-notes.md
+
+          FLAGS=(--draft --title "LocLoom $TAG" --notes-file /tmp/release-notes.md)
           if [[ "$VERSION" == *-* ]]; then
             FLAGS+=(--prerelease)
           fi
