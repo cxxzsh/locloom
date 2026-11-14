@@ -554,24 +554,42 @@ func TestMatrixRightClickFilterByContextNoPanicInFullMatrix(t *testing.T) {
 	}
 }
 
-func TestAppIconPNGTransparencyAndDimensions(t *testing.T) {
-	data, err := AppIconPNG()
+func TestAppIconPNGDarkAndLightVariants(t *testing.T) {
+	darkData, err := AppIconPNGForTheme(true)
 	if err != nil {
-		t.Fatalf("AppIconPNG failed: %v", err)
+		t.Fatalf("AppIconPNGForTheme(true) failed: %v", err)
 	}
-	img, err := png.Decode(bytes.NewReader(data))
+	lightData, err := AppIconPNGForTheme(false)
 	if err != nil {
-		t.Fatalf("png.Decode failed: %v", err)
+		t.Fatalf("AppIconPNGForTheme(false) failed: %v", err)
 	}
-	if img.Bounds().Dx() != 512 || img.Bounds().Dy() != 512 {
-		t.Fatalf("expected 512x512 app icon, got %v", img.Bounds())
+	darkImg, err := png.Decode(bytes.NewReader(darkData))
+	if err != nil {
+		t.Fatalf("png.Decode dark failed: %v", err)
 	}
-	// Outer corner (0,0) must remain 100% transparent for macOS Dock squircle mask.
-	if _, _, _, a := img.At(4, 4).RGBA(); a != 0 {
-		t.Fatalf("expected transparent outer corner alpha=0, got %d", a)
+	lightImg, err := png.Decode(bytes.NewReader(lightData))
+	if err != nil {
+		t.Fatalf("png.Decode light failed: %v", err)
 	}
-	// Inside the obsidian squircle & white-silver triangle must be opaque.
-	if _, _, _, a := img.At(256, 256).RGBA(); a == 0 {
-		t.Fatal("expected opaque center pixel inside app icon")
+	for name, img := range map[string]struct{ w, h int }{"dark": {darkImg.Bounds().Dx(), darkImg.Bounds().Dy()}, "light": {lightImg.Bounds().Dx(), lightImg.Bounds().Dy()}} {
+		if img.w != 512 || img.h != 512 {
+			t.Fatalf("expected 512x512 %s icon, got %dx%d", name, img.w, img.h)
+		}
+	}
+	// Outer corner (4,4) must remain transparent in both variants.
+	if _, _, _, a := darkImg.At(4, 4).RGBA(); a != 0 {
+		t.Fatalf("expected transparent dark outer corner, got alpha=%d", a)
+	}
+	if _, _, _, a := lightImg.At(4, 4).RGBA(); a != 0 {
+		t.Fatalf("expected transparent light outer corner, got alpha=%d", a)
+	}
+	// Squircle body at (100, 100) must be dark in darkImg and bright in lightImg.
+	dr, _, _, da := darkImg.At(100, 100).RGBA()
+	lr, _, _, la := lightImg.At(100, 100).RGBA()
+	if da == 0 || la == 0 {
+		t.Fatalf("expected opaque squircle pixel at (100,100), got darkA=%d lightA=%d", da, la)
+	}
+	if !(lr > dr*4) {
+		t.Fatalf("expected light squircle luminance >> dark squircle luminance, got lightR=%d darkR=%d", lr>>8, dr>>8)
 	}
 }

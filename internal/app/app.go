@@ -171,8 +171,8 @@ func NewWithConfig(cfg config.AppConfig) *App {
 // SetWindow binds the native window for dialogs and background UI-thread updates.
 func (a *App) SetWindow(w *mygo.Window) {
 	a.win = w
+	a.ApplyOSTheme()
 }
-
 // UILang returns the resolved active UI language ("zh" or "en").
 func (a *App) UILang() string {
 	return i18n.Resolve(a.cfg.UILang)
@@ -218,7 +218,30 @@ func (a *App) SetThemeMode(mode int) {
 	a.scheduleConfigSave()
 }
 
-// ApplyOSTheme synchronizes mygo's OS theme source with cfg.ThemeMode.
+// IsDarkTheme reports whether the resolved active theme is dark.
+func (a *App) IsDarkTheme() bool {
+	switch a.cfg.ThemeMode {
+	case 1:
+		return false
+	case 2:
+		return true
+	default:
+		return a.win != nil && mygo.Theme.IsDark()
+	}
+}
+
+// SyncAppIcon updates the OS Dock and window icon to match the active Dark/Light theme.
+func (a *App) SyncAppIcon() {
+	if a.win == nil {
+		return
+	}
+	if iconPNG, err := AppIconPNGForTheme(a.IsDarkTheme()); err == nil && len(iconPNG) > 0 {
+		_ = mygo.App.Dock.SetIcon(iconPNG)
+		_ = a.win.SetIcon(iconPNG)
+	}
+}
+
+// ApplyOSTheme synchronizes mygo's OS theme source and Dock/window icon with cfg.ThemeMode.
 func (a *App) ApplyOSTheme() {
 	if a.win == nil {
 		return
@@ -231,6 +254,7 @@ func (a *App) ApplyOSTheme() {
 	default:
 		mygo.Theme.SetSource(mygo.ThemeSystem)
 	}
+	a.SyncAppIcon()
 }
 
 // dispatchUI executes fn on the mygo main UI thread when a window is attached,

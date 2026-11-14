@@ -21,7 +21,11 @@ func (a *App) viewHeader(c *ui.Context) {
 		Children(func() {
 			// Brand, format badge & loaded source summary (shrinkable so right utility buttons never clip at 1280px)
 			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
-				ui.Image(c, iconBrand).Size(22, 22).Shrink(0)
+				brandIcon := iconBrandDark
+				if !t.Dark {
+					brandIcon = iconBrandLight
+				}
+				ui.Image(c, brandIcon).Size(22, 22).Shrink(0)
 				ui.Text(c, "LocLoom").FontSize(15).FontWeight(700).TextColor(t.Text).SingleLine().Shrink(0)
 				if a.bundle != nil {
 					ui.Badge(c, format.FormatLabel(a.bundle.Format, a.UILang())).Shrink(0)
