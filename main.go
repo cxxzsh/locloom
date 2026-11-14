@@ -76,6 +76,10 @@ func main() {
 		}
 	})
 	mygo.App.WhenReady(func() {
+		iconPNG, iconErr := app.AppIconPNG()
+		if iconErr == nil && len(iconPNG) > 0 {
+			_ = mygo.App.Dock.SetIcon(iconPNG)
+		}
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:    application.WindowTitle(),
 			Width:    *width,
@@ -83,6 +87,9 @@ func main() {
 			StateKey: "locloom-main",
 			Content:  ui.View(application.View),
 		})
+		if iconErr == nil && len(iconPNG) > 0 {
+			_ = win.SetIcon(iconPNG)
+		}
 		application.SetWindow(win)
 	})
 

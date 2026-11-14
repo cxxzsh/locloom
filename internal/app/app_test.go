@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -549,5 +551,27 @@ func TestMatrixRightClickFilterByContextNoPanicInFullMatrix(t *testing.T) {
 	}
 	if a.WindowTitle() != "LocLoom" {
 		t.Fatalf("expected clean WindowTitle 'LocLoom', got %q", a.WindowTitle())
+	}
+}
+
+func TestAppIconPNGTransparencyAndDimensions(t *testing.T) {
+	data, err := AppIconPNG()
+	if err != nil {
+		t.Fatalf("AppIconPNG failed: %v", err)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("png.Decode failed: %v", err)
+	}
+	if img.Bounds().Dx() != 512 || img.Bounds().Dy() != 512 {
+		t.Fatalf("expected 512x512 app icon, got %v", img.Bounds())
+	}
+	// Outer corner (0,0) must remain 100% transparent for macOS Dock squircle mask.
+	if _, _, _, a := img.At(4, 4).RGBA(); a != 0 {
+		t.Fatalf("expected transparent outer corner alpha=0, got %d", a)
+	}
+	// Inside the obsidian squircle & white-silver triangle must be opaque.
+	if _, _, _, a := img.At(256, 256).RGBA(); a == 0 {
+		t.Fatal("expected opaque center pixel inside app icon")
 	}
 }
