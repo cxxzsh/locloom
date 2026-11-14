@@ -73,6 +73,13 @@ func (a *App) viewModals(c *ui.Context) {
 }
 
 func (a *App) localizedHelpMarkdown() string {
+	if a.helpMarkdownZH != "" {
+		md := a.helpMarkdownZH
+		if a.UILang() == i18n.LangEN {
+			md = a.helpMarkdown
+		}
+		return stripReadmeLangSwitcher(md)
+	}
 	md := a.helpMarkdown
 	if md == "" {
 		return ""
@@ -91,4 +98,26 @@ func (a *App) localizedHelpMarkdown() string {
 	}
 	zhPart := md[idx+len(zhAnchor):]
 	return strings.TrimSpace(zhPart)
+}
+
+func stripReadmeLangSwitcher(md string) string {
+	const switcher = "[English](README.md) | [简体中文](README.zh-CN.md)"
+	if !strings.Contains(md, switcher) {
+		return strings.TrimSpace(md)
+	}
+	lines := strings.Split(md, "\n")
+	out := make([]string, 0, len(lines))
+	skippedRule := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == switcher {
+			continue
+		}
+		if !skippedRule && trimmed == "---" {
+			skippedRule = true
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }

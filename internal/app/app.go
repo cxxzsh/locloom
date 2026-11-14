@@ -63,6 +63,7 @@ type App struct {
 	// Modals & popovers
 	showHelp        bool
 	helpMarkdown    string
+	helpMarkdownZH  string
 	mdOpts          markdown.Options
 	showExportModal bool
 	exportScope     int
@@ -201,6 +202,13 @@ func (a *App) WindowTitle() string {
 // SetHelpMarkdown sets the Markdown content shown in the Help modal.
 func (a *App) SetHelpMarkdown(md string) {
 	a.helpMarkdown = md
+	a.helpMarkdownZH = ""
+}
+
+// SetHelpMarkdowns sets separate English and Simplified Chinese Markdown documents for the Help modal.
+func (a *App) SetHelpMarkdowns(enMD, zhMD string) {
+	a.helpMarkdown = enMD
+	a.helpMarkdownZH = zhMD
 }
 
 // SetShowHelp opens or closes the Help modal.

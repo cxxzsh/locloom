@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -275,6 +276,25 @@ func TestUILanguageSwitchENAndZH(t *testing.T) {
 		if !tt.HasText(want) {
 			t.Fatalf("expected %q in Chinese UI", want)
 		}
+	}
+}
+
+func TestHelpMarkdownSeparateFiles(t *testing.T) {
+	a := newTestApp()
+	en := "# English Guide\n\n[English](README.md) | [简体中文](README.zh-CN.md)\n\n---\n\nEnglish body."
+	zh := "# 中文指南\n\n[English](README.md) | [简体中文](README.zh-CN.md)\n\n---\n\n中文正文。"
+	a.SetHelpMarkdowns(en, zh)
+
+	a.SetUILang("en")
+	gotEN := a.localizedHelpMarkdown()
+	if !strings.Contains(gotEN, "English body.") || strings.Contains(gotEN, "中文正文") || strings.Contains(gotEN, "README.zh-CN.md") {
+		t.Fatalf("unexpected English help markdown: %q", gotEN)
+	}
+
+	a.SetUILang("zh")
+	gotZH := a.localizedHelpMarkdown()
+	if !strings.Contains(gotZH, "中文正文。") || strings.Contains(gotZH, "English body.") || strings.Contains(gotZH, "README.md") {
+		t.Fatalf("unexpected Chinese help markdown: %q", gotZH)
 	}
 }
 

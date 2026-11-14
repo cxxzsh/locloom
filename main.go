@@ -14,7 +14,10 @@ import (
 )
 
 //go:embed README.md
-var embeddedReadme string
+var embeddedReadmeEN string
+
+//go:embed README.zh-CN.md
+var embeddedReadmeZH string
 
 func main() {
 	headlessRender := flag.String("headless-render", "", "Render UI to a PNG file and exit (for smoke verification)")
@@ -32,7 +35,7 @@ func main() {
 	if *langFlag != "" {
 		application.SetUILang(*langFlag)
 	}
-	application.SetHelpMarkdown(embeddedReadme)
+	application.SetHelpMarkdowns(embeddedReadmeEN, embeddedReadmeZH)
 	if *openHelp {
 		application.SetShowHelp(true)
 	}
