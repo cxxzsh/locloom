@@ -238,20 +238,71 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			ui.Divider(c)
 
 			// Ordered Waterfall Provider Cards
-			ui.Text(c, tr.SectionWaterfall).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			ui.Row(c).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
+				ui.Text(c, tr.SectionWaterfall).FontSize(12).FontWeight(600).TextColor(t.TextMuted).Grow(1).MinWidth(0)
+				if !a.isDefaultProviderOrder() {
+					if ui.Button(c, tr.BtnResetOrder).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipResetOrder).Clicked() {
+						a.resetProviderOrder()
+					}
+				}
+			})
+			ui.Text(c, tr.TipDragReorder).FontSize(11).TextColor(t.TextMuted)
 			provs := provider.Ordered(a.cfg.ProviderOrder)
-			for idx, p := range provs {
-				a.viewProviderCard(c, p, idx == 0, idx == len(provs)-1)
+			var pendingDrop *pendingProviderDrop
+			ui.Column(c).Gap(0).Children(func() {
+				for idx, p := range provs {
+					if drop := a.viewProviderCard(c, provs, idx, p); drop != nil {
+						pendingDrop = drop
+					}
+				}
+			})
+			if pendingDrop != nil {
+				a.reorderProvider(pendingDrop.srcID, pendingDrop.targetID, pendingDrop.insertAfter)
 			}
 		})
 	})
 }
 
-func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLast bool) {
+type providerDragItem struct {
+	ID string
+}
+
+type pendingProviderDrop struct {
+	srcID       string
+	targetID    string
+	insertAfter bool
+}
+
+func providerIndex(provs []provider.Provider, id string) int {
+	for i, p := range provs {
+		if p.ID() == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func isProviderMoveNoOp(provs []provider.Provider, srcID string, dstIdx int, insertAfter bool) bool {
+	srcIdx := providerIndex(provs, srcID)
+	if srcIdx < 0 || dstIdx < 0 || srcIdx == dstIdx {
+		return true
+	}
+	if insertAfter && dstIdx == srcIdx-1 {
+		return true
+	}
+	if !insertAfter && dstIdx == srcIdx+1 {
+		return true
+	}
+	return false
+}
+
+func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int, p provider.Provider) *pendingProviderDrop {
 	t := c.Theme()
 	tr := a.tr()
 	lang := a.UILang()
 	pid := p.ID()
+	isFirst := idx == 0
+	isLast := idx == len(provs)-1
 	enabled := a.isProviderActive(pid)
 	expanded := a.expandedProvider[pid]
 
@@ -263,20 +314,96 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 	}
 	vals := a.cfg.ProviderConfigs[pid]
 
+	halfGap := t.Space(1.25)
+	var topPad, botPad float32
+	if !isFirst {
+		topPad = halfGap
+	}
+	if !isLast {
+		botPad = halfGap
+	}
+
+	slot := ui.Column(c).Key("slot:"+pid).Padding(topPad, 0, botPad, 0)
+	overItem, isDragOver := ui.DragOver[providerDragItem](slot)
+	dropItem, didDrop := ui.Drop[providerDragItem](slot)
+
+	insertAfter := a.dragHoverTarget == pid && a.dragHoverAfter
+	if isDragOver || didDrop {
+		_, relY, _ := slot.PointerPosition()
+		if bounds := slot.LayoutBounds(); bounds.H > 0 {
+			insertAfter = relY > bounds.H*0.5
+		} else if isDragOver && a.dragHoverTarget != pid {
+			srcIdx := providerIndex(provs, overItem.ID)
+			insertAfter = srcIdx >= 0 && srcIdx < idx
+		}
+	}
+
+	if isDragOver {
+		a.dragHoverTarget = pid
+		a.dragHoverAfter = insertAfter
+		if !isProviderMoveNoOp(provs, overItem.ID, idx, insertAfter) {
+			after := insertAfter
+			slot.DrawOver(func(pt *ui.Painter, r ui.Rect) {
+				lineY := r.Y
+				if isFirst && !after {
+					lineY = r.Y + 2
+				}
+				if after {
+					lineY = r.Y + r.H
+					if isLast {
+						lineY = r.Y + r.H - 2
+					}
+				}
+				pt.Fill(ui.Rect{X: r.X + 4, Y: lineY - 1, W: max(0, r.W-4), H: 2}, t.Accent, 1)
+				pt.Fill(ui.Rect{X: r.X, Y: lineY - 3, W: 6, H: 6}, t.Accent, 3)
+			})
+		}
+	}
+
 	border := t.Border
 	if enabled {
 		border = t.Accent.Alpha(0.6)
 	}
 
-	ui.Column(c).
-		Padding(t.Space(2)).
-		Gap(t.Space(1.5)).
-		Background(t.Surface).
-		Border(1, border).
-		Radius(t.Radius).
-		Children(func() {
-			// Collapsible Card Header
-			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+	slot.Children(func() {
+		card := ui.Column(c).
+			Key(pid).
+			Padding(t.Space(2)).
+			Gap(t.Space(1.5)).
+			Background(t.Surface).
+			Border(1, border).
+			Radius(t.Radius).
+			Drag(providerDragItem{ID: pid})
+		if card.Dragging() {
+			card = card.Opacity(0.45).Cursor(ui.CursorGrabbing)
+		}
+		card.Children(func() {
+			// Collapsible & Reorderable Card Header
+			hdrRow := ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center)
+			hdrRow.ContextMenu(func(m *ui.Menu) {
+				if m.Item(tr.MenuMoveTop).Disabled(isFirst).Chosen() {
+					a.moveProviderToEdge(pid, true)
+				}
+				if m.Item(tr.TipMoveUp).Disabled(isFirst).Chosen() {
+					a.moveProvider(pid, -1)
+				}
+				if m.Item(tr.TipMoveDown).Disabled(isLast).Chosen() {
+					a.moveProvider(pid, 1)
+				}
+				if m.Item(tr.MenuMoveBottom).Disabled(isLast).Chosen() {
+					a.moveProviderToEdge(pid, false)
+				}
+			})
+			hdrRow.Children(func() {
+				ui.Row(c).
+					AlignItems(ui.Center).
+					Padding(t.Space(0.5)).
+					Cursor(ui.CursorGrab).
+					Tooltip(tr.TipDragReorder).
+					Children(func() {
+						ui.Icon(c, iconGrip).Size(14, 14).TextColor(t.TextMuted)
+					})
+
 				arrow := "▸"
 				if expanded {
 					arrow = "▾"
@@ -295,12 +422,6 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 					kindLabel = tr.BadgeLocal
 				}
 				ui.Badge(c, kindLabel).Shrink(0)
-				if ui.Button(c, "↑").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isFirst).Tooltip(tr.TipMoveUp).Clicked() {
-					a.moveProvider(pid, -1)
-				}
-				if ui.Button(c, "↓").Padding(t.Space(0.5), t.Space(1.5)).Disabled(isLast).Tooltip(tr.TipMoveDown).Clicked() {
-					a.moveProvider(pid, 1)
-				}
 				if ui.Switch(c, &enabled).Changed() {
 					a.toggleProvider(pid, enabled)
 				}
@@ -435,6 +556,20 @@ func (a *App) viewProviderCard(c *ui.Context, p provider.Provider, isFirst, isLa
 				}
 			}
 		})
+	})
+
+	if didDrop {
+		a.dragHoverTarget = ""
+		return &pendingProviderDrop{
+			srcID:       dropItem.ID,
+			targetID:    pid,
+			insertAfter: insertAfter,
+		}
+	}
+	if !isDragOver && a.dragHoverTarget == pid {
+		a.dragHoverTarget = ""
+	}
+	return nil
 }
 
 func (a *App) viewSidebarLocales(c *ui.Context) {

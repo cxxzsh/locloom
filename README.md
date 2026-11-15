@@ -22,7 +22,7 @@
   - Automatically backfills readable source text from source templates (e.g., `en.json`, `values/strings.xml`, `Strings.resx`, `.pot`) for ID-keyed formats.
   - Isolates `.xlsx`-only rows by default to prevent injecting phantom entries; external rows are inserted only when **Append Missing** is explicitly enabled.
 - **10-Source Concurrent Waterfall Pipeline**
-  - Chains local and online providers in customizable priority order: **Local `.xlsx` Glossary** → **Local Translation Memory (TM)** → **Google Translate (Web)** → **Microsoft Bing / Edge (Keyless / Azure)** → **DeepL / DeepLX** → **MyMemory** → **LibreTranslate / Lingva** → **Baidu Translate API** → **Niutrans API** → **OpenAI / Ollama-Compatible LLMs**.
+  - Chains local and online providers in drag-and-drop customizable priority order: **Local `.xlsx` Glossary** → **Local Translation Memory (TM)** → **Google Translate (Web)** → **Microsoft Bing / Edge (Keyless / Azure)** → **LibreTranslate / Lingva (Keyless)** → **MyMemory (Keyless)** → **DeepL / DeepLX** → **OpenAI / Ollama-Compatible LLMs** → **Baidu Translate API** → **Niutrans API**.
   - Supports multi-locale concurrent scheduling, persistent local caching (`translation-cache.json`), and **HTTP / SOCKS5 proxies** (with optional TLS verification skip for self-signed gateways).
 - **Placeholder & Whitespace Guard**
   - Automatically masks Qt (`%1`..`%99`, `%n`), printf (`%s`, `%d`, `%1$s`), ICU/template (`{name}`, `{{var}}`), and surrounding whitespace before sending text to remote MT/LLM providers, flagging anomalies with `[⚠]`.

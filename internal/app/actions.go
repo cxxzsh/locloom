@@ -14,6 +14,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 
+	"locloom/internal/config"
 	"locloom/internal/domain"
 	"locloom/internal/format"
 	"locloom/internal/locale"
@@ -274,6 +275,76 @@ func (a *App) moveProvider(id string, delta int) {
 	}
 	order[idx], order[target] = order[target], order[idx]
 	a.cfg.ProviderOrder = order
+	a.scheduleConfigSave()
+}
+
+func (a *App) reorderProvider(srcID, targetID string, insertAfter bool) {
+	if srcID == "" || targetID == "" || srcID == targetID {
+		return
+	}
+	provs := provider.Ordered(a.cfg.ProviderOrder)
+	prev := make([]string, len(provs))
+	withoutSrc := make([]string, 0, len(provs))
+	srcFound := false
+	dstIdx := -1
+	for i, p := range provs {
+		pid := p.ID()
+		prev[i] = pid
+		if pid == srcID {
+			srcFound = true
+			continue
+		}
+		if pid == targetID {
+			dstIdx = len(withoutSrc)
+		}
+		withoutSrc = append(withoutSrc, pid)
+	}
+	if !srcFound || dstIdx < 0 {
+		return
+	}
+	insertAt := dstIdx
+	if insertAfter {
+		insertAt = dstIdx + 1
+	}
+	next := slices.Insert(withoutSrc, insertAt, srcID)
+	if slices.Equal(next, prev) {
+		return
+	}
+	a.cfg.ProviderOrder = next
+	a.scheduleConfigSave()
+}
+
+func (a *App) moveProviderToEdge(id string, toTop bool) {
+	provs := provider.Ordered(a.cfg.ProviderOrder)
+	if len(provs) < 2 {
+		return
+	}
+	if toTop {
+		a.reorderProvider(id, provs[0].ID(), false)
+		return
+	}
+	a.reorderProvider(id, provs[len(provs)-1].ID(), true)
+}
+
+func (a *App) isDefaultProviderOrder() bool {
+	defOrder := config.Default().ProviderOrder
+	provs := provider.Ordered(a.cfg.ProviderOrder)
+	if len(provs) != len(defOrder) {
+		return false
+	}
+	for i, p := range provs {
+		if p.ID() != defOrder[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *App) resetProviderOrder() {
+	if a.isDefaultProviderOrder() {
+		return
+	}
+	a.cfg.ProviderOrder = slices.Clone(config.Default().ProviderOrder)
 	a.scheduleConfigSave()
 }
 

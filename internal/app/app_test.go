@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -369,7 +370,7 @@ func TestSmartLocaleSyncAndNonTSFormatLoad(t *testing.T) {
 
 func TestCollapsibleProviderCardsAndSecretToggle(t *testing.T) {
 	a := newTestApp()
-	tt := ui.NewTester(a.View, 1280, 820)
+	tt := ui.NewTester(a.View, 1280, 960)
 
 	if err := tt.Click("管线"); err != nil {
 		t.Fatalf("click Pipeline tab failed: %v", err)
@@ -857,5 +858,96 @@ func TestCloudProxyBulkToggle(t *testing.T) {
 	a.setCloudProvidersUseProxy(false)
 	if a.allCloudProvidersUseProxy() || a.anyCloudProviderUsesProxy() {
 		t.Fatal("expected all cloud providers proxy disabled after toggle false")
+	}
+}
+
+func TestProviderDragReorderAndReset(t *testing.T) {
+	a := newTestApp()
+	wantDef := config.Default().ProviderOrder
+
+	// 1. Direct reorderProvider behavior (bottom-up before & top-down after & no-op self drop).
+	a.reorderProvider("bing_web", "xlsx", false)
+	if a.cfg.ProviderOrder[0] != "bing_web" || a.cfg.ProviderOrder[1] != "xlsx" {
+		t.Fatalf("expected bing_web moved before xlsx, got %v", a.cfg.ProviderOrder)
+	}
+	a.reorderProvider("bing_web", "google_web", true)
+	if !slices.Equal(a.cfg.ProviderOrder[:4], []string{"xlsx", "ts_tm", "google_web", "bing_web"}) {
+		t.Fatalf("expected bing_web moved after google_web, got %v", a.cfg.ProviderOrder)
+	}
+	prev := slices.Clone(a.cfg.ProviderOrder)
+	a.reorderProvider("google_web", "google_web", false)
+	if !slices.Equal(a.cfg.ProviderOrder, prev) {
+		t.Fatalf("expected self-drop no-op, got %v vs %v", a.cfg.ProviderOrder, prev)
+	}
+
+	// Reset button restores recommended default order.
+	a.moveProviderToEdge("deepl", true)
+	if a.cfg.ProviderOrder[0] != "deepl" || a.isDefaultProviderOrder() {
+		t.Fatalf("expected deepl moved to top and non-default state, got %v", a.cfg.ProviderOrder)
+	}
+	a.resetProviderOrder()
+	if !a.isDefaultProviderOrder() || !slices.Equal(a.cfg.ProviderOrder, wantDef) {
+		t.Fatalf("expected resetProviderOrder to restore %v, got %v", wantDef, a.cfg.ProviderOrder)
+	}
+
+	// 2. End-to-end UI drag-and-drop & reset in Pipeline sidebar.
+	tt := ui.NewTester(a.View, 1280, 820)
+	if err := tt.Click(a.tr().TabPipeline); err != nil {
+		t.Fatalf("switch to Pipeline tab failed: %v", err)
+	}
+	if tt.HasText(a.tr().BtnResetOrder) {
+		t.Fatal("expected Reset button hidden when already in default order")
+	}
+
+	srcRect, ok := tt.Find("Google Translate (免Key批量)")
+	if !ok {
+		t.Fatalf("Google Translate card not found in texts: %v", tt.Texts())
+	}
+	dstRect, ok := tt.Find("Excel 词条表 (.xlsx)")
+	if !ok {
+		t.Fatalf("Excel card not found in texts: %v", tt.Texts())
+	}
+
+	sx := srcRect.X + srcRect.W*0.5
+	sy := srcRect.Y + srcRect.H*0.5
+	tx := dstRect.X + dstRect.W*0.5
+	tyTop := dstRect.Y + 2 // upper half of top slot -> insert before Excel
+
+	tt.Press(sx, sy)
+	tt.Move(sx, sy-8) // exceed dragStart threshold (4 DIPs)
+	tt.Move(tx, tyTop)
+	tt.Release(tx, tyTop)
+
+	if a.cfg.ProviderOrder[0] != domain.OriginGoogle {
+		t.Fatalf("expected drag to move google_web to top, got order=%v", a.cfg.ProviderOrder)
+	}
+	if a.expandedProvider[domain.OriginGoogle] {
+		t.Fatal("expected drag interaction not to accidentally toggle card expansion")
+	}
+	if !tt.HasText(a.tr().BtnResetOrder) {
+		t.Fatal("expected Reset button visible after custom drag reorder")
+	}
+
+	// Clean click on Switch inside draggable card still toggles provider active state.
+	excelRect, ok := tt.Find("Excel 词条表 (.xlsx)")
+	if !ok {
+		t.Fatal("Excel card not found after reorder")
+	}
+	localBadgeRect, ok := tt.Find(a.tr().BadgeLocal)
+	if !ok {
+		t.Fatal("Local badge not found")
+	}
+	wasActive := a.isProviderActive(domain.OriginXLSX)
+	tt.ClickAt(localBadgeRect.X+localBadgeRect.W+18, excelRect.Y+excelRect.H*0.5)
+	if a.isProviderActive(domain.OriginXLSX) == wasActive {
+		t.Fatalf("expected clean click on Switch inside draggable card to toggle active state (was %v)", wasActive)
+	}
+	tt.ClickAt(localBadgeRect.X+localBadgeRect.W+18, excelRect.Y+excelRect.H*0.5)
+
+	if err := tt.Click(a.tr().BtnResetOrder); err != nil {
+		t.Fatalf("click Reset button failed: %v", err)
+	}
+	if !slices.Equal(a.cfg.ProviderOrder, wantDef) {
+		t.Fatalf("expected clicking Reset to restore %v, got %v", wantDef, a.cfg.ProviderOrder)
 	}
 }

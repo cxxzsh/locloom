@@ -41,7 +41,7 @@ func TestDefaultValues(t *testing.T) {
 	if cfg.Proxy.ProxyURL != "" {
 		t.Fatalf("expected empty ProxyURL, got %q", cfg.Proxy.ProxyURL)
 	}
-	wantOrder := []string{"xlsx", "ts_tm", "google_web", "bing_web", "deepl", "mymemory", "libretranslate", "baidu_api", "niutrans", "openai_compat"}
+	wantOrder := []string{"xlsx", "ts_tm", "google_web", "bing_web", "libretranslate", "mymemory", "deepl", "openai_compat", "baidu_api", "niutrans"}
 	if !slices.Equal(cfg.ProviderOrder, wantOrder) {
 		t.Fatalf("unexpected ProviderOrder: %v", cfg.ProviderOrder)
 	}
@@ -186,5 +186,74 @@ func TestUILangAutoNormalizedPreserved(t *testing.T) {
 	}
 	if loadedUpper.UILang != "auto" {
 		t.Fatalf("normalized AUTO UILang = %q, want auto", loadedUpper.UILang)
+	}
+}
+
+func TestProviderOrderDefaultAndLegacyMigration(t *testing.T) {
+	want := []string{
+		"xlsx",
+		"ts_tm",
+		"google_web",
+		"bing_web",
+		"libretranslate",
+		"mymemory",
+		"deepl",
+		"openai_compat",
+		"baidu_api",
+		"niutrans",
+	}
+	if got := Default().ProviderOrder; !slices.Equal(got, want) {
+		t.Fatalf("Default().ProviderOrder = %v, want %v", got, want)
+	}
+
+	legacyCases := []struct {
+		name string
+		json string
+	}{
+		{
+			name: "v0_4_providers",
+			json: `{"provider_order":["xlsx","ts_tm","google_web","openai_compat"]}`,
+		},
+		{
+			name: "v0_appended_10_providers",
+			json: `{"provider_order":["xlsx","ts_tm","google_web","openai_compat","bing_web","deepl","mymemory","libretranslate","baidu_api","niutrans"]}`,
+		},
+		{
+			name: "previous_default_10_providers",
+			json: `{"provider_order":["xlsx","ts_tm","google_web","bing_web","deepl","mymemory","libretranslate","baidu_api","niutrans","openai_compat"]}`,
+		},
+	}
+
+	dir := t.TempDir()
+	for _, tc := range legacyCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(dir, tc.name+".json")
+			if err := os.WriteFile(p, []byte(tc.json), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, _, err := loadFromPath(p)
+			if err != nil {
+				t.Fatalf("loadFromPath(%s) failed: %v", tc.name, err)
+			}
+			if !slices.Equal(loaded.ProviderOrder, want) {
+				t.Fatalf("legacy %s migrated order = %v, want %v", tc.name, loaded.ProviderOrder, want)
+			}
+		})
+	}
+
+	// Custom user-reordered list must be preserved untouched.
+	customPath := filepath.Join(dir, "custom.json")
+	customOrder := []string{"deepl", "xlsx", "ts_tm", "openai_compat", "google_web", "bing_web", "libretranslate", "mymemory", "baidu_api", "niutrans"}
+	cfg := Default()
+	cfg.ProviderOrder = customOrder
+	if err := SaveTo(customPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loadedCustom, _, err := loadFromPath(customPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(loadedCustom.ProviderOrder, customOrder) {
+		t.Fatalf("custom order was overwritten: got %v, want %v", loadedCustom.ProviderOrder, customOrder)
 	}
 }

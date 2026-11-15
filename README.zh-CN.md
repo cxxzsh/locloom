@@ -22,7 +22,7 @@
   - 针对 ID 键控格式（如 `en.json`、`values/strings.xml`、`Strings.resx`、`.pot`），自动从源模板回填可读原文供审校与机翻使用。
   - 默认严格隔离仅存在于 `.xlsx` 中的外部词条，仅在显式开启 **「追加词表新增词条」** 时才插入目标文件。
 - **十源并发瀑布流引擎（10-Source Concurrent Waterfall）**
-  - 支持自定义优先级链式回退补缺：**本地 `.xlsx` 词条表** → **本地翻译记忆库 (TM)** → **Google Web（免 Key）** → **Microsoft Bing / Edge（免 Key / Azure）** → **DeepL / DeepLX** → **MyMemory（免 Key）** → **LibreTranslate / Lingva** → **百度翻译开放平台** → **小牛翻译 Niutrans** → **OpenAI / Ollama 兼容大模型**。
+  - 支持拖拽自定义优先级链式回退补缺：**本地 `.xlsx` 词条表** → **本地翻译记忆库 (TM)** → **Google Web（免 Key）** → **Microsoft Bing / Edge（免 Key / Azure）** → **Lingva / LibreTranslate（免 Key）** → **MyMemory（免 Key）** → **DeepL / DeepLX** → **OpenAI / Ollama 兼容大模型** → **百度翻译开放平台** → **小牛翻译 Niutrans**。
   - 支持多语种并发调度、持久化本地缓存（`translation-cache.json`）以及 **HTTP / SOCKS5 代理**（支持自签证书网关跳过 TLS 校验）。
 - **占位符与格式护栏**
   - 发送给远端翻译引擎前自动掩码 Qt（`%1`..`%99`、`%n`）、printf（`%s`、`%d`、`%1$s`）、ICU/模板（`{name}`、`{{var}}`）及前后空白；还原后自动校验一致性并标记 `[⚠]`。

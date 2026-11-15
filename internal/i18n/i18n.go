@@ -168,6 +168,11 @@ type Catalog struct {
 	BadgeEngine             string
 	TipMoveUp               string
 	TipMoveDown             string
+	BtnResetOrder           string
+	TipResetOrder           string
+	TipDragReorder          string
+	MenuMoveTop             string
+	MenuMoveBottom          string
 	BtnBrowse               string
 	BtnTestConn             string
 	BtnDiscoverModels       string
@@ -431,6 +436,11 @@ var zhCatalog = Catalog{
 	BadgeEngine:             "引擎",
 	TipMoveUp:               "上移优先级",
 	TipMoveDown:             "下移优先级",
+	BtnResetOrder:           "重置默认",
+	TipResetOrder:           "恢复推荐的默认瀑布流回退顺序",
+	TipDragReorder:          "按住卡片拖动可调整回退顺序（右键更多操作）",
+	MenuMoveTop:             "移至最前",
+	MenuMoveBottom:          "移至最后",
 	BtnBrowse:               "浏览",
 	BtnTestConn:             "连通测试",
 	BtnDiscoverModels:       "发现模型",
@@ -689,6 +699,11 @@ var enCatalog = Catalog{
 	BadgeEngine:             "Cloud",
 	TipMoveUp:               "Move up",
 	TipMoveDown:             "Move down",
+	BtnResetOrder:           "Reset",
+	TipResetOrder:           "Restore recommended default waterfall order",
+	TipDragReorder:          "Drag cards to reorder fallback priority (right-click for more)",
+	MenuMoveTop:             "Move to Top",
+	MenuMoveBottom:          "Move to Bottom",
 	BtnBrowse:               "Browse",
 	BtnTestConn:             "Test",
 	BtnDiscoverModels:       "Models",

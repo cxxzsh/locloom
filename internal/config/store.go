@@ -67,12 +67,12 @@ func Default() AppConfig {
 			"ts_tm",
 			"google_web",
 			"bing_web",
-			"deepl",
-			"mymemory",
 			"libretranslate",
+			"mymemory",
+			"deepl",
+			"openai_compat",
 			"baidu_api",
 			"niutrans",
-			"openai_compat",
 		},
 		ProviderConfigs: map[string]map[string]string{
 			"xlsx": {
@@ -240,8 +240,8 @@ func normalizeLoaded(cfg *AppConfig) {
 	if len(cfg.Profiles) == 0 {
 		cfg.Profiles = def.Profiles
 	}
-	if len(cfg.ProviderOrder) == 0 {
-		cfg.ProviderOrder = def.ProviderOrder
+	if len(cfg.ProviderOrder) == 0 || isLegacyDefaultProviderOrder(cfg.ProviderOrder) {
+		cfg.ProviderOrder = slices.Clone(def.ProviderOrder)
 	} else {
 		for _, pid := range def.ProviderOrder {
 			if !slices.Contains(cfg.ProviderOrder, pid) {
@@ -263,6 +263,20 @@ func normalizeLoaded(cfg *AppConfig) {
 			}
 		}
 	}
+}
+
+func isLegacyDefaultProviderOrder(order []string) bool {
+	legacyDefaults := [][]string{
+		{"xlsx", "ts_tm", "google_web", "openai_compat"},
+		{"xlsx", "ts_tm", "google_web", "openai_compat", "bing_web", "deepl", "mymemory", "libretranslate", "baidu_api", "niutrans"},
+		{"xlsx", "ts_tm", "google_web", "bing_web", "deepl", "mymemory", "libretranslate", "baidu_api", "niutrans", "openai_compat"},
+	}
+	for _, legacy := range legacyDefaults {
+		if slices.Equal(order, legacy) {
+			return true
+		}
+	}
+	return false
 }
 
 // Save writes cfg atomically to the resolved config.json path.

@@ -79,6 +79,8 @@ type App struct {
 	providerTesting   map[string]bool
 	discoveredModels  map[string][]string
 	discoveringModels map[string]bool
+	dragHoverTarget   string
+	dragHoverAfter    bool
 
 	// Locale sidebar search
 	localeSearchQuery string
