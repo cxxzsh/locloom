@@ -6,6 +6,8 @@
 
 **LocLoom** is a cross-platform, single-binary desktop and CLI localization workbench (`CGO_ENABLED=0`) built with Go and [`egoist/mygo`](https://github.com/egoist/mygo), supporting **macOS**, **Windows**, and **Linux**. Designed around lossless file preservation, it supports **8 built-in localization formats** (`Qt .ts`, `GNU Gettext .po/.pot`, `JSON i18n`, `Flutter .arb`, `Apple .xcstrings`, `Android strings.xml`, `.NET .resx`, and `XLIFF 1.2/2.0`), fills multi-language translations via a concurrent 10-source waterfall pipeline, exports multi-mode `.xlsx` review workbooks, and writes changes back **losslessly**.
 
+![LocLoom Workbench (English)](assets/screenshot-en.png)
+
 ## 1. Overview & Core Capabilities
 
 - **8 Built-In Lossless Localization Formats**

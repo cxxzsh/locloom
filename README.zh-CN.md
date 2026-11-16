@@ -6,6 +6,8 @@
 
 **LocLoom** 是一款基于 Go 与 [`egoist/mygo`](https://github.com/egoist/mygo) 构建的跨平台单文件桌面与命令行本地化工作台（`CGO_ENABLED=0`），支持 **macOS**、**Windows** 与 **Linux**。工具围绕“原位无损回填”设计，原生支持 **8 大主流本地化格式**（`Qt .ts`、`GNU Gettext .po/.pot`、`JSON i18n`、`Flutter .arb`、`Apple .xcstrings`、`Android strings.xml`、`.NET .resx`、`XLIFF 1.2/2.0`），通过十源并发瀑布流自动补齐译文、导出多模式 `.xlsx` 审校表，并**无损写回**目标文件。
 
+![LocLoom 界面预览（中文）](assets/screenshot-zh.png)
+
 ## 1. 核心架构与能力
 
 - **原生支持 8 大无损本地化格式**
