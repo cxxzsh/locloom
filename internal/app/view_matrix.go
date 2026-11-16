@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,7 +20,19 @@ func (a *App) viewMatrix(c *ui.Context) {
 	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
 		// Filter & View Mode Toolbar (kept on 1 crisp line at 1280px)
 		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Wrap().Children(func() {
-			if ui.Segmented(c, &a.statusFilter, tr.FilterAll, tr.FilterGaps, tr.FilterPending, tr.FilterWarnings).Shrink(0).Tooltip(tr.TipStatusFilter).Changed() {
+			warnLabel := tr.FilterWarnings
+			if a.plan != nil {
+				totalWarns := 0
+				for id, st := range a.plan.Summary.LocaleStats {
+					if id != a.plan.RefLocaleID {
+						totalWarns += st.Warnings
+					}
+				}
+				if totalWarns > 0 {
+					warnLabel = fmt.Sprintf("%s (%d)", tr.FilterWarnings, totalWarns)
+				}
+			}
+			if ui.Segmented(c, &a.statusFilter, tr.FilterAll, tr.FilterGaps, tr.FilterPending, warnLabel).Shrink(0).Tooltip(tr.TipStatusFilter).Changed() {
 				a.refilterRows()
 			}
 
@@ -30,7 +43,42 @@ func (a *App) viewMatrix(c *ui.Context) {
 			if a.cfg.MatrixViewMode == 0 {
 				ids := a.enabledNonRefIDs()
 				if len(ids) > 0 {
-					if ui.Select(c, &a.focusedLocale, ids).Width(92).Shrink(0).Tooltip(tr.TipFocusedLocale).Changed() {
+					labels := make([]string, len(ids))
+					idToLabel := make(map[string]string, len(ids))
+					for i, id := range ids {
+						lbl := a.localeSelectLabel(id)
+						labels[i] = lbl
+						idToLabel[id] = lbl
+					}
+					selectedLabel := idToLabel[a.focusedLocale]
+					if selectedLabel == "" && len(labels) > 0 {
+						selectedLabel = labels[0]
+					}
+					sel := ui.Select(c, &selectedLabel, labels).Width(168).Shrink(0).Tooltip(tr.TipFocusedLocale)
+					changed := sel.Changed()
+					if changed {
+						if idx := slices.Index(labels, selectedLabel); idx >= 0 {
+							a.focusedLocale = ids[idx]
+						}
+					}
+					sel.HandleInput(func(ev ui.InputEvent) bool {
+						if ev.Kind == ui.InputScroll && ev.DY != 0 {
+							cur := slices.Index(ids, a.focusedLocale)
+							if cur < 0 {
+								cur = 0
+							}
+							if ev.DY < 0 {
+								cur = (cur - 1 + len(ids)) % len(ids)
+							} else {
+								cur = (cur + 1) % len(ids)
+							}
+							a.focusedLocale = ids[cur]
+							changed = true
+							return true
+						}
+						return false
+					})
+					if changed {
 						a.activeEditLocale = a.focusedLocale
 						a.syncEditorFromSelection()
 					}
@@ -628,4 +676,17 @@ func (a *App) buildMatrixHeaderMenu(m *ui.Menu, col int) {
 			a.setStatus(fmt.Sprintf(tr.StatusRevertedColFmt, targetLoc), false)
 		})
 	}
+}
+
+func (a *App) localeSelectLabel(id string) string {
+	for _, spec := range a.cfg.Locales {
+		if spec.ID == id {
+			name := spec.DisplayName(a.UILang())
+			if name != "" && name != id {
+				return id + " · " + name
+			}
+			break
+		}
+	}
+	return id
 }

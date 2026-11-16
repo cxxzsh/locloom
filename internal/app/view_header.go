@@ -37,6 +37,7 @@ func (a *App) viewHeader(c *ui.Context) {
 				}
 				rows := 0
 				pct := 0.0
+				totalWarns := 0
 				if a.plan != nil {
 					rows = a.plan.Summary.TotalRows
 					if len(a.plan.Summary.LocaleStats) > 0 {
@@ -47,6 +48,7 @@ func (a *App) viewHeader(c *ui.Context) {
 								continue
 							}
 							sum += st.Completion
+							totalWarns += st.Warnings
 							cnt++
 						}
 						if cnt > 0 {
@@ -56,6 +58,18 @@ func (a *App) viewHeader(c *ui.Context) {
 				}
 				badgeText := fmt.Sprintf(tr.HeaderSummaryFmt, sourceLabel, rows, pct*100)
 				ui.Badge(c, badgeText).Shrink(1).MinWidth(0).Tooltip(badgeText)
+				if totalWarns > 0 {
+					if ui.Button(c, fmt.Sprintf("⚠ %d", totalWarns)).
+						Padding(t.Space(0.5), t.Space(1.5)).
+						Background(t.Warning.Alpha(0.16)).
+						TextColor(t.Warning).
+						Shrink(0).
+						Tooltip(tr.TipStatusFilter).
+						Clicked() {
+						a.statusFilter = 3
+						a.refilterRows()
+					}
+				}
 			})
 
 			// File & Excel Action Group
@@ -158,6 +172,12 @@ func (a *App) viewHeader(c *ui.Context) {
 					if a.matrixHeightPct > 72 {
 						a.matrixHeightPct = 72
 					}
+				}
+				if ui.Button(c, tr.BtnSettings).
+					Padding(t.Space(1.5), t.Space(2)).
+					Tooltip(tr.TipSettings).
+					Clicked() {
+					a.showSettings = true
 				}
 				helpBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(2)).

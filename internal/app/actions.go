@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,6 +24,7 @@ import (
 	"locloom/internal/platform"
 	"locloom/internal/provider"
 	"locloom/internal/sheet"
+	"locloom/internal/updater"
 )
 
 func (a *App) enabledNonRefLocales() []locale.LocaleSpec {
@@ -1409,4 +1412,61 @@ func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.Loca
 		}
 	}
 	return tasks, totalItems
+}
+
+func (a *App) checkUpdatesAsync(silent bool) {
+	if a.checkingUpdate {
+		return
+	}
+	a.checkingUpdate = true
+	a.updateErr = ""
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		client, _ := a.netPool.Client(true)
+		info, err := updater.CheckLatest(ctx, client, updater.DefaultLatestReleaseURL, config.AppVersion)
+		a.dispatchUI(func() {
+			a.checkingUpdate = false
+			if err != nil {
+				a.updateErr = err.Error()
+				if !silent {
+					a.setStatus(fmt.Sprintf(a.tr().StatusUpdateErrFmt, err), true)
+				}
+				return
+			}
+			a.updateInfo = &info
+			if info.HasUpdate {
+				a.setStatus(fmt.Sprintf(a.tr().StatusUpdateAvailFmt, info.LatestVersion, info.CurrentVersion), false)
+			} else if !silent {
+				a.setStatus(fmt.Sprintf(a.tr().StatusUpToDateFmt, info.CurrentVersion), false)
+			}
+		})
+	}()
+}
+
+func (a *App) openReleasePage() {
+	target := "https://github.com/cxxzsh/locloom/releases"
+	if a.updateInfo != nil && strings.TrimSpace(a.updateInfo.HTMLURL) != "" {
+		target = a.updateInfo.HTMLURL
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", target)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+	default:
+		cmd = exec.Command("xdg-open", target)
+	}
+	_ = cmd.Start()
+}
+
+// OnInteractiveReady runs startup tasks for interactive desktop sessions (first-run onboarding & update check).
+func (a *App) OnInteractiveReady() {
+	if !a.cfg.HasSeenOnboarding && !a.showHelp {
+		a.showOnboarding = true
+	}
+	if a.cfg.CheckUpdatesOnStartup {
+		a.checkUpdatesAsync(true)
+	}
 }

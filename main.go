@@ -98,6 +98,7 @@ func main() {
 			Content:  ui.View(application.View),
 		})
 		application.SetWindow(win)
+		application.OnInteractiveReady()
 	})
 
 	if err := mygo.App.Run(); err != nil {

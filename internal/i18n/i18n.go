@@ -326,6 +326,33 @@ type Catalog struct {
 	ExportScopeAll      string
 	ExportScopeGaps     string
 	ExportScopeChanges  string
+	BtnSettings              string
+	TipSettings              string
+	SettingsModalTitle       string
+	SettingsTabGeneral       string
+	SettingsTabNetwork       string
+	SettingsTabUpdates       string
+	LabelUILang              string
+	LabelThemeMode           string
+	LabelCurrentVersionFmt   string
+	CheckAutoUpdate          string
+	BtnCheckUpdates          string
+	BtnCheckingUpdates       string
+	StatusUpToDateFmt        string
+	StatusUpdateAvailFmt     string
+	StatusUpdateErrFmt       string
+	BtnOpenReleasePage       string
+	BtnOpenOnboarding        string
+	PipelineSummaryFmt       string
+	OnboardingTitle          string
+	OnboardingSubtitle       string
+	OnboardingStep1Title     string
+	OnboardingStep1Desc      string
+	OnboardingStep2Title     string
+	OnboardingStep2Desc      string
+	OnboardingStep3Title     string
+	OnboardingStep3Desc      string
+	BtnOnboardingStart       string
 	ExportScopeWarnings string
 	ExportDescAll       string
 	ExportDescGaps      string
@@ -623,6 +650,33 @@ var zhCatalog = Catalog{
 	LogCountFmt:         "共 %d 条运行日志",
 	BtnCopyLogs:         "复制日志",
 	BtnClearLogs:        "清空日志",
+	BtnSettings:              "设置",
+	TipSettings:              "打开全局设置（外观、语言、网络代理、缓存与自动更新）",
+	SettingsModalTitle:       "LocLoom 设置",
+	SettingsTabGeneral:       "通用与外观",
+	SettingsTabNetwork:       "代理与缓存",
+	SettingsTabUpdates:       "更新与引导",
+	LabelUILang:              "界面语言",
+	LabelThemeMode:           "外观主题",
+	LabelCurrentVersionFmt:   "当前版本：v%s",
+	CheckAutoUpdate:          "启动时自动检查更新",
+	BtnCheckUpdates:          "立即检查更新",
+	BtnCheckingUpdates:       "正在检查...",
+	StatusUpToDateFmt:        "已是最新版本 (v%s)",
+	StatusUpdateAvailFmt:     "发现新版本 v%s（当前 v%s）",
+	StatusUpdateErrFmt:       "检查更新失败：%v",
+	BtnOpenReleasePage:       "前往下载新版本",
+	BtnOpenOnboarding:        "重新查看新手引导",
+	PipelineSummaryFmt:       "并发 %d · 缓存 %d 条 · %s",
+	OnboardingTitle:          "欢迎使用 LocLoom",
+	OnboardingSubtitle:       "原位无损本地化工作台 · 3 步快速上手",
+	OnboardingStep1Title:     "1. 加载项目文件",
+	OnboardingStep1Desc:      "点击顶部「打开目录 / 打开文件」，或直接将文件夹 / .zip / .xlsx 拖入窗口。支持 .ts、.po、.json、.arb、.xcstrings、strings.xml、.resx、.xliff。",
+	OnboardingStep2Title:     "2. 配置引擎并并发翻译",
+	OnboardingStep2Desc:      "在左侧「管线」启用免费在线源（Google / Bing / LibreTranslate / MyMemory）或自有 API，点击顶部「开始并发翻译」。",
+	OnboardingStep3Title:     "3. 精修校对并写回保存",
+	OnboardingStep3Desc:      "在表格或底部精修区检查译文与 [⚠] 占位符告警，确认无误后点击「写回保存」原位无损写入文件。",
+	BtnOnboardingStart:       "开始使用",
 	TipCopyLogs:  "复制全部运行日志到剪贴板",
 	TipClearLogs: "清空当前面板日志",
 
@@ -931,6 +985,33 @@ var enCatalog = Catalog{
 	BtnClearLogs:        "Clear Logs",
 	TipCopyLogs:  "Copy all logs to clipboard",
 	TipClearLogs: "Clear log panel",
+	BtnSettings:              "Settings",
+	TipSettings:              "Open global settings (appearance, language, proxy, cache, and updates)",
+	SettingsModalTitle:       "LocLoom Settings",
+	SettingsTabGeneral:       "General",
+	SettingsTabNetwork:       "Proxy & Cache",
+	SettingsTabUpdates:       "Updates & Guide",
+	LabelUILang:              "Interface Language",
+	LabelThemeMode:           "Theme",
+	LabelCurrentVersionFmt:   "Current version: v%s",
+	CheckAutoUpdate:          "Check for updates on startup",
+	BtnCheckUpdates:          "Check for Updates",
+	BtnCheckingUpdates:       "Checking...",
+	StatusUpToDateFmt:        "You're up to date (v%s)",
+	StatusUpdateAvailFmt:     "Update available: v%s (current v%s)",
+	StatusUpdateErrFmt:       "Update check failed: %v",
+	BtnOpenReleasePage:       "Download Latest Release",
+	BtnOpenOnboarding:        "Show Onboarding Guide",
+	PipelineSummaryFmt:       "Workers %d · Cache %d · %s",
+	OnboardingTitle:          "Welcome to LocLoom",
+	OnboardingSubtitle:       "Lossless Localization Workbench · 3-Step Quick Start",
+	OnboardingStep1Title:     "1. Load Your Project",
+	OnboardingStep1Desc:      "Click Open Dir / Open File above, or drop a folder / .zip / .xlsx onto the window. Supports .ts, .po, .json, .arb, .xcstrings, strings.xml, .resx, .xliff.",
+	OnboardingStep2Title:     "2. Configure Engines & Translate",
+	OnboardingStep2Desc:      "Enable free web engines (Google / Bing / LibreTranslate / MyMemory) or your own API in Pipeline, then click Start Translate.",
+	OnboardingStep3Title:     "3. Review & Save Back",
+	OnboardingStep3Desc:      "Review translations and [⚠] placeholder warnings in the matrix or inspector, then click Save Back to patch files losslessly.",
+	BtnOnboardingStart:       "Get Started",
 
 	HelpModalTitle:      "LocLoom User Guide",
 	HelpFallbackMD:      "# LocLoom\n\nCross-platform concurrent localization and lossless patching workbench.",

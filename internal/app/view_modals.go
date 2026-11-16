@@ -1,11 +1,15 @@
 package app
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
+	"locloom/internal/provider"
 
+	"locloom/internal/config"
 	"locloom/internal/i18n"
 	"locloom/internal/sheet"
 )
@@ -70,6 +74,8 @@ func (a *App) viewModals(c *ui.Context) {
 			})
 		})
 	})
+	a.viewSettingsModal(c)
+	a.viewOnboardingModal(c)
 }
 
 func (a *App) localizedHelpMarkdown() string {
@@ -120,4 +126,326 @@ func stripReadmeLangSwitcher(md string) string {
 		out = append(out, line)
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func (a *App) viewSettingsModal(c *ui.Context) {
+	t := c.Theme()
+	tr := a.tr()
+
+	ui.Modal(c, &a.showSettings, func() {
+		ui.Column(c).Width(560).MaxWidth(560).MaxHeight(560).Gap(t.Space(2.5)).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, tr.SettingsModalTitle).FontSize(16).FontWeight(700).Grow(1)
+				if ui.Button(c, tr.BtnClose).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+					a.showSettings = false
+				}
+			})
+
+			ui.Tabs(c, &a.settingsTab, tr.SettingsTabGeneral, tr.SettingsTabNetwork, tr.SettingsTabUpdates).FillWidth()
+
+			ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+				ui.Column(c).Gap(t.Space(2.5)).Padding(t.Space(1)).Children(func() {
+					switch a.settingsTab {
+					case 0: // General & Appearance
+						ui.Column(c).Gap(t.Space(1)).Children(func() {
+							ui.Text(c, tr.LabelUILang).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+							langIdx := 0
+							if a.UILang() == i18n.LangEN {
+								langIdx = 1
+							}
+							if ui.Segmented(c, &langIdx, "中文", "English").FillEqually().Changed() {
+								if langIdx == 0 {
+									a.SetUILang(i18n.LangZH)
+								} else {
+									a.SetUILang(i18n.LangEN)
+								}
+							}
+						})
+
+						ui.Column(c).Gap(t.Space(1)).Children(func() {
+							ui.Text(c, tr.LabelThemeMode).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+							curTheme := a.effectiveThemeMode()
+							if ui.Segmented(c, &curTheme, tr.ThemeSystem, tr.ThemeLight, tr.ThemeDark).FillEqually().Changed() {
+								a.SetThemeMode(curTheme)
+							}
+						})
+
+						ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, tr.LabelGlobalConcurrency).FontSize(12).FontWeight(600).Grow(1)
+							if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency <= 1).Tooltip(tr.TipConcurrencyDec).Clicked() {
+								a.cfg.Concurrency--
+								a.scheduleConfigSave()
+							}
+							ui.Text(c, fmt.Sprintf("%d", a.cfg.Concurrency)).FontSize(13).FontWeight(600).Width(24).TextAlign(ui.Center)
+							if ui.Button(c, "+").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency >= 16).Tooltip(tr.TipConcurrencyInc).Clicked() {
+								a.cfg.Concurrency++
+								a.scheduleConfigSave()
+							}
+						})
+
+					case 1: // Proxy & Cache
+						ui.Column(c).Gap(t.Space(1)).Children(func() {
+							ui.Text(c, tr.SectionNetworkProxy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+							prevProxyEmpty := strings.TrimSpace(a.cfg.Proxy.ProxyURL) == ""
+							if ui.TextInput(c, &a.cfg.Proxy.ProxyURL).
+								Placeholder(tr.PlaceholderProxy).
+								Tooltip(tr.TipProxyURL).
+								Changed() {
+								a.netPool.Update(a.cfg.Proxy)
+								if prevProxyEmpty && strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" && !a.anyCloudProviderUsesProxy() {
+									a.setCloudProvidersUseProxy(true)
+								}
+								a.scheduleConfigSave()
+							}
+							if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).AlignSelf(ui.Start).Tooltip(tr.TipSkipTLS).Changed() {
+								a.netPool.Update(a.cfg.Proxy)
+								a.scheduleConfigSave()
+							}
+							if strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" {
+								useCloudProxy := a.allCloudProvidersUseProxy()
+								if ui.Checkbox(c, &useCloudProxy, tr.CheckProxyAllCloud).AlignSelf(ui.Start).Tooltip(tr.TipProxyAllCloud).Changed() {
+									a.setCloudProvidersUseProxy(useCloudProxy)
+									a.scheduleConfigSave()
+								}
+							}
+						})
+
+						ui.Divider(c)
+
+						ui.Column(c).Gap(t.Space(1)).Children(func() {
+							ui.Text(c, tr.SectionConcurrencyCache).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+							ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+								if ui.Checkbox(c, &a.cfg.BypassCache, tr.CheckBypassCache).Tooltip(tr.TipBypassCache).Changed() {
+									a.scheduleConfigSave()
+								}
+								ui.Spacer(c)
+								cacheLen := 0
+								if a.cache != nil {
+									cacheLen = a.cache.Len()
+								}
+								if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Tooltip(tr.TipClearCache).Clicked() {
+									if a.cache != nil {
+										_ = a.cache.Clear()
+										a.setStatus(tr.StatusCacheCleared, false)
+									}
+								}
+							})
+							if a.cache != nil && a.cache.Len() > 0 {
+								isEN := a.UILang() == "en"
+								locCounts := a.cache.CountsByLocale()
+								provCounts := a.cache.CountsByProvider()
+
+								allLocLbl := "全部语种"
+								allProvLbl := "全部引擎"
+								searchPlaceholder := "搜索源文 / 译文…"
+								clearFilteredFmt := "清理筛选 (%d)"
+								if isEN {
+									allLocLbl = "All Locales"
+									allProvLbl = "All Engines"
+									searchPlaceholder = "Search source / translation…"
+									clearFilteredFmt = "Clear Filtered (%d)"
+								}
+
+								locIDs := make([]string, 0, len(locCounts))
+								for id := range locCounts {
+									locIDs = append(locIDs, id)
+								}
+								slices.Sort(locIDs)
+								locLabels := make([]string, 0, len(locIDs)+1)
+								locLabels = append(locLabels, allLocLbl)
+								for _, id := range locIDs {
+									locLabels = append(locLabels, fmt.Sprintf("%s (%d)", a.localeSelectLabel(id), locCounts[id]))
+								}
+								curLocLbl := allLocLbl
+								if idx := slices.Index(locIDs, a.cacheClearLocale); idx >= 0 {
+									curLocLbl = locLabels[idx+1]
+								} else {
+									a.cacheClearLocale = ""
+								}
+
+								provIDs := make([]string, 0, len(provCounts))
+								for id := range provCounts {
+									provIDs = append(provIDs, id)
+								}
+								slices.Sort(provIDs)
+								provLabels := make([]string, 0, len(provIDs)+1)
+								provLabels = append(provLabels, allProvLbl)
+								for _, id := range provIDs {
+									provLabels = append(provLabels, fmt.Sprintf("%s (%d)", id, provCounts[id]))
+								}
+								curProvLbl := allProvLbl
+								if idx := slices.Index(provIDs, a.cacheClearProvider); idx >= 0 {
+									curProvLbl = provLabels[idx+1]
+								} else {
+									a.cacheClearProvider = ""
+								}
+
+								entries := a.cache.Entries()
+								q := strings.ToLower(strings.TrimSpace(a.cacheSearchQuery))
+								filtered := make([]provider.CacheEntry, 0, len(entries))
+								filteredKeys := make([]string, 0, len(entries))
+								for _, e := range entries {
+									if a.cacheClearLocale != "" && e.TargetLocale != a.cacheClearLocale {
+										continue
+									}
+									if a.cacheClearProvider != "" && e.ProviderID != a.cacheClearProvider {
+										continue
+									}
+									if q != "" {
+										if !strings.Contains(strings.ToLower(e.Source), q) &&
+											!strings.Contains(strings.ToLower(e.Translated), q) &&
+											!strings.Contains(strings.ToLower(e.TargetLocale), q) &&
+											!strings.Contains(strings.ToLower(e.ProviderID), q) {
+											continue
+										}
+									}
+									filtered = append(filtered, e)
+									filteredKeys = append(filteredKeys, e.Key)
+								}
+
+								ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+									ui.TextInput(c, &a.cacheSearchQuery).Placeholder(searchPlaceholder).Grow(1)
+									if ui.Select(c, &curLocLbl, locLabels).Width(150).Changed() {
+										if curLocLbl == allLocLbl {
+											a.cacheClearLocale = ""
+										} else if idx := slices.Index(locLabels, curLocLbl); idx > 0 {
+											a.cacheClearLocale = locIDs[idx-1]
+										}
+									}
+									if ui.Select(c, &curProvLbl, provLabels).Width(120).Changed() {
+										if curProvLbl == allProvLbl {
+											a.cacheClearProvider = ""
+										} else if idx := slices.Index(provLabels, curProvLbl); idx > 0 {
+											a.cacheClearProvider = provIDs[idx-1]
+										}
+									}
+									if len(filteredKeys) > 0 {
+										if ui.Button(c, fmt.Sprintf(clearFilteredFmt, len(filteredKeys))).Padding(t.Space(0.5), t.Space(1.5)).Clicked() {
+											n := a.cache.DeleteKeys(filteredKeys)
+											a.setStatus(fmt.Sprintf("%s (%d)", tr.StatusCacheCleared, n), false)
+										}
+									}
+								})
+
+								ui.Scroll(c).MaxHeight(200).Border(1, t.Border).Radius(6).Padding(t.Space(0.5)).Children(func() {
+									ui.Column(c).Gap(2).Children(func() {
+										limit := min(len(filtered), 100)
+										for i := 0; i < limit; i++ {
+											e := filtered[i]
+											ui.Row(c).Gap(t.Space(1)).Padding(t.Space(0.4), t.Space(0.8)).AlignItems(ui.Center).Children(func() {
+												ui.Text(c, e.ProviderID).FontSize(11).TextColor(t.TextMuted).Width(72).Shrink(0)
+												ui.Text(c, e.TargetLocale).FontSize(11).TextColor(t.Accent).Width(48).Shrink(0)
+												summary := strings.ReplaceAll(e.Source, "\n", " ") + " → " + strings.ReplaceAll(e.Translated, "\n", " ")
+												ui.Text(c, summary).FontSize(11).Grow(1)
+												if ui.Button(c, "×").Padding(0, t.Space(0.8)).Clicked() {
+													if a.cache.DeleteKey(e.Key) {
+														a.setStatus(fmt.Sprintf("%s (1)", tr.StatusCacheCleared), false)
+													}
+												}
+											})
+										}
+										if len(filtered) > 100 {
+											moreTxt := fmt.Sprintf("仅显示前 100 条（共 %d 条），请使用搜索或筛选缩小范围", len(filtered))
+											if isEN {
+												moreTxt = fmt.Sprintf("Showing first 100 of %d entries; filter to narrow down", len(filtered))
+											}
+											ui.Text(c, moreTxt).FontSize(11).TextColor(t.TextMuted).Padding(t.Space(0.5), t.Space(1))
+										}
+									})
+								})
+							}
+						})
+
+					case 2: // Updates & Onboarding
+						ui.Column(c).Gap(t.Space(1.5)).Children(func() {
+							ui.Text(c, fmt.Sprintf(tr.LabelCurrentVersionFmt, config.AppVersion)).FontSize(13).FontWeight(600)
+							if ui.Checkbox(c, &a.cfg.CheckUpdatesOnStartup, tr.CheckAutoUpdate).AlignSelf(ui.Start).Changed() {
+								a.scheduleConfigSave()
+							}
+							ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+								lbl := tr.BtnCheckUpdates
+								if a.checkingUpdate {
+									lbl = tr.BtnCheckingUpdates
+								}
+								if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Disabled(a.checkingUpdate).Clicked() {
+									a.checkUpdatesAsync(false)
+								}
+								if a.updateInfo != nil && a.updateInfo.HasUpdate {
+									if ui.Button(c, tr.BtnOpenReleasePage).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+										a.openReleasePage()
+									}
+								}
+							})
+							if a.updateErr != "" {
+								ui.Text(c, fmt.Sprintf(tr.StatusUpdateErrFmt, a.updateErr)).FontSize(12).TextColor(t.Danger)
+							} else if a.updateInfo != nil {
+								if a.updateInfo.HasUpdate {
+									ui.Text(c, fmt.Sprintf(tr.StatusUpdateAvailFmt, a.updateInfo.LatestVersion, a.updateInfo.CurrentVersion)).
+										FontSize(12).FontWeight(600).TextColor(t.Accent)
+								} else {
+									ui.Text(c, fmt.Sprintf(tr.StatusUpToDateFmt, a.updateInfo.CurrentVersion)).
+										FontSize(12).TextColor(t.Success)
+								}
+							}
+						})
+
+						ui.Divider(c)
+
+						ui.Row(c).AlignItems(ui.Center).Children(func() {
+							if ui.Button(c, tr.BtnOpenOnboarding).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+								a.showSettings = false
+								a.showOnboarding = true
+							}
+						})
+					}
+				})
+			})
+		})
+	})
+}
+
+func (a *App) viewOnboardingModal(c *ui.Context) {
+	t := c.Theme()
+	tr := a.tr()
+
+	ui.Modal(c, &a.showOnboarding, func() {
+		ui.Column(c).Width(560).MaxWidth(560).Gap(t.Space(2.5)).Children(func() {
+			ui.Column(c).Gap(t.Space(0.5)).Children(func() {
+				ui.Text(c, tr.OnboardingTitle).FontSize(18).FontWeight(700)
+				ui.Text(c, tr.OnboardingSubtitle).FontSize(12).TextColor(t.TextMuted)
+			})
+			ui.Divider(c)
+
+			steps := []struct {
+				title string
+				desc  string
+			}{
+				{tr.OnboardingStep1Title, tr.OnboardingStep1Desc},
+				{tr.OnboardingStep2Title, tr.OnboardingStep2Desc},
+				{tr.OnboardingStep3Title, tr.OnboardingStep3Desc},
+			}
+			for _, st := range steps {
+				ui.Column(c).
+					Padding(t.Space(1.5), t.Space(2)).
+					Gap(t.Space(0.5)).
+					Background(t.Surface).
+					Border(1, t.Border).
+					Radius(t.Radius).
+					Children(func() {
+						ui.Text(c, st.title).FontSize(13).FontWeight(600).TextColor(t.Accent)
+						ui.Text(c, st.desc).FontSize(12).TextColor(t.TextMuted)
+					})
+			}
+
+			ui.Row(c).Justify(ui.End).Gap(t.Space(2)).Children(func() {
+				if ui.PrimaryButton(c, tr.BtnOnboardingStart).Padding(t.Space(1.5), t.Space(3.5)).Clicked() {
+					a.showOnboarding = false
+					if !a.cfg.HasSeenOnboarding {
+						a.cfg.HasSeenOnboarding = true
+						a.scheduleConfigSave()
+					}
+				}
+			})
+		})
+	})
 }

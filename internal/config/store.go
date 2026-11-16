@@ -15,6 +15,8 @@ import (
 )
 
 const configFileName = "config.json"
+// AppVersion is the current application semantic version (aligned with mygo.json).
+const AppVersion = "0.1.1"
 
 // AppConfig persists user preferences, proxy configuration, dynamic locales, and per-provider settings.
 type AppConfig struct {
@@ -31,6 +33,8 @@ type AppConfig struct {
 	EnablePluralForms bool                        `json:"enable_plural_forms"`
 	BypassCache      bool                         `json:"bypass_cache"`
 	Concurrency      int                          `json:"concurrency"`
+	HasSeenOnboarding     bool `json:"has_seen_onboarding"`
+	CheckUpdatesOnStartup bool `json:"check_updates_on_startup"`
 	LastTSPath       string                       `json:"last_ts_path,omitempty"`
 	LastXLSXPath     string                       `json:"last_xlsx_path,omitempty"`
 	Proxy            netpool.ProxyConfig          `json:"proxy"`
@@ -56,6 +60,8 @@ func Default() AppConfig {
 		CreateBackup:     true,
 		BypassCache:      false,
 		Concurrency:      4,
+		HasSeenOnboarding:     false,
+		CheckUpdatesOnStartup: true,
 		Proxy: netpool.ProxyConfig{
 			ProxyURL:      "",
 			SkipTLSVerify: false,

@@ -208,66 +208,30 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 
 	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Gap(t.Space(2.5)).Padding(t.Space(1)).Children(func() {
-			// Concurrency & Cache
-			ui.Text(c, tr.SectionConcurrencyCache).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
-			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, tr.LabelGlobalConcurrency).FontSize(12).Grow(1)
-				if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency <= 1).Tooltip(tr.TipConcurrencyDec).Clicked() {
-					a.cfg.Concurrency--
-					a.scheduleConfigSave()
-				}
-				ui.Text(c, fmt.Sprintf("%d", a.cfg.Concurrency)).FontSize(13).FontWeight(600).Width(24).TextAlign(ui.Center)
-				if ui.Button(c, "+").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency >= 16).Tooltip(tr.TipConcurrencyInc).Clicked() {
-					a.cfg.Concurrency++
-					a.scheduleConfigSave()
-				}
-			})
-
-			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				if ui.Checkbox(c, &a.cfg.BypassCache, tr.CheckBypassCache).Tooltip(tr.TipBypassCache).Changed() {
-					a.scheduleConfigSave()
-				}
-				ui.Spacer(c)
-				cacheLen := 0
-				if a.cache != nil {
-					cacheLen = a.cache.Len()
-				}
-				if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Tooltip(tr.TipClearCache).Clicked() {
-					if a.cache != nil {
-						_ = a.cache.Clear()
-						a.setStatus(tr.StatusCacheCleared, false)
+			// Compact summary of Concurrency / Cache / Proxy (full controls live in Settings modal)
+			cacheLen := 0
+			if a.cache != nil {
+				cacheLen = a.cache.Len()
+			}
+			proxyLabel := tr.LabelNone
+			if p := strings.TrimSpace(a.cfg.Proxy.ProxyURL); p != "" {
+				proxyLabel = p
+			}
+			ui.Row(c).
+				Padding(t.Space(1.5), t.Space(2)).
+				Gap(t.Space(1.5)).
+				AlignItems(ui.Center).
+				Background(t.Surface).
+				Border(1, t.Border).
+				Radius(t.Radius).
+				Children(func() {
+					ui.Text(c, fmt.Sprintf(tr.PipelineSummaryFmt, a.cfg.Concurrency, cacheLen, proxyLabel)).
+						FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0)
+					if ui.Button(c, tr.BtnSettings).Padding(t.Space(0.5), t.Space(2)).Tooltip(tr.TipSettings).Clicked() {
+						a.settingsTab = 1
+						a.showSettings = true
 					}
-				}
-			})
-
-			ui.Divider(c)
-
-			// Network & Proxy
-			ui.Text(c, tr.SectionNetworkProxy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
-			prevProxyEmpty := strings.TrimSpace(a.cfg.Proxy.ProxyURL) == ""
-			if ui.TextInput(c, &a.cfg.Proxy.ProxyURL).
-				Placeholder(tr.PlaceholderProxy).
-				Tooltip(tr.TipProxyURL).
-				Changed() {
-				a.netPool.Update(a.cfg.Proxy)
-				if prevProxyEmpty && strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" && !a.anyCloudProviderUsesProxy() {
-					a.setCloudProvidersUseProxy(true)
-				}
-				a.scheduleConfigSave()
-			}
-			if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).AlignSelf(ui.Start).Tooltip(tr.TipSkipTLS).Changed() {
-				a.netPool.Update(a.cfg.Proxy)
-				a.scheduleConfigSave()
-			}
-			if strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" {
-				useCloudProxy := a.allCloudProvidersUseProxy()
-				if ui.Checkbox(c, &useCloudProxy, tr.CheckProxyAllCloud).AlignSelf(ui.Start).Tooltip(tr.TipProxyAllCloud).Changed() {
-					a.setCloudProvidersUseProxy(useCloudProxy)
-					a.scheduleConfigSave()
-				}
-			}
-
-			ui.Divider(c)
+				})
 
 			// Ordered Waterfall Provider Cards
 			ui.Row(c).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {

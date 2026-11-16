@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 
 	"locloom/internal/platform"
@@ -177,4 +178,160 @@ func (c *Cache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.data)
+}
+
+// ClearByLocale removes all cached entries for the given targetLocale and returns the number removed.
+func (c *Cache) ClearByLocale(targetLocale string) int {
+	return c.clearWhere(func(providerID, locale string) bool {
+		return locale == targetLocale
+	})
+}
+
+// ClearByProvider removes all cached entries for the given providerID and returns the number removed.
+func (c *Cache) ClearByProvider(providerID string) int {
+	return c.clearWhere(func(prov, locale string) bool {
+		return prov == providerID
+	})
+}
+
+func (c *Cache) clearWhere(match func(providerID, targetLocale string) bool) int {
+	c.mu.Lock()
+	removed := 0
+	kept := make([]string, 0, len(c.order))
+	for _, k := range c.order {
+		parts := strings.SplitN(k, "\x00", 4)
+		prov, loc := "", ""
+		if len(parts) >= 2 {
+			prov, loc = parts[0], parts[1]
+		}
+		if match(prov, loc) {
+			delete(c.data, k)
+			removed++
+		} else {
+			kept = append(kept, k)
+		}
+	}
+	for k := range c.data {
+		parts := strings.SplitN(k, "\x00", 4)
+		prov, loc := "", ""
+		if len(parts) >= 2 {
+			prov, loc = parts[0], parts[1]
+		}
+		if match(prov, loc) {
+			delete(c.data, k)
+			removed++
+		}
+	}
+	c.order = kept
+	if removed > 0 {
+		c.dirty = true
+	}
+	c.mu.Unlock()
+	if removed > 0 {
+		_ = c.Save()
+	}
+	return removed
+}
+
+// CountsByLocale returns the number of cached entries per target locale.
+func (c *Cache) CountsByLocale() map[string]int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]int)
+	for k := range c.data {
+		if parts := strings.SplitN(k, "\x00", 4); len(parts) >= 2 && parts[1] != "" {
+			out[parts[1]]++
+		}
+	}
+	return out
+}
+
+// CountsByProvider returns the number of cached entries per provider ID.
+func (c *Cache) CountsByProvider() map[string]int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]int)
+	for k := range c.data {
+		if parts := strings.SplitN(k, "\x00", 4); len(parts) >= 1 && parts[0] != "" {
+			out[parts[0]]++
+		}
+	}
+	return out
+}
+
+// CacheEntry represents a single cached translation entry for inspection/deletion.
+type CacheEntry struct {
+	Key          string
+	ProviderID   string
+	TargetLocale string
+	ContextName  string
+	Source       string
+	Translated   string
+}
+
+// Entries returns all cached entries sorted by key.
+func (c *Cache) Entries() []CacheEntry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]CacheEntry, 0, len(c.data))
+	for k, v := range c.data {
+		parts := strings.SplitN(k, "\x00", 4)
+		e := CacheEntry{Key: k, Translated: v}
+		if len(parts) >= 1 {
+			e.ProviderID = parts[0]
+		}
+		if len(parts) >= 2 {
+			e.TargetLocale = parts[1]
+		}
+		if len(parts) >= 3 {
+			e.ContextName = parts[2]
+		}
+		if len(parts) >= 4 {
+			e.Source = parts[3]
+		}
+		out = append(out, e)
+	}
+	slices.SortFunc(out, func(a, b CacheEntry) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+	return out
+}
+
+// DeleteKey removes a single cached entry by its exact key.
+func (c *Cache) DeleteKey(key string) bool {
+	return c.DeleteKeys([]string{key}) > 0
+}
+
+// DeleteKeys removes all specified keys from the cache and saves to disk.
+func (c *Cache) DeleteKeys(keys []string) int {
+	if len(keys) == 0 {
+		return 0
+	}
+	delSet := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		delSet[k] = struct{}{}
+	}
+	c.mu.Lock()
+	removed := 0
+	for k := range delSet {
+		if _, ok := c.data[k]; ok {
+			delete(c.data, k)
+			removed++
+		}
+	}
+	if removed > 0 {
+		kept := make([]string, 0, len(c.order))
+		for _, k := range c.order {
+			if _, ok := delSet[k]; !ok {
+				kept = append(kept, k)
+			}
+		}
+		c.order = kept
+		c.dirty = true
+	}
+	c.mu.Unlock()
+	if removed > 0 {
+		_ = c.Save()
+	}
+	return removed
 }

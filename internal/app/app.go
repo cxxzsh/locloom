@@ -21,6 +21,7 @@ import (
 	"locloom/internal/netpool"
 	"locloom/internal/planner"
 	"locloom/internal/provider"
+	"locloom/internal/updater"
 	_ "locloom/internal/providers"
 	"locloom/internal/sheet"
 )
@@ -65,6 +66,12 @@ type App struct {
 	pendingTableOps []func()
 	// Modals & popovers
 	showHelp        bool
+	showSettings    bool
+	settingsTab     int
+	showOnboarding  bool
+	checkingUpdate  bool
+	updateInfo      *updater.ReleaseInfo
+	updateErr       string
 	helpMarkdown    string
 	helpMarkdownZH  string
 	mdOpts          markdown.Options
@@ -86,6 +93,9 @@ type App struct {
 	// Locale sidebar search
 	localeSearchQuery string
 	// Custom locale form
+	cacheClearLocale   string
+	cacheClearProvider string
+	cacheSearchQuery   string
 	newLocID   string
 	newLocName string
 	newLocCode string
@@ -695,6 +705,14 @@ func (a *App) View(c *ui.Context) {
 				a.showHelp = false
 			} else if a.showExportModal {
 				a.showExportModal = false
+			} else if a.showSettings {
+				a.showSettings = false
+			} else if a.showOnboarding {
+				a.showOnboarding = false
+				if !a.cfg.HasSeenOnboarding {
+					a.cfg.HasSeenOnboarding = true
+					a.scheduleConfigSave()
+				}
 			}
 		}
 		if c.Shortcut(0, ui.KeyF3) || c.Shortcut(ui.Alt, ui.KeyDown) {
