@@ -95,9 +95,9 @@ Status badges are strictly for UI preview and are **never** written to localizat
 
 | Badge | Meaning | Behavior |
 | :--- | :--- | :--- |
-| **`[补]`** | Fill Gap | Original entry is `unfinished` or empty; writes translation and removes `type="unfinished"` |
-| **`[改]`** | Overwrite | Shown only in Overwrite mode; replaces an existing finished translation |
-| **`[新]` / `[加]`** | Append Missing | Shown when Append Missing is enabled; inserts a new entry into the target `<context>` |
+| **`[Fill]`** | Fill Gap | Original entry is `unfinished` or empty; writes translation and removes `type="unfinished"` |
+| **`[Over]`** | Overwrite | Shown only in Overwrite mode; replaces an existing finished translation |
+| **`[Add]`** | Append Missing | Shown when Append Missing is enabled; inserts a new entry into the target `<context>` |
 | **`[⚠]`** | Format Warning | Placeholder count (`%1` / `%n`), mask token, or trailing `\t` differs from the source text |
 
 ## 4. OS Configuration & Cache Paths
