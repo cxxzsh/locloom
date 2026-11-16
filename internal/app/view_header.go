@@ -92,11 +92,12 @@ func (a *App) viewHeader(c *ui.Context) {
 						Background(t.Danger).
 						TextColor(t.AccentText).
 						Padding(t.Space(1.5), t.Space(3)).
+						Tooltip(tr.TipStopTranslate).
 						Clicked() {
 						a.stopTranslation()
 					}
 				} else {
-					btn := ui.PrimaryButton(c, "").Padding(t.Space(1.5), t.Space(3))
+					btn := ui.PrimaryButton(c, "").Padding(t.Space(1.5), t.Space(3)).Tooltip(tr.TipStartTranslate)
 					btn.Children(func() {
 						ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 							ui.Icon(c, iconPlay).Size(14, 14)

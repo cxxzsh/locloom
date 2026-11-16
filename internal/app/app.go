@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -713,7 +714,50 @@ func (a *App) View(c *ui.Context) {
 		a.viewHeader(c)
 		ui.Divider(c)
 
-		if a.statusBanner != "" {
+		if a.translating {
+			tr := a.tr()
+			frac := 0.0
+			if a.translateTotalCount > 0 {
+				frac = float64(a.translateDoneCount) / float64(a.translateTotalCount)
+			}
+			var activeParts []string
+			for locID, st := range a.translateStatuses {
+				if st.ActiveProvider != "" && st.Completed < st.Total {
+					activeParts = append(activeParts, fmt.Sprintf("%s (%s %d/%d)", locID, st.ActiveProvider, st.Completed, st.Total))
+				}
+			}
+			slices.Sort(activeParts)
+			detail := strings.Join(activeParts, " · ")
+			if len(activeParts) > 3 {
+				detail = strings.Join(activeParts[:3], " · ") + fmt.Sprintf(" (+%d)", len(activeParts)-3)
+			}
+			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(t.Accent.Alpha(0.10)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c)
+				ui.Text(c, fmt.Sprintf(tr.StatusTranslatingBannerFmt, a.translateDoneCount, a.translateTotalCount, frac*100)).
+					FontSize(12).FontWeight(600).TextColor(t.Accent).SingleLine()
+				if detail != "" {
+					ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0)
+				} else {
+					ui.Spacer(c)
+				}
+				ui.Column(c).Width(160).Children(func() {
+					ui.Progress(c, frac)
+				})
+				if ui.Button(c, tr.BtnStopTranslate).Padding(t.Space(0.5), t.Space(2)).Background(t.Danger).TextColor(t.AccentText).Tooltip(tr.TipStopTranslate).Clicked() {
+					a.stopTranslation()
+				}
+			})
+			ui.Divider(c)
+		} else if a.translatingRow {
+			tr := a.tr()
+			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(t.Accent.Alpha(0.10)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c)
+				ui.Text(c, a.statusBanner).FontSize(12).FontWeight(600).TextColor(t.Accent).SingleLine().Grow(1)
+				_ = tr
+			})
+			ui.Divider(c)
+		} else if a.statusBanner != "" {
+			// Static status banner shown when no translation is active
 			bg := t.Surface
 			fg := t.Text
 			if a.statusBannerErr {

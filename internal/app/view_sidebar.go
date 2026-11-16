@@ -37,35 +37,64 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Gap(t.Space(2.5)).Padding(t.Space(1)).Children(func() {
 			// Write mode & options
-			ui.Text(c, tr.SectionWriteStrategy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
-			wm := int(a.cfg.WriteMode)
-			if ui.Segmented(c, &wm, tr.WriteModeFill, tr.WriteModeOverwrite).FillEqually().Cursor(ui.CursorPointer).Changed() {
-				a.cfg.WriteMode = domain.WriteMode(wm)
-				a.rebuildPlan()
-				a.scheduleConfigSave()
-			}
-
-			if ui.Checkbox(c, &a.cfg.AppendMissing, tr.CheckAppendMissing).Changed() {
-				a.rebuildPlan()
-				a.scheduleConfigSave()
-			}
-			if a.cfg.AppendMissing {
-				if ui.TextInput(c, &a.cfg.AppendContext).
-					Placeholder(tr.PlaceholderDefaultCtx).
-					Changed() {
-					a.defaultCtx = a.cfg.AppendContext
+			ui.Column(c).Gap(t.Space(1)).Children(func() {
+				ui.Text(c, tr.SectionWriteStrategy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+				wm := int(a.cfg.WriteMode)
+				if ui.Segmented(c, &wm, tr.WriteModeFill, tr.WriteModeOverwrite).FillEqually().Cursor(ui.CursorPointer).Tooltip(tr.TipWriteMode).Changed() {
+					a.cfg.WriteMode = domain.WriteMode(wm)
 					a.rebuildPlan()
 					a.scheduleConfigSave()
 				}
-			}
-			if ui.Checkbox(c, &a.cfg.CreateBackup, tr.CheckCreateBackup).Changed() {
+				wmDesc := tr.DescWriteModeFill
+				if a.cfg.WriteMode == domain.ModeOverwriteExisting {
+					wmDesc = tr.DescWriteModeOverwrite
+				}
+				ui.Text(c, wmDesc).FontSize(11).TextColor(t.TextMuted)
+			})
+			ui.Divider(c)
+
+			if ui.Checkbox(c, &a.cfg.CreateBackup, tr.CheckCreateBackup).AlignSelf(ui.Start).Tooltip(tr.TipCreateBackup).Changed() {
 				a.scheduleConfigSave()
 			}
-			if ui.Checkbox(c, &a.cfg.EnablePluralForms, tr.CheckPluralForms).Changed() {
+			if ui.Checkbox(c, &a.cfg.EnablePluralForms, tr.CheckPluralForms).AlignSelf(ui.Start).Tooltip(tr.TipPluralForms).Changed() {
 				a.editBoundLocale = ""
 				a.syncEditorFromSelection()
 				a.scheduleConfigSave()
 			}
+			ui.Column(c).Gap(t.Space(1)).Children(func() {
+				if ui.Checkbox(c, &a.cfg.AppendMissing, tr.CheckAppendMissing).AlignSelf(ui.Start).Tooltip(tr.TipAppendMissing).Changed() {
+					a.rebuildPlan()
+					a.scheduleConfigSave()
+				}
+				if a.cfg.AppendMissing {
+					ui.Column(c).Gap(t.Space(0.5)).Children(func() {
+						ui.Text(c, tr.LabelAppendContext).FontSize(11).TextColor(t.TextMuted)
+						var ctxChoices []string
+						if a.plan != nil {
+							for _, cn := range a.plan.Summary.ContextNames {
+								if strings.TrimSpace(cn) != "" {
+									ctxChoices = append(ctxChoices, cn)
+								}
+							}
+						}
+						if !slices.Contains(ctxChoices, "MainWindow") {
+							ctxChoices = append(ctxChoices, "MainWindow")
+						}
+						if !slices.Contains(ctxChoices, "Common") {
+							ctxChoices = append(ctxChoices, "Common")
+						}
+						if ui.Autocomplete(c, &a.cfg.AppendContext, ctxChoices).
+							Placeholder(tr.PlaceholderDefaultCtx).
+							Label(tr.LabelAppendContext).
+							Tooltip(tr.TipAppendMissing).
+							Changed() {
+							a.defaultCtx = a.cfg.AppendContext
+							a.rebuildPlan()
+							a.scheduleConfigSave()
+						}
+					})
+				}
+			})
 
 			ui.Divider(c)
 
@@ -144,7 +173,8 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 					Background(cardBg).
 					Border(1, borderCol).
 					Radius(t.Radius).
-					Cursor(ui.CursorPointer)
+					Cursor(ui.CursorPointer).
+					Tooltip(tr.TipLocaleProgressCard)
 				card.Children(func() {
 					ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 						ui.Text(c, fmt.Sprintf("%s · %s", locID, locName)).FontSize(12).FontWeight(600).SingleLine().Grow(1)
@@ -182,26 +212,27 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			ui.Text(c, tr.SectionConcurrencyCache).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, tr.LabelGlobalConcurrency).FontSize(12).Grow(1)
-				if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency <= 1).Clicked() {
+				if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency <= 1).Tooltip(tr.TipConcurrencyDec).Clicked() {
 					a.cfg.Concurrency--
 					a.scheduleConfigSave()
 				}
 				ui.Text(c, fmt.Sprintf("%d", a.cfg.Concurrency)).FontSize(13).FontWeight(600).Width(24).TextAlign(ui.Center)
-				if ui.Button(c, "+").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency >= 16).Clicked() {
+				if ui.Button(c, "+").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency >= 16).Tooltip(tr.TipConcurrencyInc).Clicked() {
 					a.cfg.Concurrency++
 					a.scheduleConfigSave()
 				}
 			})
 
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				if ui.Checkbox(c, &a.cfg.BypassCache, tr.CheckBypassCache).Grow(1).Changed() {
+				if ui.Checkbox(c, &a.cfg.BypassCache, tr.CheckBypassCache).Tooltip(tr.TipBypassCache).Changed() {
 					a.scheduleConfigSave()
 				}
+				ui.Spacer(c)
 				cacheLen := 0
 				if a.cache != nil {
 					cacheLen = a.cache.Len()
 				}
-				if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Clicked() {
+				if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Tooltip(tr.TipClearCache).Clicked() {
 					if a.cache != nil {
 						_ = a.cache.Clear()
 						a.setStatus(tr.StatusCacheCleared, false)
@@ -216,6 +247,7 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			prevProxyEmpty := strings.TrimSpace(a.cfg.Proxy.ProxyURL) == ""
 			if ui.TextInput(c, &a.cfg.Proxy.ProxyURL).
 				Placeholder(tr.PlaceholderProxy).
+				Tooltip(tr.TipProxyURL).
 				Changed() {
 				a.netPool.Update(a.cfg.Proxy)
 				if prevProxyEmpty && strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" && !a.anyCloudProviderUsesProxy() {
@@ -223,13 +255,13 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 				}
 				a.scheduleConfigSave()
 			}
-			if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).Changed() {
+			if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).AlignSelf(ui.Start).Tooltip(tr.TipSkipTLS).Changed() {
 				a.netPool.Update(a.cfg.Proxy)
 				a.scheduleConfigSave()
 			}
 			if strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" {
 				useCloudProxy := a.allCloudProvidersUseProxy()
-				if ui.Checkbox(c, &useCloudProxy, tr.CheckProxyAllCloud).Changed() {
+				if ui.Checkbox(c, &useCloudProxy, tr.CheckProxyAllCloud).AlignSelf(ui.Start).Tooltip(tr.TipProxyAllCloud).Changed() {
 					a.setCloudProvidersUseProxy(useCloudProxy)
 					a.scheduleConfigSave()
 				}
@@ -422,7 +454,7 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 					kindLabel = tr.BadgeLocal
 				}
 				ui.Badge(c, kindLabel).Shrink(0)
-				if ui.Switch(c, &enabled).Changed() {
+				if ui.Switch(c, &enabled).Tooltip(tr.TipProviderToggle).Changed() {
 					a.toggleProvider(pid, enabled)
 				}
 			})
@@ -443,7 +475,7 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 						switch field.Type {
 						case provider.FieldBool:
 							checked := curVal == "true" || curVal == "1"
-							if ui.Checkbox(c, &checked, field.Help).Changed() {
+							if ui.Checkbox(c, &checked, field.Help).AlignSelf(ui.Start).Changed() {
 								if checked {
 									vals[fKey] = "true"
 								} else {
@@ -483,7 +515,7 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 								if revealed {
 									toggleLbl = tr.BtnHideSecret
 								}
-								if ui.Button(c, toggleLbl).Padding(t.Space(1), t.Space(2)).Clicked() {
+								if ui.Button(c, toggleLbl).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipToggleSecret).Clicked() {
 									a.revealedSecrets[secretKey] = !revealed
 								}
 							})
@@ -496,7 +528,7 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
-								if ui.Button(c, tr.BtnBrowse).Padding(t.Space(1), t.Space(2)).Clicked() {
+								if ui.Button(c, tr.BtnBrowse).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipBrowseFile).Clicked() {
 									win := a.win
 									go func() {
 										opts := mygo.OpenDialogOptions{
@@ -537,12 +569,12 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 				// Actions row: Test Connectivity + Discover Models (if supported)
 				ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 					testing := a.providerTesting[pid]
-					if ui.Button(c, tr.BtnTestConn).Padding(t.Space(1), t.Space(2)).Disabled(testing).Clicked() {
+					if ui.Button(c, tr.BtnTestConn).Padding(t.Space(1), t.Space(2)).Disabled(testing).Tooltip(tr.TipTestConn).Clicked() {
 						a.testProviderAsync(pid)
 					}
 					if _, ok := p.(provider.ModelDiscoverer); ok {
 						disc := a.discoveringModels[pid]
-						if ui.Button(c, tr.BtnDiscoverModels).Padding(t.Space(1), t.Space(2)).Disabled(disc).Clicked() {
+						if ui.Button(c, tr.BtnDiscoverModels).Padding(t.Space(1), t.Space(2)).Disabled(disc).Tooltip(tr.TipDiscoverModels).Clicked() {
 							a.discoverModelsAsync(pid)
 						}
 					}
@@ -598,10 +630,10 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			})
 
 			ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
-				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Clicked() {
+				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipSelectAllLocales).Clicked() {
 					a.selectAllLocales(true)
 				}
-				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Clicked() {
+				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipDeselectAllLocales).Clicked() {
 					a.selectAllLocales(false)
 				}
 				if ui.Button(c, tr.BtnSyncBundleLocales).
@@ -616,12 +648,13 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			// FilePattern & Skeleton scaffold
 			ui.Column(c).Gap(t.Space(1)).Children(func() {
 				ui.Text(c, tr.LabelFilePattern).FontSize(11).TextColor(t.TextMuted)
-				if ui.TextInput(c, &a.cfg.FilePattern).Placeholder("{id}.ts").MinWidth(0).Changed() {
+				if ui.TextInput(c, &a.cfg.FilePattern).Placeholder("{id}.ts").MinWidth(0).Tooltip(tr.TipFilePattern).Changed() {
 					a.scheduleConfigSave()
 				}
 				if ui.Button(c, tr.BtnScaffoldTS).
 					Padding(t.Space(1), t.Space(2)).
 					Disabled(a.bundle == nil || a.bundle.Topology == format.TopologyMultiLocale).
+					Tooltip(tr.TipScaffoldTS).
 					Clicked() {
 					a.scaffoldMissingLocaleFiles()
 				}
@@ -651,7 +684,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 					Background(t.Surface).
 					Radius(t.Radius).
 					Children(func() {
-						if ui.Checkbox(c, &loc.Enabled, "").Disabled(loc.IsRef).Changed() {
+						if ui.Checkbox(c, &loc.Enabled, "").Disabled(loc.IsRef).Tooltip(tr.TipLocaleEnable).Changed() {
 							a.rebuildPlan()
 							a.scheduleConfigSave()
 						}
@@ -671,7 +704,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 						if loc.IsRef {
 							refLabel = tr.BtnIsRef
 						}
-						if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Disabled(loc.IsRef).Clicked() {
+						if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Disabled(loc.IsRef).Tooltip(tr.TipSetRef).Clicked() {
 							a.setRefLocale(loc.ID)
 						}
 						if !loc.IsRef {
@@ -693,7 +726,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 					ui.TextInput(c, &a.newLocName).Placeholder(tr.PlaceholderLocaleName).Grow(1).MinWidth(0)
 					ui.TextInput(c, &a.newLocCode).Placeholder(tr.PlaceholderEngineCode).Width(90).MinWidth(0)
 				})
-				if ui.Button(c, tr.BtnAddLocale).Padding(t.Space(1), t.Space(2)).Clicked() {
+				if ui.Button(c, tr.BtnAddLocale).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipAddLocale).Clicked() {
 					a.addCustomLocale()
 				}
 			})

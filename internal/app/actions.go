@@ -638,6 +638,8 @@ func (a *App) startTranslation() {
 	a.translateDoneCount = 0
 	a.translateTotalCount = totalItems
 	a.translateStatuses = make(map[string]provider.LocaleStatus)
+	a.statusBanner = ""
+	a.statusBannerErr = false
 	a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), totalItems, cfg.Concurrency))
 
 	go func() {
@@ -1270,6 +1272,7 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 	}
 
 	a.translatingRow = true
+	a.setStatus(fmt.Sprintf(a.tr().StatusTranslatingRowFmt, len(tasks)), false)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

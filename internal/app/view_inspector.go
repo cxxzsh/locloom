@@ -67,7 +67,7 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 					}
 					if row.Numerus {
 						ui.Badge(c, tr.BadgeNumerus).Shrink(0)
-						if ui.Checkbox(c, &a.cfg.EnablePluralForms, tr.CheckPluralForms).Changed() {
+						if ui.Checkbox(c, &a.cfg.EnablePluralForms, tr.CheckPluralForms).Tooltip(tr.TipPluralForms).Changed() {
 							a.editBoundLocale = ""
 							a.syncEditorFromSelection()
 							a.scheduleConfigSave()
@@ -95,7 +95,8 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 								Padding(t.Space(0.5), t.Space(2)).
 								Background(bg).
 								TextColor(fg).
-								Border(1, border)
+								Border(1, border).
+								Tooltip(tr.TipLocalePill)
 							if pill.Clicked() {
 								a.activeEditLocale = lid
 								a.syncEditorFromSelection()
@@ -127,7 +128,11 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 					badge, fg := formatCellStatusBadge(c, cell, tr)
 					ui.Text(c, badge).FontSize(11).TextColor(fg)
 					ui.Spacer(c)
-					if ui.Button(c, tr.BtnTranslateRow).
+					rowTransLabel := tr.BtnTranslateRow
+					if a.translatingRow {
+						rowTransLabel = tr.BtnTranslatingRow
+					}
+					if ui.Button(c, rowTransLabel).
 						Padding(t.Space(0.5), t.Space(1.5)).
 						Disabled(a.translating || a.translatingRow).
 						Tooltip(tr.TipTranslateRow).
@@ -146,13 +151,13 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 						Clicked() {
 						a.jumpGap(1)
 					}
-					if ui.Button(c, tr.BtnCopySrc).Padding(t.Space(0.5), t.Space(1.5)).Clicked() {
+					if ui.Button(c, tr.BtnCopySrc).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipCopySrc).Clicked() {
 						a.copySourceToClipboard()
 					}
-					if ui.Button(c, tr.BtnUseSrc).Padding(t.Space(0.5), t.Space(1.5)).Clicked() {
+					if ui.Button(c, tr.BtnUseSrc).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipUseSrc).Clicked() {
 						a.useSourceAsTranslation()
 					}
-					if ui.Button(c, tr.BtnResetCell).Padding(t.Space(0.5), t.Space(1.5)).Clicked() {
+					if ui.Button(c, tr.BtnResetCell).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipResetCell).Clicked() {
 						a.resetActiveCell()
 					}
 				})
@@ -243,10 +248,10 @@ func (a *App) viewDiagnosticsLogs(c *ui.Context) {
 
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, fmt.Sprintf(tr.LogCountFmt, len(a.logs))).FontSize(12).TextColor(t.TextMuted).Grow(1)
-		if ui.Button(c, tr.BtnCopyLogs).Padding(t.Space(1), t.Space(2)).Clicked() {
+		if ui.Button(c, tr.BtnCopyLogs).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipCopyLogs).Clicked() {
 			a.copyLogsToClipboard()
 		}
-		if ui.Button(c, tr.BtnClearLogs).Padding(t.Space(1), t.Space(2)).Clicked() {
+		if ui.Button(c, tr.BtnClearLogs).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipClearLogs).Clicked() {
 			a.logs = nil
 		}
 	})

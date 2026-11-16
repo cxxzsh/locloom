@@ -19,18 +19,18 @@ func (a *App) viewMatrix(c *ui.Context) {
 	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
 		// Filter & View Mode Toolbar (kept on 1 crisp line at 1280px)
 		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Wrap().Children(func() {
-			if ui.Segmented(c, &a.statusFilter, tr.FilterAll, tr.FilterGaps, tr.FilterPending, tr.FilterWarnings).Shrink(0).Changed() {
+			if ui.Segmented(c, &a.statusFilter, tr.FilterAll, tr.FilterGaps, tr.FilterPending, tr.FilterWarnings).Shrink(0).Tooltip(tr.TipStatusFilter).Changed() {
 				a.refilterRows()
 			}
 
-			if ui.Segmented(c, &a.cfg.MatrixViewMode, tr.ViewModeFocus, tr.ViewModeFull).Shrink(0).Changed() {
+			if ui.Segmented(c, &a.cfg.MatrixViewMode, tr.ViewModeFocus, tr.ViewModeFull).Shrink(0).Tooltip(tr.TipMatrixViewMode).Changed() {
 				a.scheduleConfigSave()
 			}
 
 			if a.cfg.MatrixViewMode == 0 {
 				ids := a.enabledNonRefIDs()
 				if len(ids) > 0 {
-					if ui.Select(c, &a.focusedLocale, ids).Width(92).Shrink(0).Changed() {
+					if ui.Select(c, &a.focusedLocale, ids).Width(92).Shrink(0).Tooltip(tr.TipFocusedLocale).Changed() {
 						a.activeEditLocale = a.focusedLocale
 						a.syncEditorFromSelection()
 					}
@@ -42,6 +42,7 @@ func (a *App) viewMatrix(c *ui.Context) {
 				Placeholder(tr.PlaceholderSearch).
 				Grow(1).
 				MinWidth(90).
+				Tooltip(tr.TipSearchField).
 				Changed() {
 				a.refilterRows()
 			}
@@ -52,7 +53,7 @@ func (a *App) viewMatrix(c *ui.Context) {
 				if m.Item(tr.MenuClearAll).Chosen() {
 					a.clearAllTranslations()
 				}
-			}).Shrink(0)
+			}).Shrink(0).Tooltip(tr.TipMenuClear)
 		})
 
 		if a.plan == nil || len(a.filteredRows) == 0 {

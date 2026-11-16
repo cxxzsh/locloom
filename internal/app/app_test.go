@@ -1019,3 +1019,49 @@ func TestBuildTranslationTasksRespectsWriteModeOverwrite(t *testing.T) {
 		t.Fatalf("expected Open and Save in overwrite mode (skipping vanished), got total=%d tasks=%+v", overTotal, overTasks["ja_JP"])
 	}
 }
+
+func TestSidebarCheckboxesDoNotStretchToBlankAreaAndAppendContextTyping(t *testing.T) {
+	a := newTestApp()
+	a.cfg.CreateBackup = false
+	a.cfg.EnablePluralForms = false
+	a.cfg.AppendMissing = false
+
+	tt := ui.NewTester(a.View, 1280, 820)
+	tr := a.tr()
+
+	for _, label := range []string{tr.CheckCreateBackup, tr.CheckPluralForms, tr.CheckAppendMissing} {
+		rect, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("expected to find checkbox %q", label)
+		}
+		if rect.W > 220 {
+			t.Fatalf("checkbox %q stretched too wide across blank area: width=%.1f", label, rect.W)
+		}
+		// Clicking in the blank area to the right of the checkbox must not toggle it.
+		blankX := rect.X + rect.W + 30
+		midY := rect.Y + rect.H/2
+		tt.ClickAt(blankX, midY)
+	}
+	if a.cfg.CreateBackup || a.cfg.EnablePluralForms || a.cfg.AppendMissing {
+		t.Fatalf("clicking blank space to the right of checkboxes should not toggle them: backup=%v plural=%v append=%v",
+			a.cfg.CreateBackup, a.cfg.EnablePluralForms, a.cfg.AppendMissing)
+	}
+
+	// Clicking the checkbox itself enables AppendMissing and reveals the editable group input.
+	tt.Click(tr.CheckAppendMissing)
+	if !a.cfg.AppendMissing {
+		t.Fatalf("expected AppendMissing=true after clicking checkbox")
+	}
+	lblRect, ok := tt.Find(tr.LabelAppendContext)
+	if !ok {
+		t.Fatalf("expected to find %q", tr.LabelAppendContext)
+	}
+	tt.ClickAt(lblRect.X+20, lblRect.Y+lblRect.H+14)
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("CustomDialogGroup")
+	// Click outside to blur and verify free-typed text does not revert.
+	tt.Click(tr.SectionWriteStrategy)
+	if a.cfg.AppendContext != "CustomDialogGroup" {
+		t.Fatalf("expected AppendContext='CustomDialogGroup' after free typing and blur, got %q", a.cfg.AppendContext)
+	}
+}
