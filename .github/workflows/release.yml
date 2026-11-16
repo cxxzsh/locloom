@@ -101,8 +101,8 @@ jobs:
       matrix:
         include:
           - name: macOS
-            os: macos-latest
-            platform: "darwin/universal,darwin/arm64,darwin/amd64"
+            os: macos-15-intel
+            platform: "darwin/universal"
           - name: Windows
             os: ubuntu-latest
             platform: "windows/amd64,windows/arm64"
@@ -133,8 +133,6 @@ jobs:
           case "$MATRIX_NAME" in
             macOS)
               cp "build/darwin-universal/locloom-${VERSION}.dmg" "dist-assets/locloom-${VERSION}-macos-universal.dmg"
-              cp "build/darwin-arm64/locloom-${VERSION}-arm64.dmg" "dist-assets/locloom-${VERSION}-macos-arm64.dmg"
-              cp "build/darwin-amd64/locloom-${VERSION}-amd64.dmg" "dist-assets/locloom-${VERSION}-macos-amd64.dmg"
               ;;
             Windows)
               cp "build/windows-amd64/locloom-setup-${VERSION}-amd64.exe" "dist-assets/"
