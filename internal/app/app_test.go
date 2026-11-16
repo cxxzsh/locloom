@@ -951,3 +951,71 @@ func TestProviderDragReorderAndReset(t *testing.T) {
 		t.Fatalf("expected clicking Reset to restore %v, got %v", wantDef, a.cfg.ProviderOrder)
 	}
 }
+
+func TestBuildTranslationTasksRespectsWriteModeOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	zhPath := filepath.Join(dir, "zh_CN.ts")
+	zhTS := `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="zh_CN">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>Old</source>
+        <translation>旧</translation>
+    </message>
+</context>
+</TS>`
+	if err := os.WriteFile(zhPath, []byte(zhTS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	jaPath := filepath.Join(dir, "ja_JP.ts")
+	jaTS := `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="ja_JP">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Open</source>
+        <translation>開く</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Old</source>
+        <translation type="vanished">古い</translation>
+    </message>
+</context>
+</TS>`
+	if err := os.WriteFile(jaPath, []byte(jaTS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newTestApp()
+	if err := a.LoadProject(dir); err != nil {
+		t.Fatalf("LoadProject failed: %v", err)
+	}
+	targets := []locale.LocaleSpec{{ID: "ja_JP", Name: "日语", Enabled: true, EngineCode: "ja"}}
+
+	// ModeFillUnfinished: only untranslated "Save" is queued.
+	fillTasks, fillTotal := buildTranslationTasks(a.plan, targets, domain.ModeFillUnfinished, "")
+	if fillTotal != 1 || len(fillTasks["ja_JP"]) != 1 || fillTasks["ja_JP"][0].Key.Source != "Save" {
+		t.Fatalf("expected only Save in fill mode, got total=%d tasks=%+v", fillTotal, fillTasks["ja_JP"])
+	}
+
+	// ModeOverwriteExisting: both finished "Open" and unfinished "Save" are queued, vanished "Old" is skipped.
+	overTasks, overTotal := buildTranslationTasks(a.plan, targets, domain.ModeOverwriteExisting, "")
+	if overTotal != 2 || len(overTasks["ja_JP"]) != 2 {
+		t.Fatalf("expected Open and Save in overwrite mode (skipping vanished), got total=%d tasks=%+v", overTotal, overTasks["ja_JP"])
+	}
+}

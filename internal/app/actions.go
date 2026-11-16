@@ -621,42 +621,11 @@ func (a *App) startTranslation() {
 		return
 	}
 
-	tasks := make(map[string][]provider.SourceItem)
-	totalItems := 0
-	refID := a.plan.RefLocaleID
 	bundleSourceLocale := ""
 	if a.bundle != nil {
 		bundleSourceLocale = a.bundle.SourceLocale
 	}
-
-	for _, loc := range targetLocales {
-		var items []provider.SourceItem
-		for i := range a.plan.Rows {
-			row := &a.plan.Rows[i]
-			if strings.TrimSpace(row.RefText) == "" {
-				continue
-			}
-			cell, ok := row.Cells[loc.ID]
-			if ok && cell.Effective != "" {
-				continue
-			}
-			if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
-				continue
-			}
-			items = append(items, provider.SourceItem{
-				ID:           row.Key.Canonical(),
-				Key:          row.Key,
-				SourceLocale: bundleSourceLocale,
-				RefLocale:    refID,
-				RefText:      row.RefText,
-				Numerus:      row.Numerus,
-			})
-		}
-		if len(items) > 0 {
-			tasks[loc.ID] = items
-			totalItems += len(items)
-		}
-	}
+	tasks, totalItems := buildTranslationTasks(a.plan, targetLocales, cfg.WriteMode, bundleSourceLocale)
 
 	if totalItems == 0 {
 		a.setStatus(a.tr().StatusNoGapsToTranslate, false)
@@ -1276,6 +1245,9 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 	for _, loc := range targetLocales {
 		if forceLocaleID == "" {
 			cell, ok := row.Cells[loc.ID]
+			if ok && cell.Status == domain.StatusVanished {
+				continue
+			}
 			if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
 				continue
 			}
@@ -1393,4 +1365,45 @@ func (a *App) revertRowAt(planRowIdx int) {
 func (a *App) copyText(s string) {
 	_ = mygo.Clipboard.Write(transfer.TextData(s))
 	a.setStatus(a.tr().StatusCopiedText, false)
+}
+
+func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.LocaleSpec, mode domain.WriteMode, bundleSourceLocale string) (map[string][]provider.SourceItem, int) {
+	tasks := make(map[string][]provider.SourceItem)
+	if plan == nil {
+		return tasks, 0
+	}
+	totalItems := 0
+	refID := plan.RefLocaleID
+	for _, loc := range targetLocales {
+		var items []provider.SourceItem
+		for i := range plan.Rows {
+			row := &plan.Rows[i]
+			if strings.TrimSpace(row.RefText) == "" {
+				continue
+			}
+			cell, ok := row.Cells[loc.ID]
+			if ok && cell.Status == domain.StatusVanished {
+				continue
+			}
+			if ok && cell.Effective != "" && mode == domain.ModeFillUnfinished {
+				continue
+			}
+			if ok && mode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
+				continue
+			}
+			items = append(items, provider.SourceItem{
+				ID:           row.Key.Canonical(),
+				Key:          row.Key,
+				SourceLocale: bundleSourceLocale,
+				RefLocale:    refID,
+				RefText:      row.RefText,
+				Numerus:      row.Numerus,
+			})
+		}
+		if len(items) > 0 {
+			tasks[loc.ID] = items
+			totalItems += len(items)
+		}
+	}
+	return tasks, totalItems
 }

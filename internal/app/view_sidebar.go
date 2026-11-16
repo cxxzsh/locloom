@@ -39,7 +39,7 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 			// Write mode & options
 			ui.Text(c, tr.SectionWriteStrategy).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			wm := int(a.cfg.WriteMode)
-			if ui.Segmented(c, &wm, tr.WriteModeFill, tr.WriteModeOverwrite).FillEqually().Changed() {
+			if ui.Segmented(c, &wm, tr.WriteModeFill, tr.WriteModeOverwrite).FillEqually().Cursor(ui.CursorPointer).Changed() {
 				a.cfg.WriteMode = domain.WriteMode(wm)
 				a.rebuildPlan()
 				a.scheduleConfigSave()
