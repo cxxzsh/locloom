@@ -179,6 +179,12 @@ jobs:
               cp "build/linux-arm64/locloom-${VERSION}-linux-arm64.tar.gz" "dist-assets/"
               collect_updates build/linux-amd64 'locloom-*-linux-*.tar.gz'
               collect_updates build/linux-arm64 'locloom-*-linux-*.tar.gz'
+              # PKGBUILD packages the linux tarball; renamed per arch
+              # since it pins the archive basename + sha256.
+              [ -f build/linux-amd64/PKGBUILD ] && cp \
+                build/linux-amd64/PKGBUILD dist-assets/PKGBUILD-amd64
+              [ -f build/linux-arm64/PKGBUILD ] && cp \
+                build/linux-arm64/PKGBUILD dist-assets/PKGBUILD-arm64
               ;;
           esac
           ls -lh dist-assets/
