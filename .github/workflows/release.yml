@@ -180,11 +180,18 @@ jobs:
               collect_updates build/linux-amd64 'locloom-*-linux-*.tar.gz'
               collect_updates build/linux-arm64 'locloom-*-linux-*.tar.gz'
               # PKGBUILD packages the linux tarball; renamed per arch
-              # since it pins the archive basename + sha256.
+              # since it pins the archive basename + sha256. Its source
+              # list also needs the resized icon PNGs next to it.
               [ -f build/linux-amd64/PKGBUILD ] && cp \
                 build/linux-amd64/PKGBUILD dist-assets/PKGBUILD-amd64
               [ -f build/linux-arm64/PKGBUILD ] && cp \
                 build/linux-arm64/PKGBUILD dist-assets/PKGBUILD-arm64
+              for d in build/linux-amd64 build/linux-arm64; do
+                for i in 256x256 512x512; do
+                  [ -f "$d/locloom-$i.png" ] && \
+                    cp "$d/locloom-$i.png" dist-assets/
+                done
+              done
               ;;
           esac
           ls -lh dist-assets/
