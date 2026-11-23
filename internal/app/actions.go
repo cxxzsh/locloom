@@ -653,13 +653,15 @@ func (a *App) startTranslation() {
 	go func() {
 		totalTranslated := 0
 		start := time.Now()
-		for _, waveLocales := range waves {
+		for w, waveLocales := range waves {
 			// Plan cells mutate on the UI thread as results land; build
 			// each wave's task list there so it reads the latest texts.
 			var tasks map[string][]provider.SourceItem
 			var waveItems int
 			a.runOnUI(func() {
 				tasks, waveItems = buildTranslationTasks(a.plan, waveLocales, cfg.WriteMode, bundleSourceLocale)
+				a.translateWave = w + 1
+				a.translateWaveTotal = len(waves)
 				a.translateTotalCount += waveItems
 				if waveItems > 0 {
 					a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), waveItems, cfg.Concurrency))
@@ -687,6 +689,8 @@ func (a *App) startTranslation() {
 		a.dispatchUI(func() {
 			a.translating = false
 			a.cancelTranslate = nil
+			a.translateWave = 0
+			a.translateWaveTotal = 0
 			msg := fmt.Sprintf(a.tr().StatusTranslateDoneFmt, totalTranslated, dur.Round(time.Millisecond))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)

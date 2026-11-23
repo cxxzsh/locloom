@@ -106,37 +106,38 @@ type Catalog struct {
 	StatusExportedExcelFmt     string
 
 	// Header
-	SourceUnloaded    string
-	HeaderSummaryFmt  string
-	BtnOpenDir        string
-	TipOpenDir        string
-	BtnOpenFile        string
-	TipOpenFile        string
-	BtnImportExcel     string
-	TipImportExcel     string
-	BtnExportExcel     string
-	TipExportExcel     string
-	StatusTranslating  string
-	BtnStopTranslate   string
-	BtnStartTranslate  string
-	TipStopTranslate   string
-	TipStartTranslate  string
+	SourceUnloaded             string
+	HeaderSummaryFmt           string
+	BtnOpenDir                 string
+	TipOpenDir                 string
+	BtnOpenFile                string
+	TipOpenFile                string
+	BtnImportExcel             string
+	TipImportExcel             string
+	BtnExportExcel             string
+	TipExportExcel             string
+	StatusTranslating          string
+	BtnStopTranslate           string
+	BtnStartTranslate          string
+	TipStopTranslate           string
+	TipStartTranslate          string
 	StatusTranslatingBannerFmt string
+	StatusTranslatingWaveFmt   string
 	StatusTranslatingRowFmt    string
 	BtnTranslatingRow          string
-	BtnWriteTS         string
-	BtnWriteTSCountFmt string
-	TipWriteTS         string
-	ThemeSystem       string
-	ThemeLight        string
-	ThemeDark         string
-	TipTheme          string
-	BtnLangToggle     string
-	TipLangToggle     string
-	HeaderLogsFmt     string
-	TipLogs           string
-	BtnHelp           string
-	TipHelp           string
+	BtnWriteTS                 string
+	BtnWriteTSCountFmt         string
+	TipWriteTS                 string
+	ThemeSystem                string
+	ThemeLight                 string
+	ThemeDark                  string
+	TipTheme                   string
+	BtnLangToggle              string
+	TipLangToggle              string
+	HeaderLogsFmt              string
+	TipLogs                    string
+	BtnHelp                    string
+	TipHelp                    string
 
 	// Sidebar tabs
 	TabProject  string
@@ -144,27 +145,27 @@ type Catalog struct {
 	TabLocales  string
 
 	// Sidebar: Project tab
-	SectionWriteStrategy  string
-	WriteModeFill         string
-	WriteModeOverwrite    string
-	CheckAppendMissing    string
+	SectionWriteStrategy   string
+	WriteModeFill          string
+	WriteModeOverwrite     string
+	CheckAppendMissing     string
 	DescWriteModeFill      string
 	DescWriteModeOverwrite string
 	LabelAppendContext     string
-	PlaceholderDefaultCtx string
-	CheckCreateBackup     string
-	CheckPluralForms      string
-	TipWriteMode          string
-	TipAppendMissing      string
-	TipCreateBackup       string
-	TipPluralForms        string
-	TipLocaleProgressCard string
-	SectionContextNavFmt  string
-	AllContextsFmt        string
-	NoContextLabel        string
-	SectionLocaleProgress string
-	LocaleGapFmt          string
-	LocaleWarnFmt         string
+	PlaceholderDefaultCtx  string
+	CheckCreateBackup      string
+	CheckPluralForms       string
+	TipWriteMode           string
+	TipAppendMissing       string
+	TipCreateBackup        string
+	TipPluralForms         string
+	TipLocaleProgressCard  string
+	SectionContextNavFmt   string
+	AllContextsFmt         string
+	NoContextLabel         string
+	SectionLocaleProgress  string
+	LocaleGapFmt           string
+	LocaleWarnFmt          string
 
 	// Sidebar: Pipeline tab
 	SectionConcurrencyCache string
@@ -176,14 +177,14 @@ type Catalog struct {
 	PlaceholderProxy        string
 	CheckSkipTLS            string
 	CheckProxyAllCloud      string
-	TipConcurrencyDec  string
-	TipConcurrencyInc  string
-	TipBypassCache     string
-	TipClearCache      string
-	TipProxyURL        string
-	TipSkipTLS         string
-	TipProxyAllCloud   string
-	TipProviderToggle  string
+	TipConcurrencyDec       string
+	TipConcurrencyInc       string
+	TipBypassCache          string
+	TipClearCache           string
+	TipProxyURL             string
+	TipSkipTLS              string
+	TipProxyAllCloud        string
+	TipProviderToggle       string
 	SectionWaterfall        string
 	BadgeLocal              string
 	BadgeEngine             string
@@ -199,10 +200,10 @@ type Catalog struct {
 	BtnDiscoverModels       string
 	BtnShowSecret           string
 	BtnHideSecret           string
-	TipBrowseFile     string
-	TipTestConn       string
-	TipDiscoverModels string
-	TipToggleSecret   string
+	TipBrowseFile           string
+	TipTestConn             string
+	TipDiscoverModels       string
+	TipToggleSecret         string
 
 	// Sidebar: Locales tab
 	SectionPresetProfiles   string
@@ -214,12 +215,12 @@ type Catalog struct {
 	BadgeInBundle           string
 	LabelFilePattern        string
 	BtnScaffoldTS           string
-	TipSelectAllLocales   string
-	TipDeselectAllLocales string
-	TipFilePattern        string
-	TipScaffoldTS         string
-	TipLocaleEnable       string
-	TipSetRef             string
+	TipSelectAllLocales     string
+	TipDeselectAllLocales   string
+	TipFilePattern          string
+	TipScaffoldTS           string
+	TipLocaleEnable         string
+	TipSetRef               string
 	SectionLocaleListFmt    string
 	BtnSetRef               string
 	BtnIsRef                string
@@ -232,7 +233,7 @@ type Catalog struct {
 	PlaceholderLocaleName   string
 	PlaceholderEngineCode   string
 	BtnAddLocale            string
-	TipAddLocale string
+	TipAddLocale            string
 	// Matrix toolbar & empty states
 	FilterAll         string
 	FilterGaps        string
@@ -307,10 +308,10 @@ type Catalog struct {
 	BtnCopySrc          string
 	BtnUseSrc           string
 	BtnResetCell        string
-	TipLocalePill string
-	TipCopySrc    string
-	TipUseSrc     string
-	TipResetCell  string
+	TipLocalePill       string
+	TipCopySrc          string
+	TipUseSrc           string
+	TipResetCell        string
 	HintNumerus         string
 	PlaceholderEditor   string
 	LabelBeforeXML      string
@@ -318,95 +319,95 @@ type Catalog struct {
 	LogCountFmt         string
 	BtnCopyLogs         string
 	BtnClearLogs        string
-	TipCopyLogs  string
-	TipClearLogs string
+	TipCopyLogs         string
+	TipClearLogs        string
 
 	// Modals
-	HelpModalTitle      string
-	HelpFallbackMD      string
-	ExportModalTitle    string
-	LabelExportScope    string
-	ExportScopeAll      string
-	ExportScopeGaps     string
-	ExportScopeChanges  string
-	BtnSettings              string
-	TipSettings              string
-	SettingsModalTitle       string
-	SettingsTabGeneral       string
-	SettingsTabNetwork       string
-	SettingsTabUpdates       string
-	LabelUILang              string
-	LabelThemeMode           string
-	LabelCurrentVersionFmt   string
-	CheckAutoUpdate          string
-	BtnCheckUpdates          string
-	BtnCheckingUpdates       string
-	StatusUpToDateFmt        string
-	StatusUpdateAvailFmt     string
-	StatusUpdateErrFmt       string
-	BtnOpenReleasePage       string
-	BtnOpenOnboarding        string
-	PipelineSummaryFmt       string
-	OnboardingTitle          string
-	OnboardingSubtitle       string
-	OnboardingStep1Title     string
-	OnboardingStep1Desc      string
-	OnboardingStep2Title     string
-	OnboardingStep2Desc      string
-	OnboardingStep3Title     string
-	OnboardingStep3Desc      string
-	BtnOnboardingStart       string
-	ExportScopeWarnings string
-	ExportDescAll       string
-	ExportDescGaps      string
-	ExportDescChanges   string
-	ExportDescWarnings  string
-	BtnExportConfirm    string
+	HelpModalTitle         string
+	HelpFallbackMD         string
+	ExportModalTitle       string
+	LabelExportScope       string
+	ExportScopeAll         string
+	ExportScopeGaps        string
+	ExportScopeChanges     string
+	BtnSettings            string
+	TipSettings            string
+	SettingsModalTitle     string
+	SettingsTabGeneral     string
+	SettingsTabNetwork     string
+	SettingsTabUpdates     string
+	LabelUILang            string
+	LabelThemeMode         string
+	LabelCurrentVersionFmt string
+	CheckAutoUpdate        string
+	BtnCheckUpdates        string
+	BtnCheckingUpdates     string
+	StatusUpToDateFmt      string
+	StatusUpdateAvailFmt   string
+	StatusUpdateErrFmt     string
+	BtnOpenReleasePage     string
+	BtnOpenOnboarding      string
+	PipelineSummaryFmt     string
+	OnboardingTitle        string
+	OnboardingSubtitle     string
+	OnboardingStep1Title   string
+	OnboardingStep1Desc    string
+	OnboardingStep2Title   string
+	OnboardingStep2Desc    string
+	OnboardingStep3Title   string
+	OnboardingStep3Desc    string
+	BtnOnboardingStart     string
+	ExportScopeWarnings    string
+	ExportDescAll          string
+	ExportDescGaps         string
+	ExportDescChanges      string
+	ExportDescWarnings     string
+	BtnExportConfirm       string
 
 	// Actions, native dialogs & background tasks
-	DialogOpenTSDir            string
-	ErrLoadTSDirFmt            string
-	DialogOpenFile             string
-	FilterLocFilesName         string
-	ErrLoadFilesFmt            string
-	DialogImportExcel          string
-	FilterExcelName            string
-	DialogExportExcel          string
-	StatusTestingConn          string
-	StatusConnFailedFmt        string
-	LogConnFailedFmt           string
-	StatusConnOK               string
-	LogConnOK                  string
-	StatusDiscoverFailedFmt    string
-	LogDiscoverFailedFmt       string
-	StatusDiscoveredModelsFmt  string
-	LogDiscoveredModelsFmt     string
-	LogConfigSkippedFmt        string
-	ErrNoActiveProvider        string
-	ErrNoTargetLocale          string
-	StatusNoGapsToTranslate    string
-	LogStartTranslateFmt       string
-	StatusTranslateDoneFmt     string
-	LogStoppingTranslate       string
-	ErrLoadTSFirst             string
-	ErrBuildPatchFmt           string
-	LogBuildPatchErrFmt        string
-	StatusNoTSChanges          string
-	ErrWriteTSFmt              string
-	StatusWriteTSDoneFmt       string
-	StatusClearedMachineFmt    string
-	StatusClearedAll           string
-	ErrScaffoldLoadFirst       string
-	LogScaffoldErrFmt          string
-	StatusAllLocalesHaveTS     string
-	StatusScaffoldDoneFmt      string
-	ErrEnterLocaleID           string
-	ErrLocaleExistsFmt         string
-	StatusCopiedLogs           string
-	StatusCopiedSrc            string
-	StatusTranslateRowDoneFmt  string
-	StatusNoGapsFound          string
-	StatusRowNoGaps            string
+	DialogOpenTSDir           string
+	ErrLoadTSDirFmt           string
+	DialogOpenFile            string
+	FilterLocFilesName        string
+	ErrLoadFilesFmt           string
+	DialogImportExcel         string
+	FilterExcelName           string
+	DialogExportExcel         string
+	StatusTestingConn         string
+	StatusConnFailedFmt       string
+	LogConnFailedFmt          string
+	StatusConnOK              string
+	LogConnOK                 string
+	StatusDiscoverFailedFmt   string
+	LogDiscoverFailedFmt      string
+	StatusDiscoveredModelsFmt string
+	LogDiscoveredModelsFmt    string
+	LogConfigSkippedFmt       string
+	ErrNoActiveProvider       string
+	ErrNoTargetLocale         string
+	StatusNoGapsToTranslate   string
+	LogStartTranslateFmt      string
+	StatusTranslateDoneFmt    string
+	LogStoppingTranslate      string
+	ErrLoadTSFirst            string
+	ErrBuildPatchFmt          string
+	LogBuildPatchErrFmt       string
+	StatusNoTSChanges         string
+	ErrWriteTSFmt             string
+	StatusWriteTSDoneFmt      string
+	StatusClearedMachineFmt   string
+	StatusClearedAll          string
+	ErrScaffoldLoadFirst      string
+	LogScaffoldErrFmt         string
+	StatusAllLocalesHaveTS    string
+	StatusScaffoldDoneFmt     string
+	ErrEnterLocaleID          string
+	ErrLocaleExistsFmt        string
+	StatusCopiedLogs          string
+	StatusCopiedSrc           string
+	StatusTranslateRowDoneFmt string
+	StatusNoGapsFound         string
+	StatusRowNoGaps           string
 	CtxTranslateRow           string
 	CtxRetranslateCellFmt     string
 	CtxClearCellFmt           string
@@ -450,63 +451,64 @@ var zhCatalog = Catalog{
 	ErrExportExcelFmt:          "导出 Excel 失败: %v",
 	StatusExportedExcelFmt:     "已导出 %d 行到 %s",
 
-	SourceUnloaded:    "未加载项目",
-	HeaderSummaryFmt:  "%s · %d 条 · %.0f%%",
-	BtnOpenDir:        "打开目录",
-	TipOpenDir:        "打开本地化目录 (Cmd/Ctrl+O)",
-	BtnOpenFile:       "打开文件",
-	TipOpenFile:       "打开本地化文件（.ts/.po/.json/.arb/.xcstrings/strings.xml/.resx/.xliff/.zip）",
-	BtnImportExcel:    "导入 Excel",
-	TipImportExcel:    "导入 .xlsx 翻译词表",
-	BtnExportExcel:    "导出 Excel",
-	TipExportExcel:    "导出 .xlsx 词表 (Cmd/Ctrl+E)",
-	StatusTranslating: "正在并发翻译",
-	BtnStopTranslate:  "停止翻译",
-	BtnStartTranslate: "开始并发翻译",
-	TipStopTranslate:  "立即中止当前并发翻译任务（已完成的条目会保留在暂存区）",
-	TipStartTranslate: "按「管线」中的引擎顺序并发翻译待处理词条（受写回策略控制）",
+	SourceUnloaded:             "未加载项目",
+	HeaderSummaryFmt:           "%s · %d 条 · %.0f%%",
+	BtnOpenDir:                 "打开目录",
+	TipOpenDir:                 "打开本地化目录 (Cmd/Ctrl+O)",
+	BtnOpenFile:                "打开文件",
+	TipOpenFile:                "打开本地化文件（.ts/.po/.json/.arb/.xcstrings/strings.xml/.resx/.xliff/.zip）",
+	BtnImportExcel:             "导入 Excel",
+	TipImportExcel:             "导入 .xlsx 翻译词表",
+	BtnExportExcel:             "导出 Excel",
+	TipExportExcel:             "导出 .xlsx 词表 (Cmd/Ctrl+E)",
+	StatusTranslating:          "正在并发翻译",
+	BtnStopTranslate:           "停止翻译",
+	BtnStartTranslate:          "开始并发翻译",
+	TipStopTranslate:           "立即中止当前并发翻译任务（已完成的条目会保留在暂存区）",
+	TipStartTranslate:          "按「管线」中的引擎顺序并发翻译待处理词条（受写回策略控制）",
+	StatusTranslatingWaveFmt:   "第 %d/%d 轮（级联）",
 	StatusTranslatingBannerFmt: "正在并发翻译：%d / %d (%.0f%%)",
 	StatusTranslatingRowFmt:    "正在翻译当前词条（%d 个目标语种，按瀑布流引擎顺序执行）...",
 	BtnTranslatingRow:          "⚡ 翻译中...",
-	BtnWriteTS:         "写回保存",
-	BtnWriteTSCountFmt: "写回保存 (%d)",
-	TipWriteTS:         "将待写回变更原位无损保存到文件或 ZIP (Cmd/Ctrl+S)",
-	ThemeSystem:       "跟随系统",
-	ThemeLight:        "浅色",
-	ThemeDark:         "深色",
-	TipTheme:          "切换外观主题 (跟随系统 / 浅色 / 深色)",
-	BtnLangToggle:     "EN",
-	TipLangToggle:     "Switch UI to English",
-	HeaderLogsFmt:     "日志(%d)",
-	TipLogs:           "查看运行日志与诊断",
-	BtnHelp:           "帮助",
-	TipHelp:           "打开使用指南",
+	BtnWriteTS:                 "写回保存",
+	BtnWriteTSCountFmt:         "写回保存 (%d)",
+	TipWriteTS:                 "将待写回变更原位无损保存到文件或 ZIP (Cmd/Ctrl+S)",
+	ThemeSystem:                "跟随系统",
+	ThemeLight:                 "浅色",
+	ThemeDark:                  "深色",
+	TipTheme:                   "切换外观主题 (跟随系统 / 浅色 / 深色)",
+	BtnLangToggle:              "EN",
+	TipLangToggle:              "Switch UI to English",
+	HeaderLogsFmt:              "日志(%d)",
+	TipLogs:                    "查看运行日志与诊断",
+	BtnHelp:                    "帮助",
+	TipHelp:                    "打开使用指南",
 
 	TabProject:  "项目",
 	TabPipeline: "管线",
 	TabLocales:  "语种",
 
-	SectionWriteStrategy:  "写回策略",
+	SectionWriteStrategy:   "写回策略",
 	DescWriteModeFill:      "仅翻译空缺词条，保留已有译文",
 	DescWriteModeOverwrite: "重译全部词条并覆盖已有译文",
 	LabelAppendContext:     "新词条默认分组",
-	WriteModeFill:         "安全补齐空缺",
-	WriteModeOverwrite:    "覆盖已有译文",
-	CheckAppendMissing:    "允许从 Excel 追加新词条",
-	PlaceholderDefaultCtx: "留空则归入 Common",
-	CheckCreateBackup:     "写回前备份 .bak",
-	CheckPluralForms:      "启用复数多词形编辑",
-	TipWriteMode:          "安全补齐空缺：仅翻译未完成词条，保留已有译文；\n覆盖已有译文：按当前引擎瀑布流重新翻译所有非消失词条",
-	TipAppendMissing:      "勾选后，从 .xlsx 词表导入但原文件中不存在的新词条也会追加写回（默认隔离外部幽灵词条）",
-	TipCreateBackup:       "写回修改前在同目录自动生成 .bak 备份文件，防止误操作丢失原文件",
-	TipPluralForms:        "对包含复数规则的词条按 One / Other 等分栏单独编辑，避免手动拼接分隔符",
-	TipLocaleProgressCard: "点击切换到「聚焦单语种」并定位该语种",
-	SectionContextNavFmt:  "上下文导航 (%d)",
-	AllContextsFmt:        "全部上下文 (%d)",
-	NoContextLabel:        "(无上下文)",
-	SectionLocaleProgress: "语种进度总览",
-	LocaleGapFmt:          "缺 %d",
-	LocaleWarnFmt:         "告警 %d",
+	WriteModeFill:          "安全补齐空缺",
+	WriteModeOverwrite:     "覆盖已有译文",
+	CheckAppendMissing:     "允许从 Excel 追加新词条",
+	PlaceholderDefaultCtx:  "留空则归入 Common",
+	CheckCreateBackup:      "写回前备份 .bak",
+	CheckPluralForms:       "启用复数多词形编辑",
+	TipWriteMode:           "安全补齐空缺：仅翻译未完成词条，保留已有译文；\n覆盖已有译文：按当前引擎瀑布流重新翻译所有非消失词条",
+	TipAppendMissing:       "勾选后，从 .xlsx 词表导入但原文件中不存在的新词条也会追加写回（默认隔离外部幽灵词条）",
+	TipCreateBackup:        "写回修改前在同目录自动生成 .bak 备份文件，防止误操作丢失原文件",
+	TipPluralForms:         "对包含复数规则的词条按 One / Other 等分栏单独编辑，避免手动拼接分隔符",
+	TipLocaleProgressCard:  "点击切换到「聚焦单语种」并定位该语种",
+	SectionContextNavFmt:   "上下文导航 (%d)",
+	AllContextsFmt:         "全部上下文 (%d)",
+	NoContextLabel:         "(无上下文)",
+	SectionLocaleProgress:  "语种进度总览",
+	LocaleGapFmt:           "缺 %d",
+	LocaleWarnFmt:          "告警 %d",
 
 	SectionConcurrencyCache: "并发与缓存",
 	LabelGlobalConcurrency:  "全局并发数",
@@ -517,14 +519,14 @@ var zhCatalog = Catalog{
 	PlaceholderProxy:        "http://127.0.0.1:8080 或 socks5://127.0.0.1:1080",
 	CheckSkipTLS:            "跳过 TLS 证书校验",
 	CheckProxyAllCloud:      "对所有云端引擎启用此代理",
-	TipConcurrencyDec:  "减少全局并发请求数（1–16）",
-	TipConcurrencyInc:  "增加全局并发请求数（1–16）；免费在线引擎建议 2–4 以避免限流",
-	TipBypassCache:     "勾选后忽略本地 translation-cache.json 缓存，强制重新请求翻译引擎",
-	TipClearCache:      "清空全部本地持久化的翻译缓存记录（不影响当前已加载项目）",
-	TipProxyURL:        "支持 http://、https://、socks5:// 代理地址；填写后可一键为云端引擎启用",
-	TipSkipTLS:         "仅在公司自签名证书或本地抓包调试时勾选；正常网络请保持关闭",
-	TipProxyAllCloud:   "一键开启或关闭所有云端翻译引擎的代理开关（自动跳过 127.0.0.1 / localhost）",
-	TipProviderToggle:  "启用或停用该翻译引擎；仅启用的引擎会参与瀑布流",
+	TipConcurrencyDec:       "减少全局并发请求数（1–16）",
+	TipConcurrencyInc:       "增加全局并发请求数（1–16）；免费在线引擎建议 2–4 以避免限流",
+	TipBypassCache:          "勾选后忽略本地 translation-cache.json 缓存，强制重新请求翻译引擎",
+	TipClearCache:           "清空全部本地持久化的翻译缓存记录（不影响当前已加载项目）",
+	TipProxyURL:             "支持 http://、https://、socks5:// 代理地址；填写后可一键为云端引擎启用",
+	TipSkipTLS:              "仅在公司自签名证书或本地抓包调试时勾选；正常网络请保持关闭",
+	TipProxyAllCloud:        "一键开启或关闭所有云端翻译引擎的代理开关（自动跳过 127.0.0.1 / localhost）",
+	TipProviderToggle:       "启用或停用该翻译引擎；仅启用的引擎会参与瀑布流",
 	SectionWaterfall:        "翻译引擎瀑布流（按顺序回退）",
 	BadgeLocal:              "本地",
 	BadgeEngine:             "引擎",
@@ -540,10 +542,10 @@ var zhCatalog = Catalog{
 	BtnDiscoverModels:       "发现模型",
 	BtnShowSecret:           "显示",
 	BtnHideSecret:           "隐藏",
-	TipBrowseFile:     "打开系统文件或目录选择器",
-	TipTestConn:       "发送一条短测试请求，验证当前引擎连通性与鉴权配置",
-	TipDiscoverModels: "从 API 端点自动拉取可用模型列表",
-	TipToggleSecret:   "显示或隐藏密钥明文",
+	TipBrowseFile:           "打开系统文件或目录选择器",
+	TipTestConn:             "发送一条短测试请求，验证当前引擎连通性与鉴权配置",
+	TipDiscoverModels:       "从 API 端点自动拉取可用模型列表",
+	TipToggleSecret:         "显示或隐藏密钥明文",
 
 	SectionPresetProfiles:   "语种预设组合",
 	BtnSelectAll:            "全选",
@@ -554,25 +556,25 @@ var zhCatalog = Catalog{
 	BadgeInBundle:           "项目内",
 	LabelFilePattern:        "文件命名模式",
 	BtnScaffoldTS:           "补全缺失语种骨架文件",
-	SectionLocaleListFmt:  "语种列表 (%d)",
-	BtnSetRef:             "设为参考",
-	TipSelectAllLocales:   "启用下方全部目标语种",
-	TipDeselectAllLocales: "停用下方全部目标语种（参考语种除外）",
-	TipFilePattern:        "生成缺失语种文件时的命名模板，{id} 会替换为语种 ID（如 zh_CN.ts）",
-	TipScaffoldTS:         "为已启用但磁盘尚不存在的语种自动生成骨架文件（.xcstrings 多语种单文件除外）",
-	TipLocaleEnable:       "勾选后纳入当前项目的翻译与写回范围",
-	TipSetRef:             "设为主参考语种：其译文会作为参考列显示，协助其他语种对照翻译",
-	BtnIsRef:              "★ 参考",
-	TipRemoveLocale:       "移除语种",
-	LabelTranslateFrom:    "译自",
-	TipTranslateFrom:      "指定该语种的翻译源：默认用文件原文；改为其他语种时，用该语种已有译文作为源文翻译（如 zh_TW 选 zh_CN 作简繁转换）",
-	OptSourceDefault:      "默认（文件原文）",
-	SectionAddLocale:      "添加自定义语种",
-	PlaceholderLocaleID:   "语种 ID (如 nl_NL)",
-	PlaceholderLocaleName: "名称 (如 荷兰语)",
-	PlaceholderEngineCode: "引擎码 (nl)",
-	BtnAddLocale:          "添加语种",
-	TipAddLocale: "添加一条自定义目标语种到配置列表",
+	SectionLocaleListFmt:    "语种列表 (%d)",
+	BtnSetRef:               "设为参考",
+	TipSelectAllLocales:     "启用下方全部目标语种",
+	TipDeselectAllLocales:   "停用下方全部目标语种（参考语种除外）",
+	TipFilePattern:          "生成缺失语种文件时的命名模板，{id} 会替换为语种 ID（如 zh_CN.ts）",
+	TipScaffoldTS:           "为已启用但磁盘尚不存在的语种自动生成骨架文件（.xcstrings 多语种单文件除外）",
+	TipLocaleEnable:         "勾选后纳入当前项目的翻译与写回范围",
+	TipSetRef:               "设为主参考语种：其译文会作为参考列显示，协助其他语种对照翻译",
+	BtnIsRef:                "★ 参考",
+	TipRemoveLocale:         "移除语种",
+	LabelTranslateFrom:      "译自",
+	TipTranslateFrom:        "指定该语种的翻译源：默认用文件原文；改为其他语种时，用该语种已有译文作为源文翻译（如 zh_TW 选 zh_CN 作简繁转换）",
+	OptSourceDefault:        "默认（文件原文）",
+	SectionAddLocale:        "添加自定义语种",
+	PlaceholderLocaleID:     "语种 ID (如 nl_NL)",
+	PlaceholderLocaleName:   "名称 (如 荷兰语)",
+	PlaceholderEngineCode:   "引擎码 (nl)",
+	BtnAddLocale:            "添加语种",
+	TipAddLocale:            "添加一条自定义目标语种到配置列表",
 
 	FilterAll:         "全部",
 	FilterGaps:        "待补齐",
@@ -623,68 +625,68 @@ var zhCatalog = Catalog{
 	OriginManual:    "手工",
 	OriginCache:     "缓存",
 
-	TabInspector:        "词条精修与格式对比",
-	TabLogsFmt:          "运行日志与诊断 (%d)",
-	InspectorEmptyHint:  "在上方表格中点击任意词条行，即可在此处精修译文并预览格式回填差异",
-	LabelKeyIDPrefix:    "键名: ",
-	LabelContextPrefix:  "上下文: ",
-	LabelLocationPrefix: "位置: ",
-	LabelCommentPrefix:  "注释: ",
-	BadgeNumerus:        "复数 Numerus (使用 --- 分隔)",
-	LabelTargetLocale:   "目标语种:",
-	LabelSource:         "英文原文 (Source)",
-	LabelRef:            "参考译文",
-	LabelNone:           "(无)",
-	LabelEditTargetFmt:  "译文编辑 (%s)",
-	BtnTranslateRow:     "⚡ 翻译此条",
-	TipTranslateRow:     "使用当前激活的翻译引擎即时翻译此行",
-	BtnPrevGap:          "◀ 上一待办",
-	TipPrevGap:          "跳转到上一个缺口或告警行 (Alt+Up)",
-	BtnNextGap:          "下一待办 ▶",
-	TipNextGap:          "跳转到下一个缺口或告警行 (Alt+Down / F3)",
-	BtnCopySrc:          "复制原文",
-	BtnUseSrc:           "填入原文",
-	BtnResetCell:        "重置该格",
-	TipLocalePill: "点击切换下方编辑器当前编辑的目标语种",
-	TipCopySrc:    "将英文原文复制到系统剪贴板",
-	TipUseSrc:     "直接将英文原文填入当前译文框（适合品牌名、代码或无需翻译的词条）",
-	TipResetCell:  "撤销当前单元格的未保存修改，还原回文件原始值",
-	HintNumerus:         "提示：此词条包含复数形式，请使用单独一行 --- 分隔各个复数译文。",
-	PlaceholderEditor:   "输入译文（实时保存，O(1) 刷新单元格）...",
-	LabelBeforeXML:      "修改前片段 (Before)",
-	LabelAfterXML:       "回填后片段 (After)",
-	LogCountFmt:         "共 %d 条运行日志",
-	BtnCopyLogs:         "复制日志",
-	BtnClearLogs:        "清空日志",
-	BtnSettings:              "设置",
-	TipSettings:              "打开全局设置（外观、语言、网络代理、缓存与自动更新）",
-	SettingsModalTitle:       "LocLoom 设置",
-	SettingsTabGeneral:       "通用与外观",
-	SettingsTabNetwork:       "代理与缓存",
-	SettingsTabUpdates:       "更新与引导",
-	LabelUILang:              "界面语言",
-	LabelThemeMode:           "外观主题",
-	LabelCurrentVersionFmt:   "当前版本：v%s",
-	CheckAutoUpdate:          "启动时自动检查更新",
-	BtnCheckUpdates:          "立即检查更新",
-	BtnCheckingUpdates:       "正在检查...",
-	StatusUpToDateFmt:        "已是最新版本 (v%s)",
-	StatusUpdateAvailFmt:     "发现新版本 v%s（当前 v%s）",
-	StatusUpdateErrFmt:       "检查更新失败：%v",
-	BtnOpenReleasePage:       "前往下载新版本",
-	BtnOpenOnboarding:        "重新查看新手引导",
-	PipelineSummaryFmt:       "并发 %d · 缓存 %d 条 · %s",
-	OnboardingTitle:          "欢迎使用 LocLoom",
-	OnboardingSubtitle:       "原位无损本地化工作台 · 3 步快速上手",
-	OnboardingStep1Title:     "1. 加载项目文件",
-	OnboardingStep1Desc:      "点击顶部「打开目录 / 打开文件」，或直接将文件夹 / .zip / .xlsx 拖入窗口。支持 .ts、.po、.json、.arb、.xcstrings、strings.xml、.resx、.xliff。",
-	OnboardingStep2Title:     "2. 配置引擎并并发翻译",
-	OnboardingStep2Desc:      "在左侧「管线」启用免费在线源（Google / Bing / LibreTranslate / MyMemory）或自有 API，点击顶部「开始并发翻译」。",
-	OnboardingStep3Title:     "3. 精修校对并写回保存",
-	OnboardingStep3Desc:      "在表格或底部精修区检查译文与 [⚠] 占位符告警，确认无误后点击「写回保存」原位无损写入文件。",
-	BtnOnboardingStart:       "开始使用",
-	TipCopyLogs:  "复制全部运行日志到剪贴板",
-	TipClearLogs: "清空当前面板日志",
+	TabInspector:           "词条精修与格式对比",
+	TabLogsFmt:             "运行日志与诊断 (%d)",
+	InspectorEmptyHint:     "在上方表格中点击任意词条行，即可在此处精修译文并预览格式回填差异",
+	LabelKeyIDPrefix:       "键名: ",
+	LabelContextPrefix:     "上下文: ",
+	LabelLocationPrefix:    "位置: ",
+	LabelCommentPrefix:     "注释: ",
+	BadgeNumerus:           "复数 Numerus (使用 --- 分隔)",
+	LabelTargetLocale:      "目标语种:",
+	LabelSource:            "英文原文 (Source)",
+	LabelRef:               "参考译文",
+	LabelNone:              "(无)",
+	LabelEditTargetFmt:     "译文编辑 (%s)",
+	BtnTranslateRow:        "⚡ 翻译此条",
+	TipTranslateRow:        "使用当前激活的翻译引擎即时翻译此行",
+	BtnPrevGap:             "◀ 上一待办",
+	TipPrevGap:             "跳转到上一个缺口或告警行 (Alt+Up)",
+	BtnNextGap:             "下一待办 ▶",
+	TipNextGap:             "跳转到下一个缺口或告警行 (Alt+Down / F3)",
+	BtnCopySrc:             "复制原文",
+	BtnUseSrc:              "填入原文",
+	BtnResetCell:           "重置该格",
+	TipLocalePill:          "点击切换下方编辑器当前编辑的目标语种",
+	TipCopySrc:             "将英文原文复制到系统剪贴板",
+	TipUseSrc:              "直接将英文原文填入当前译文框（适合品牌名、代码或无需翻译的词条）",
+	TipResetCell:           "撤销当前单元格的未保存修改，还原回文件原始值",
+	HintNumerus:            "提示：此词条包含复数形式，请使用单独一行 --- 分隔各个复数译文。",
+	PlaceholderEditor:      "输入译文（实时保存，O(1) 刷新单元格）...",
+	LabelBeforeXML:         "修改前片段 (Before)",
+	LabelAfterXML:          "回填后片段 (After)",
+	LogCountFmt:            "共 %d 条运行日志",
+	BtnCopyLogs:            "复制日志",
+	BtnClearLogs:           "清空日志",
+	BtnSettings:            "设置",
+	TipSettings:            "打开全局设置（外观、语言、网络代理、缓存与自动更新）",
+	SettingsModalTitle:     "LocLoom 设置",
+	SettingsTabGeneral:     "通用与外观",
+	SettingsTabNetwork:     "代理与缓存",
+	SettingsTabUpdates:     "更新与引导",
+	LabelUILang:            "界面语言",
+	LabelThemeMode:         "外观主题",
+	LabelCurrentVersionFmt: "当前版本：v%s",
+	CheckAutoUpdate:        "启动时自动检查更新",
+	BtnCheckUpdates:        "立即检查更新",
+	BtnCheckingUpdates:     "正在检查...",
+	StatusUpToDateFmt:      "已是最新版本 (v%s)",
+	StatusUpdateAvailFmt:   "发现新版本 v%s（当前 v%s）",
+	StatusUpdateErrFmt:     "检查更新失败：%v",
+	BtnOpenReleasePage:     "前往下载新版本",
+	BtnOpenOnboarding:      "重新查看新手引导",
+	PipelineSummaryFmt:     "并发 %d · 缓存 %d 条 · %s",
+	OnboardingTitle:        "欢迎使用 LocLoom",
+	OnboardingSubtitle:     "原位无损本地化工作台 · 3 步快速上手",
+	OnboardingStep1Title:   "1. 加载项目文件",
+	OnboardingStep1Desc:    "点击顶部「打开目录 / 打开文件」，或直接将文件夹 / .zip / .xlsx 拖入窗口。支持 .ts、.po、.json、.arb、.xcstrings、strings.xml、.resx、.xliff。",
+	OnboardingStep2Title:   "2. 配置引擎并并发翻译",
+	OnboardingStep2Desc:    "在左侧「管线」启用免费在线源（Google / Bing / LibreTranslate / MyMemory）或自有 API，点击顶部「开始并发翻译」。",
+	OnboardingStep3Title:   "3. 精修校对并写回保存",
+	OnboardingStep3Desc:    "在表格或底部精修区检查译文与 [⚠] 占位符告警，确认无误后点击「写回保存」原位无损写入文件。",
+	BtnOnboardingStart:     "开始使用",
+	TipCopyLogs:            "复制全部运行日志到剪贴板",
+	TipClearLogs:           "清空当前面板日志",
 
 	HelpModalTitle:      "LocLoom 使用指南",
 	HelpFallbackMD:      "# LocLoom\n\n跨平台多语言并发翻译与原位无损回填工具。",
@@ -786,63 +788,64 @@ var enCatalog = Catalog{
 	ErrExportExcelFmt:          "Failed to export Excel: %v",
 	StatusExportedExcelFmt:     "Exported %d rows to %s",
 
-	SourceUnloaded:    "Unloaded",
-	HeaderSummaryFmt:  "%s · %d items · %.0f%%",
-	BtnOpenDir:        "Open Dir",
-	TipOpenDir:        "Open localization folder (Cmd/Ctrl+O)",
-	BtnOpenFile:       "Open File",
-	TipOpenFile:       "Open localization file(s) (.ts/.po/.json/.arb/.xcstrings/strings.xml/.resx/.xliff/.zip)",
-	BtnImportExcel:    "Import Excel",
-	TipImportExcel:    "Import .xlsx translation workbook",
-	BtnExportExcel:    "Export Excel",
-	TipExportExcel:    "Export .xlsx workbook (Cmd/Ctrl+E)",
-	StatusTranslating: "Translating",
-	BtnStopTranslate:  "Stop",
-	BtnStartTranslate: "Start Translate",
-	TipStopTranslate:  "Abort the running translation job (completed items stay staged)",
-	TipStartTranslate: "Run concurrent translation across enabled providers in waterfall order",
+	SourceUnloaded:             "Unloaded",
+	HeaderSummaryFmt:           "%s · %d items · %.0f%%",
+	BtnOpenDir:                 "Open Dir",
+	TipOpenDir:                 "Open localization folder (Cmd/Ctrl+O)",
+	BtnOpenFile:                "Open File",
+	TipOpenFile:                "Open localization file(s) (.ts/.po/.json/.arb/.xcstrings/strings.xml/.resx/.xliff/.zip)",
+	BtnImportExcel:             "Import Excel",
+	TipImportExcel:             "Import .xlsx translation workbook",
+	BtnExportExcel:             "Export Excel",
+	TipExportExcel:             "Export .xlsx workbook (Cmd/Ctrl+E)",
+	StatusTranslating:          "Translating",
+	BtnStopTranslate:           "Stop",
+	BtnStartTranslate:          "Start Translate",
+	TipStopTranslate:           "Abort the running translation job (completed items stay staged)",
+	TipStartTranslate:          "Run concurrent translation across enabled providers in waterfall order",
+	StatusTranslatingWaveFmt:   "Cascade wave %d/%d",
 	StatusTranslatingBannerFmt: "Translating: %d / %d (%.0f%%)",
 	StatusTranslatingRowFmt:    "Translating current row (%d target locale(s) via waterfall)...",
 	BtnTranslatingRow:          "⚡ Translating...",
-	BtnWriteTS:         "Save Back",
-	BtnWriteTSCountFmt: "Save Back (%d)",
-	TipWriteTS:         "Save pending changes losslessly to files or ZIP (Cmd/Ctrl+S)",
-	ThemeSystem:       "System",
-	ThemeLight:        "Light",
-	ThemeDark:         "Dark",
-	TipTheme:          "Cycle theme (System / Light / Dark)",
-	BtnLangToggle:     "中文",
-	TipLangToggle:     "切换界面为中文",
-	HeaderLogsFmt:     "Logs(%d)",
-	TipLogs:           "View logs & diagnostics",
-	BtnHelp:           "Help",
-	TipHelp:           "Open usage guide",
+	BtnWriteTS:                 "Save Back",
+	BtnWriteTSCountFmt:         "Save Back (%d)",
+	TipWriteTS:                 "Save pending changes losslessly to files or ZIP (Cmd/Ctrl+S)",
+	ThemeSystem:                "System",
+	ThemeLight:                 "Light",
+	ThemeDark:                  "Dark",
+	TipTheme:                   "Cycle theme (System / Light / Dark)",
+	BtnLangToggle:              "中文",
+	TipLangToggle:              "切换界面为中文",
+	HeaderLogsFmt:              "Logs(%d)",
+	TipLogs:                    "View logs & diagnostics",
+	BtnHelp:                    "Help",
+	TipHelp:                    "Open usage guide",
 
 	TabProject:  "Project",
 	TabPipeline: "Pipeline",
 	TabLocales:  "Locales",
 
-	SectionWriteStrategy:  "Write Strategy",
-	WriteModeFill:         "Fill Gaps Only",
-	WriteModeOverwrite:    "Overwrite Existing",
+	SectionWriteStrategy:   "Write Strategy",
+	WriteModeFill:          "Fill Gaps Only",
+	WriteModeOverwrite:     "Overwrite Existing",
 	DescWriteModeFill:      "Fills empty entries only; keeps existing translations",
 	DescWriteModeOverwrite: "Re-translates all entries and overwrites existing ones",
 	LabelAppendContext:     "Default group for new keys",
-	CheckAppendMissing:    "Allow Adding New Keys from Excel",
-	PlaceholderDefaultCtx: "Blank = Common",
-	CheckCreateBackup:     "Backup .bak before write",
-	CheckPluralForms:      "Enable Plural Forms Editing",
-	TipWriteMode:          "Fill Gaps Only: keeps existing translations and fills gaps;\nOverwrite Existing: re-translates all non-vanished entries",
-	TipAppendMissing:      "When enabled, new keys from .xlsx absent from source files are appended on Save Back",
-	TipCreateBackup:       "Create a .bak backup alongside each modified file before writing back",
-	TipPluralForms:        "Edit plural forms (One / Other / etc.) in separate labeled fields",
-	TipLocaleProgressCard: "Click to focus and edit this locale in the matrix",
-	SectionContextNavFmt:  "Contexts (%d)",
-	AllContextsFmt:        "All Contexts (%d)",
-	NoContextLabel:        "(No Context)",
-	SectionLocaleProgress: "Locale Progress",
-	LocaleGapFmt:          "Gap %d",
-	LocaleWarnFmt:         "Warn %d",
+	CheckAppendMissing:     "Allow Adding New Keys from Excel",
+	PlaceholderDefaultCtx:  "Blank = Common",
+	CheckCreateBackup:      "Backup .bak before write",
+	CheckPluralForms:       "Enable Plural Forms Editing",
+	TipWriteMode:           "Fill Gaps Only: keeps existing translations and fills gaps;\nOverwrite Existing: re-translates all non-vanished entries",
+	TipAppendMissing:       "When enabled, new keys from .xlsx absent from source files are appended on Save Back",
+	TipCreateBackup:        "Create a .bak backup alongside each modified file before writing back",
+	TipPluralForms:         "Edit plural forms (One / Other / etc.) in separate labeled fields",
+	TipLocaleProgressCard:  "Click to focus and edit this locale in the matrix",
+	SectionContextNavFmt:   "Contexts (%d)",
+	AllContextsFmt:         "All Contexts (%d)",
+	NoContextLabel:         "(No Context)",
+	SectionLocaleProgress:  "Locale Progress",
+	LocaleGapFmt:           "Gap %d",
+	LocaleWarnFmt:          "Warn %d",
 
 	SectionConcurrencyCache: "Concurrency & Cache",
 	LabelGlobalConcurrency:  "Concurrency",
@@ -853,14 +856,14 @@ var enCatalog = Catalog{
 	PlaceholderProxy:        "http://127.0.0.1:8080 or socks5://127.0.0.1:1080",
 	CheckSkipTLS:            "Skip TLS verification",
 	CheckProxyAllCloud:      "Route all cloud engines through this proxy",
-	TipConcurrencyDec:  "Decrease concurrent translation workers (1–16)",
-	TipConcurrencyInc:  "Increase concurrent translation workers (1–16); 2–4 recommended for free web engines",
-	TipBypassCache:     "Ignore local translation-cache.json and force fresh engine requests",
-	TipClearCache:      "Clear all locally persisted translation cache entries",
-	TipProxyURL:        "HTTP / HTTPS / SOCKS5 proxy URL; enables one-click proxy toggle for cloud engines",
-	TipSkipTLS:         "Skip TLS verification (only for self-signed corporate proxies or debugging)",
-	TipProxyAllCloud:   "Toggle proxy usage for all cloud engines (skips localhost)",
-	TipProviderToggle:  "Enable or disable this provider in the translation waterfall",
+	TipConcurrencyDec:       "Decrease concurrent translation workers (1–16)",
+	TipConcurrencyInc:       "Increase concurrent translation workers (1–16); 2–4 recommended for free web engines",
+	TipBypassCache:          "Ignore local translation-cache.json and force fresh engine requests",
+	TipClearCache:           "Clear all locally persisted translation cache entries",
+	TipProxyURL:             "HTTP / HTTPS / SOCKS5 proxy URL; enables one-click proxy toggle for cloud engines",
+	TipSkipTLS:              "Skip TLS verification (only for self-signed corporate proxies or debugging)",
+	TipProxyAllCloud:        "Toggle proxy usage for all cloud engines (skips localhost)",
+	TipProviderToggle:       "Enable or disable this provider in the translation waterfall",
 	SectionWaterfall:        "Waterfall Providers (Priority Order)",
 	BadgeLocal:              "Local",
 	BadgeEngine:             "Cloud",
@@ -876,10 +879,10 @@ var enCatalog = Catalog{
 	BtnDiscoverModels:       "Models",
 	BtnShowSecret:           "Show",
 	BtnHideSecret:           "Hide",
-	TipBrowseFile:     "Open system file or folder picker",
-	TipTestConn:       "Send a quick probe request to verify connectivity and credentials",
-	TipDiscoverModels: "Fetch available model IDs from the API endpoint",
-	TipToggleSecret:   "Show or hide secret value",
+	TipBrowseFile:           "Open system file or folder picker",
+	TipTestConn:             "Send a quick probe request to verify connectivity and credentials",
+	TipDiscoverModels:       "Fetch available model IDs from the API endpoint",
+	TipToggleSecret:         "Show or hide secret value",
 
 	SectionPresetProfiles:   "Preset Profiles",
 	BtnSelectAll:            "Select All",
@@ -890,25 +893,25 @@ var enCatalog = Catalog{
 	BadgeInBundle:           "In Bundle",
 	LabelFilePattern:        "Filename Pattern",
 	BtnScaffoldTS:           "Scaffold Missing Locale Files",
-	SectionLocaleListFmt:  "Locales (%d)",
-	BtnSetRef:             "Set Ref",
-	BtnIsRef:              "★ Ref",
-	TipSelectAllLocales:   "Enable all target locales below",
-	TipDeselectAllLocales: "Disable all target locales below (except reference)",
-	TipFilePattern:        "Filename template for scaffolding missing locales ({id} expands to locale ID)",
-	TipScaffoldTS:         "Generate skeleton files for enabled locales missing on disk (N/A for single-file multi-locale formats)",
-	TipLocaleEnable:       "Include this locale in translation and write-back scope",
-	TipSetRef:             "Set as reference locale shown alongside source text for cross-checking",
-	TipRemoveLocale:       "Remove locale",
-	LabelTranslateFrom:    "From",
-	TipTranslateFrom:      "Pick the source text for this locale: the bundle's source by default, or another enabled locale's existing translations (e.g. zh_TW from zh_CN for Simplified→Traditional)",
-	OptSourceDefault:      "Default (file source)",
-	SectionAddLocale:      "Add Custom Locale",
-	PlaceholderLocaleID:   "Locale ID (e.g. nl_NL)",
-	PlaceholderLocaleName: "Name (e.g. Dutch)",
-	PlaceholderEngineCode: "Code (nl)",
-	BtnAddLocale:          "Add Locale",
-	TipAddLocale: "Add a custom target locale to your configuration",
+	SectionLocaleListFmt:    "Locales (%d)",
+	BtnSetRef:               "Set Ref",
+	BtnIsRef:                "★ Ref",
+	TipSelectAllLocales:     "Enable all target locales below",
+	TipDeselectAllLocales:   "Disable all target locales below (except reference)",
+	TipFilePattern:          "Filename template for scaffolding missing locales ({id} expands to locale ID)",
+	TipScaffoldTS:           "Generate skeleton files for enabled locales missing on disk (N/A for single-file multi-locale formats)",
+	TipLocaleEnable:         "Include this locale in translation and write-back scope",
+	TipSetRef:               "Set as reference locale shown alongside source text for cross-checking",
+	TipRemoveLocale:         "Remove locale",
+	LabelTranslateFrom:      "From",
+	TipTranslateFrom:        "Pick the source text for this locale: the bundle's source by default, or another enabled locale's existing translations (e.g. zh_TW from zh_CN for Simplified→Traditional)",
+	OptSourceDefault:        "Default (file source)",
+	SectionAddLocale:        "Add Custom Locale",
+	PlaceholderLocaleID:     "Locale ID (e.g. nl_NL)",
+	PlaceholderLocaleName:   "Name (e.g. Dutch)",
+	PlaceholderEngineCode:   "Code (nl)",
+	BtnAddLocale:            "Add Locale",
+	TipAddLocale:            "Add a custom target locale to your configuration",
 
 	FilterAll:         "All",
 	FilterGaps:        "Gaps",
@@ -959,68 +962,68 @@ var enCatalog = Catalog{
 	OriginManual:    "Manual",
 	OriginCache:     "Cache",
 
-	TabInspector:        "Inspector & Format Diff",
-	TabLogsFmt:          "Logs & Diagnostics (%d)",
-	InspectorEmptyHint:  "Click any entry row above to edit its translation and preview the format diff",
-	LabelKeyIDPrefix:    "Key: ",
-	LabelContextPrefix:  "Context: ",
-	LabelLocationPrefix: "Location: ",
-	LabelCommentPrefix:  "Comment: ",
-	BadgeNumerus:        "Plural Numerus (separate with ---)",
-	LabelTargetLocale:   "Target Locale:",
-	LabelSource:         "Source",
-	LabelRef:            "Reference",
-	LabelNone:           "(None)",
-	LabelEditTargetFmt:  "Translation (%s)",
-	BtnTranslateRow:     "⚡ Translate Row",
-	TipTranslateRow:     "Translate this row immediately using active providers",
-	BtnPrevGap:          "◀ Prev Gap",
-	TipPrevGap:          "Jump to previous gap or warning row (Alt+Up)",
-	BtnNextGap:          "Next Gap ▶",
-	TipNextGap:          "Jump to next gap or warning row (Alt+Down / F3)",
-	BtnCopySrc:          "Copy Src",
-	BtnUseSrc:           "Use Src",
-	BtnResetCell:        "Reset Cell",
-	TipLocalePill: "Switch active target locale in the editor below",
-	TipCopySrc:    "Copy source text to clipboard",
-	TipUseSrc:     "Fill editor with source text (useful for brand names, identifiers, or untranslatable strings)",
-	TipResetCell:  "Discard unsaved edits on this cell and revert to file original",
-	HintNumerus:         "Tip: This entry has plural forms. Separate each form with a line containing only ---.",
-	PlaceholderEditor:   "Enter translation (auto-saved, O(1) cell refresh)...",
-	LabelBeforeXML:      "Before",
-	LabelAfterXML:       "After",
-	LogCountFmt:         "%d log entries",
-	BtnCopyLogs:         "Copy Logs",
-	BtnClearLogs:        "Clear Logs",
-	TipCopyLogs:  "Copy all logs to clipboard",
-	TipClearLogs: "Clear log panel",
-	BtnSettings:              "Settings",
-	TipSettings:              "Open global settings (appearance, language, proxy, cache, and updates)",
-	SettingsModalTitle:       "LocLoom Settings",
-	SettingsTabGeneral:       "General",
-	SettingsTabNetwork:       "Proxy & Cache",
-	SettingsTabUpdates:       "Updates & Guide",
-	LabelUILang:              "Interface Language",
-	LabelThemeMode:           "Theme",
-	LabelCurrentVersionFmt:   "Current version: v%s",
-	CheckAutoUpdate:          "Check for updates on startup",
-	BtnCheckUpdates:          "Check for Updates",
-	BtnCheckingUpdates:       "Checking...",
-	StatusUpToDateFmt:        "You're up to date (v%s)",
-	StatusUpdateAvailFmt:     "Update available: v%s (current v%s)",
-	StatusUpdateErrFmt:       "Update check failed: %v",
-	BtnOpenReleasePage:       "Download Latest Release",
-	BtnOpenOnboarding:        "Show Onboarding Guide",
-	PipelineSummaryFmt:       "Workers %d · Cache %d · %s",
-	OnboardingTitle:          "Welcome to LocLoom",
-	OnboardingSubtitle:       "Lossless Localization Workbench · 3-Step Quick Start",
-	OnboardingStep1Title:     "1. Load Your Project",
-	OnboardingStep1Desc:      "Click Open Dir / Open File above, or drop a folder / .zip / .xlsx onto the window. Supports .ts, .po, .json, .arb, .xcstrings, strings.xml, .resx, .xliff.",
-	OnboardingStep2Title:     "2. Configure Engines & Translate",
-	OnboardingStep2Desc:      "Enable free web engines (Google / Bing / LibreTranslate / MyMemory) or your own API in Pipeline, then click Start Translate.",
-	OnboardingStep3Title:     "3. Review & Save Back",
-	OnboardingStep3Desc:      "Review translations and [⚠] placeholder warnings in the matrix or inspector, then click Save Back to patch files losslessly.",
-	BtnOnboardingStart:       "Get Started",
+	TabInspector:           "Inspector & Format Diff",
+	TabLogsFmt:             "Logs & Diagnostics (%d)",
+	InspectorEmptyHint:     "Click any entry row above to edit its translation and preview the format diff",
+	LabelKeyIDPrefix:       "Key: ",
+	LabelContextPrefix:     "Context: ",
+	LabelLocationPrefix:    "Location: ",
+	LabelCommentPrefix:     "Comment: ",
+	BadgeNumerus:           "Plural Numerus (separate with ---)",
+	LabelTargetLocale:      "Target Locale:",
+	LabelSource:            "Source",
+	LabelRef:               "Reference",
+	LabelNone:              "(None)",
+	LabelEditTargetFmt:     "Translation (%s)",
+	BtnTranslateRow:        "⚡ Translate Row",
+	TipTranslateRow:        "Translate this row immediately using active providers",
+	BtnPrevGap:             "◀ Prev Gap",
+	TipPrevGap:             "Jump to previous gap or warning row (Alt+Up)",
+	BtnNextGap:             "Next Gap ▶",
+	TipNextGap:             "Jump to next gap or warning row (Alt+Down / F3)",
+	BtnCopySrc:             "Copy Src",
+	BtnUseSrc:              "Use Src",
+	BtnResetCell:           "Reset Cell",
+	TipLocalePill:          "Switch active target locale in the editor below",
+	TipCopySrc:             "Copy source text to clipboard",
+	TipUseSrc:              "Fill editor with source text (useful for brand names, identifiers, or untranslatable strings)",
+	TipResetCell:           "Discard unsaved edits on this cell and revert to file original",
+	HintNumerus:            "Tip: This entry has plural forms. Separate each form with a line containing only ---.",
+	PlaceholderEditor:      "Enter translation (auto-saved, O(1) cell refresh)...",
+	LabelBeforeXML:         "Before",
+	LabelAfterXML:          "After",
+	LogCountFmt:            "%d log entries",
+	BtnCopyLogs:            "Copy Logs",
+	BtnClearLogs:           "Clear Logs",
+	TipCopyLogs:            "Copy all logs to clipboard",
+	TipClearLogs:           "Clear log panel",
+	BtnSettings:            "Settings",
+	TipSettings:            "Open global settings (appearance, language, proxy, cache, and updates)",
+	SettingsModalTitle:     "LocLoom Settings",
+	SettingsTabGeneral:     "General",
+	SettingsTabNetwork:     "Proxy & Cache",
+	SettingsTabUpdates:     "Updates & Guide",
+	LabelUILang:            "Interface Language",
+	LabelThemeMode:         "Theme",
+	LabelCurrentVersionFmt: "Current version: v%s",
+	CheckAutoUpdate:        "Check for updates on startup",
+	BtnCheckUpdates:        "Check for Updates",
+	BtnCheckingUpdates:     "Checking...",
+	StatusUpToDateFmt:      "You're up to date (v%s)",
+	StatusUpdateAvailFmt:   "Update available: v%s (current v%s)",
+	StatusUpdateErrFmt:     "Update check failed: %v",
+	BtnOpenReleasePage:     "Download Latest Release",
+	BtnOpenOnboarding:      "Show Onboarding Guide",
+	PipelineSummaryFmt:     "Workers %d · Cache %d · %s",
+	OnboardingTitle:        "Welcome to LocLoom",
+	OnboardingSubtitle:     "Lossless Localization Workbench · 3-Step Quick Start",
+	OnboardingStep1Title:   "1. Load Your Project",
+	OnboardingStep1Desc:    "Click Open Dir / Open File above, or drop a folder / .zip / .xlsx onto the window. Supports .ts, .po, .json, .arb, .xcstrings, strings.xml, .resx, .xliff.",
+	OnboardingStep2Title:   "2. Configure Engines & Translate",
+	OnboardingStep2Desc:    "Enable free web engines (Google / Bing / LibreTranslate / MyMemory) or your own API in Pipeline, then click Start Translate.",
+	OnboardingStep3Title:   "3. Review & Save Back",
+	OnboardingStep3Desc:    "Review translations and [⚠] placeholder warnings in the matrix or inspector, then click Save Back to patch files losslessly.",
+	BtnOnboardingStart:     "Get Started",
 
 	HelpModalTitle:      "LocLoom User Guide",
 	HelpFallbackMD:      "# LocLoom\n\nCross-platform concurrent localization and lossless patching workbench.",

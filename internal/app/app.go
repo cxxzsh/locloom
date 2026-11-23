@@ -108,6 +108,8 @@ type App struct {
 	translateStatuses   map[string]provider.LocaleStatus
 	translateDoneCount  int
 	translateTotalCount int
+	translateWave       int // 1-based wave of the running cascade; 0 when idle
+	translateWaveTotal  int
 	// Logs & status banner
 	logs            []provider.LogEvent
 	statusBanner    string
@@ -768,7 +770,7 @@ func (a *App) View(c *ui.Context) {
 			}
 			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(accentTint(t)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, fmt.Sprintf(tr.StatusTranslatingBannerFmt, a.translateDoneCount, a.translateTotalCount, frac*100)).
+				ui.Text(c, a.translateBannerText(tr, frac)).
 					FontSize(12).FontWeight(600).TextColor(t.Accent).SingleLine()
 				if detail != "" {
 					ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0)
@@ -830,4 +832,15 @@ func (a *App) View(c *ui.Context) {
 	})
 
 	a.viewModals(c)
+}
+
+// translateBannerText renders the in-flight translation status: plain
+// "x/y" for a single wave, or "wave i/n · x/y" while a dependent
+// cascade runs.
+func (a *App) translateBannerText(tr *i18n.Catalog, frac float64) string {
+	base := fmt.Sprintf(tr.StatusTranslatingBannerFmt, a.translateDoneCount, a.translateTotalCount, frac*100)
+	if a.translateWaveTotal > 1 && a.translateWave > 0 {
+		return fmt.Sprintf(tr.StatusTranslatingWaveFmt, a.translateWave, a.translateWaveTotal) + " · " + base
+	}
+	return base
 }
