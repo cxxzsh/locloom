@@ -475,6 +475,22 @@ func (a *App) dispatchUI(fn func()) {
 	}
 }
 
+// runOnUI runs fn on the mygo main UI thread and waits for it, so a
+// background goroutine can read or mutate plan state safely between
+// translation waves. With no window (headless/tests) it runs inline.
+func (a *App) runOnUI(fn func()) {
+	if a.win == nil {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	a.win.Update(func() {
+		fn()
+		close(done)
+	})
+	<-done
+}
+
 func (a *App) invalidate() {
 	if a.win != nil {
 		a.win.Invalidate()

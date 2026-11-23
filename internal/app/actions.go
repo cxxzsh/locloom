@@ -658,24 +658,17 @@ func (a *App) startTranslation() {
 			// each wave's task list there so it reads the latest texts.
 			var tasks map[string][]provider.SourceItem
 			var waveItems int
-			built := make(chan struct{})
-			a.dispatchUI(func() {
+			a.runOnUI(func() {
 				tasks, waveItems = buildTranslationTasks(a.plan, waveLocales, cfg.WriteMode, bundleSourceLocale)
 				a.translateTotalCount += waveItems
 				if waveItems > 0 {
 					a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), waveItems, cfg.Concurrency))
 				}
-				close(built)
 			})
-			<-built
 			if waveItems == 0 {
 				continue
 			}
-			a.dispatchUI(func() {
-				a.translateTotalCount += waveItems
-				a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), waveItems, cfg.Concurrency))
-			})
-			opts := provider.DispatchOptions{
+			res := provider.RunConcurrent(ctx, provider.DispatchOptions{
 				Registry:    provider.DefaultRegistry(),
 				Cache:       a.cache,
 				ProviderIDs: activeIDs,
@@ -684,8 +677,7 @@ func (a *App) startTranslation() {
 				Concurrency: cfg.Concurrency,
 				BypassCache: cfg.BypassCache,
 				OnUpdate:    a.translationOnUpdate(),
-			}
-			res := provider.RunConcurrent(ctx, opts)
+			})
 			totalTranslated += len(res.Cells)
 			if ctx.Err() != nil {
 				break
@@ -1372,16 +1364,13 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 		// translated text for this row.
 		for _, waveLocs := range translationWaves(targetLocales) {
 			var tasks map[string][]provider.SourceItem
-			built := make(chan struct{})
-			a.dispatchUI(func() {
+			a.runOnUI(func() {
 				tasks = rowTasks(waveLocs)
-				close(built)
 			})
-			<-built
 			if len(tasks) == 0 {
 				continue
 			}
-			opts := provider.DispatchOptions{
+			res := provider.RunConcurrent(ctx, provider.DispatchOptions{
 				Registry:    provider.DefaultRegistry(),
 				Cache:       a.cache,
 				ProviderIDs: activeIDs,
@@ -1389,10 +1378,8 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 				Tasks:       tasks,
 				Concurrency: cfg.Concurrency,
 				BypassCache: cfg.BypassCache || forceLocaleID != "",
-			}
-			res := provider.RunConcurrent(ctx, opts)
-			applied := make(chan struct{})
-			a.dispatchUI(func() {
+			})
+			a.runOnUI(func() {
 				for _, cell := range res.Cells {
 					origin := cell.ProviderID
 					if forceLocaleID != "" {
@@ -1404,9 +1391,7 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 				for _, ev := range res.Events {
 					a.logs = append(a.logs, ev)
 				}
-				close(applied)
 			})
-			<-applied
 			translated += len(res.Cells)
 			if ctx.Err() != nil {
 				break
