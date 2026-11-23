@@ -72,6 +72,10 @@ type App struct {
 	showOnboarding  bool
 	checkingUpdate  bool
 	updateInfo      *updater.ReleaseInfo
+	pendingUpdate   *mygo.Update // signed update offered by mygo.Updater
+	installingUpd   bool
+	updateDL        int64 // install download progress, bytes
+	updateTotal     int64
 	updateErr       string
 	helpMarkdown    string
 	helpMarkdownZH  string

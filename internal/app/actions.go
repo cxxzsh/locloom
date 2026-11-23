@@ -1540,8 +1540,29 @@ func (a *App) checkUpdatesAsync(silent bool) {
 	a.checkingUpdate = true
 	a.updateErr = ""
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if mygo.Updater.Enabled() {
+			up, err := mygo.Updater.Check(ctx)
+			a.dispatchUI(func() {
+				a.checkingUpdate = false
+				if err != nil {
+					a.updateErr = err.Error()
+					if !silent {
+						a.setStatus(fmt.Sprintf(a.tr().StatusUpdateErrFmt, err), true)
+					}
+					return
+				}
+				a.pendingUpdate = up
+				a.updateInfo = nil
+				if up != nil {
+					a.setStatus(fmt.Sprintf(a.tr().StatusUpdateAvailFmt, up.Version, config.AppVersion), false)
+				} else if !silent {
+					a.setStatus(fmt.Sprintf(a.tr().StatusUpToDateFmt, config.AppVersion), false)
+				}
+			})
+			return
+		}
 		client, _ := a.netPool.Client(true)
 		info, err := updater.CheckLatest(ctx, client, updater.DefaultLatestReleaseURL, config.AppVersion)
 		a.dispatchUI(func() {
@@ -1554,12 +1575,47 @@ func (a *App) checkUpdatesAsync(silent bool) {
 				return
 			}
 			a.updateInfo = &info
+			a.pendingUpdate = nil
 			if info.HasUpdate {
 				a.setStatus(fmt.Sprintf(a.tr().StatusUpdateAvailFmt, info.LatestVersion, info.CurrentVersion), false)
 			} else if !silent {
 				a.setStatus(fmt.Sprintf(a.tr().StatusUpToDateFmt, info.CurrentVersion), false)
 			}
 		})
+	}()
+}
+
+// installUpdate downloads, verifies and swaps in the signed update
+// offered by mygo.Updater, then relaunches. Progress is relayed onto
+// the UI thread for the settings modal's progress bar.
+func (a *App) installUpdate() {
+	if a.installingUpd || a.pendingUpdate == nil {
+		return
+	}
+	up := a.pendingUpdate
+	a.installingUpd = true
+	a.updateErr = ""
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		err := up.Install(ctx, func(dl, total int64) {
+			a.dispatchUI(func() {
+				a.updateDL, a.updateTotal = dl, total
+			})
+		})
+		a.dispatchUI(func() {
+			a.installingUpd = false
+			if err != nil {
+				a.updateErr = err.Error()
+				a.setStatus(fmt.Sprintf(a.tr().StatusUpdateErrFmt, err), true)
+				return
+			}
+			a.pendingUpdate = nil
+			a.setStatus(a.tr().StatusUpdateInstalled, false)
+		})
+		if err == nil {
+			mygo.App.Relaunch()
+		}
 	}()
 }
 

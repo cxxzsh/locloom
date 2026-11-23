@@ -345,6 +345,9 @@ type Catalog struct {
 	StatusUpToDateFmt      string
 	StatusUpdateAvailFmt   string
 	StatusUpdateErrFmt     string
+	BtnInstallUpdate       string
+	BtnInstalling          string
+	StatusUpdateInstalled  string
 	BtnOpenReleasePage     string
 	BtnOpenOnboarding      string
 	PipelineSummaryFmt     string
@@ -673,6 +676,9 @@ var zhCatalog = Catalog{
 	StatusUpToDateFmt:      "已是最新版本 (v%s)",
 	StatusUpdateAvailFmt:   "发现新版本 v%s（当前 v%s）",
 	StatusUpdateErrFmt:     "检查更新失败：%v",
+	BtnInstallUpdate:       "安装并重启",
+	BtnInstalling:          "正在安装更新...",
+	StatusUpdateInstalled:  "更新已安装，正在重启...",
 	BtnOpenReleasePage:     "前往下载新版本",
 	BtnOpenOnboarding:      "重新查看新手引导",
 	PipelineSummaryFmt:     "并发 %d · 缓存 %d 条 · %s",
@@ -1012,6 +1018,9 @@ var enCatalog = Catalog{
 	StatusUpToDateFmt:      "You're up to date (v%s)",
 	StatusUpdateAvailFmt:   "Update available: v%s (current v%s)",
 	StatusUpdateErrFmt:     "Update check failed: %v",
+	BtnInstallUpdate:       "Install & Relaunch",
+	BtnInstalling:          "Installing update...",
+	StatusUpdateInstalled:  "Update installed, relaunching...",
 	BtnOpenReleasePage:     "Download Latest Release",
 	BtnOpenOnboarding:      "Show Onboarding Guide",
 	PipelineSummaryFmt:     "Workers %d · Cache %d · %s",

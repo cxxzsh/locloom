@@ -370,14 +370,34 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 								if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Disabled(a.checkingUpdate).Clicked() {
 									a.checkUpdatesAsync(false)
 								}
+								if a.pendingUpdate != nil {
+									lbl := tr.BtnInstallUpdate
+									if a.installingUpd {
+										lbl = tr.BtnInstalling
+									}
+									if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Disabled(a.installingUpd).Clicked() {
+										a.installUpdate()
+									}
+								}
 								if a.updateInfo != nil && a.updateInfo.HasUpdate {
 									if ui.Button(c, tr.BtnOpenReleasePage).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
 										a.openReleasePage()
 									}
 								}
 							})
+							if a.installingUpd && a.updateTotal > 0 {
+								ui.Progress(c, float64(a.updateDL)/float64(a.updateTotal))
+							}
 							if a.updateErr != "" {
 								ui.Text(c, fmt.Sprintf(tr.StatusUpdateErrFmt, a.updateErr)).FontSize(12).TextColor(t.Danger)
+							} else if a.pendingUpdate != nil {
+								ui.Text(c, fmt.Sprintf(tr.StatusUpdateAvailFmt, a.pendingUpdate.Version, config.AppVersion)).
+									FontSize(12).FontWeight(600).TextColor(t.Accent)
+								if a.pendingUpdate.Notes != "" {
+									ui.Scroll(c).MaxHeight(120).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
+										markdown.View(c, a.pendingUpdate.Notes, &a.mdOpts)
+									})
+								}
 							} else if a.updateInfo != nil {
 								if a.updateInfo.HasUpdate {
 									ui.Text(c, fmt.Sprintf(tr.StatusUpdateAvailFmt, a.updateInfo.LatestVersion, a.updateInfo.CurrentVersion)).
