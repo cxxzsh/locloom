@@ -298,10 +298,6 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 			locID := locs[locIdx].ID
 			cell := r.Cells[locID]
 			tag, fg := shortMatrixTag(c, cell, tr)
-			bg := ui.Transparent
-			if a.activeEditLocale == locID {
-				bg = t.Accent.Alpha(0.08)
-			}
 			tip := cell.Effective
 			if len(cell.Warnings) > 0 {
 				warnTip := strings.Join(cell.Warnings, "\n")
@@ -317,8 +313,6 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 				AlignSelf(ui.Stretch).
 				Gap(t.Space(1)).
 				Padding(t.Space(0.5), t.Space(1)).
-				Radius(t.Radius).
-				Background(bg).
 				AlignItems(ui.Center).
 				Cursor(ui.CursorPointer).
 				Tooltip(tip)
