@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -635,81 +635,154 @@ func (a *App) startTranslation() {
 	if a.bundle != nil {
 		bundleSourceLocale = a.bundle.SourceLocale
 	}
-	tasks, totalItems := buildTranslationTasks(a.plan, targetLocales, cfg.WriteMode, bundleSourceLocale)
 
-	if totalItems == 0 {
-		a.setStatus(a.tr().StatusNoGapsToTranslate, false)
-		return
-	}
+	// Dependent locales translate in waves: a locale pinned to another
+	// target's output (e.g. zh_TW from zh_CN) runs after its source's wave
+	// so it picks up the translations that wave just produced.
+	waves := translationWaves(targetLocales)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.translating = true
 	a.cancelTranslate = cancel
 	a.translateDoneCount = 0
-	a.translateTotalCount = totalItems
+	a.translateTotalCount = 0
 	a.translateStatuses = make(map[string]provider.LocaleStatus)
 	a.statusBanner = ""
 	a.statusBannerErr = false
-	a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), totalItems, cfg.Concurrency))
 
 	go func() {
-		opts := provider.DispatchOptions{
-			Registry:    provider.DefaultRegistry(),
-			Cache:       a.cache,
-			ProviderIDs: activeIDs,
-			Locales:     targetLocales,
-			Tasks:       tasks,
-			Concurrency: cfg.Concurrency,
-			BypassCache: cfg.BypassCache,
-			OnUpdate: func(statuses map[string]provider.LocaleStatus, newCells []provider.TranslatedCell, newEvents []provider.LogEvent) {
-				a.dispatchUI(func() {
-					a.translateStatuses = statuses
-					done := 0
-					for _, st := range statuses {
-						done += st.Completed
-					}
-					a.translateDoneCount = done
-
-					for _, cell := range newCells {
-						a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
-					}
-					if len(newCells) > 0 {
-						updatedAny := false
-						for _, cell := range newCells {
-							if planner.UpdateCellByKey(a.plan, cell.Key, cell.LocaleID, a.catalog) {
-								updatedAny = true
-							}
-							if cell.Key == a.editBoundRowKey && cell.LocaleID == a.activeEditLocale {
-								a.editBoundLocale = ""
-							}
-						}
-						if updatedAny {
-							if a.statusFilter != 0 || strings.TrimSpace(a.searchQuery) != "" {
-								a.refilterRows()
-							} else {
-								a.syncEditorFromSelection()
-							}
-							a.syncWindowEdited()
-						}
-					}
-					for _, ev := range newEvents {
-						a.logs = append(a.logs, ev)
-					}
-					a.trimLogs()
-				})
-			},
+		totalTranslated := 0
+		start := time.Now()
+		for _, waveLocales := range waves {
+			// Plan cells mutate on the UI thread as results land; build
+			// each wave's task list there so it reads the latest texts.
+			var tasks map[string][]provider.SourceItem
+			var waveItems int
+			built := make(chan struct{})
+			a.dispatchUI(func() {
+				tasks, waveItems = buildTranslationTasks(a.plan, waveLocales, cfg.WriteMode, bundleSourceLocale)
+				a.translateTotalCount += waveItems
+				if waveItems > 0 {
+					a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), waveItems, cfg.Concurrency))
+				}
+				close(built)
+			})
+			<-built
+			if waveItems == 0 {
+				continue
+			}
+			a.dispatchUI(func() {
+				a.translateTotalCount += waveItems
+				a.appendLog("info", "", "", fmt.Sprintf(a.tr().LogStartTranslateFmt, len(tasks), waveItems, cfg.Concurrency))
+			})
+			opts := provider.DispatchOptions{
+				Registry:    provider.DefaultRegistry(),
+				Cache:       a.cache,
+				ProviderIDs: activeIDs,
+				Locales:     waveLocales,
+				Tasks:       tasks,
+				Concurrency: cfg.Concurrency,
+				BypassCache: cfg.BypassCache,
+				OnUpdate:    a.translationOnUpdate(),
+			}
+			res := provider.RunConcurrent(ctx, opts)
+			totalTranslated += len(res.Cells)
+			if ctx.Err() != nil {
+				break
+			}
 		}
-		res := provider.RunConcurrent(ctx, opts)
+		dur := time.Since(start)
 		a.dispatchUI(func() {
 			a.translating = false
 			a.cancelTranslate = nil
-			a.translateStatuses = res.Statuses
-			msg := fmt.Sprintf(a.tr().StatusTranslateDoneFmt, len(res.Cells), res.Duration.Round(time.Millisecond))
+			msg := fmt.Sprintf(a.tr().StatusTranslateDoneFmt, totalTranslated, dur.Round(time.Millisecond))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)
 			a.rebuildPlan()
 		})
 	}()
+}
+
+// translationOnUpdate returns the shared OnUpdate callback wiring cell
+// results and log events back onto the UI thread for one wave.
+func (a *App) translationOnUpdate() func(map[string]provider.LocaleStatus, []provider.TranslatedCell, []provider.LogEvent) {
+	return func(statuses map[string]provider.LocaleStatus, newCells []provider.TranslatedCell, newEvents []provider.LogEvent) {
+		a.dispatchUI(func() {
+			for id, st := range statuses {
+				a.translateStatuses[id] = st
+			}
+			done := 0
+			for _, st := range a.translateStatuses {
+				done += st.Completed
+			}
+			a.translateDoneCount = done
+
+			for _, cell := range newCells {
+				a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+			}
+			if len(newCells) > 0 {
+				updatedAny := false
+				for _, cell := range newCells {
+					if planner.UpdateCellByKey(a.plan, cell.Key, cell.LocaleID, a.catalog) {
+						updatedAny = true
+					}
+					if cell.Key == a.editBoundRowKey && cell.LocaleID == a.activeEditLocale {
+						a.editBoundLocale = ""
+					}
+				}
+				if updatedAny {
+					if a.statusFilter != 0 || strings.TrimSpace(a.searchQuery) != "" {
+						a.refilterRows()
+					} else {
+						a.syncEditorFromSelection()
+					}
+					a.syncWindowEdited()
+				}
+			}
+			for _, ev := range newEvents {
+				a.logs = append(a.logs, ev)
+			}
+			a.trimLogs()
+		})
+	}
+}
+
+// translationWaves sorts target locales into dependency waves by
+// SourceLocale: wave 0 translates from the bundle's reference, wave N
+// from a locale of an earlier wave. A cycle falls back to config order
+// so nothing is dropped.
+func translationWaves(locs []locale.LocaleSpec) [][]locale.LocaleSpec {
+	byID := make(map[string]locale.LocaleSpec, len(locs))
+	for _, l := range locs {
+		byID[l.ID] = l
+	}
+	depth := make(map[string]int, len(locs))
+	var level func(l locale.LocaleSpec, seen map[string]bool) int
+	level = func(l locale.LocaleSpec, seen map[string]bool) int {
+		if d, ok := depth[l.ID]; ok {
+			return d
+		}
+		d := 0
+		if l.SourceLocale != "" {
+			if src, ok := byID[l.SourceLocale]; ok && !seen[l.ID] {
+				seen[l.ID] = true
+				d = level(src, seen) + 1
+			}
+		}
+		depth[l.ID] = d
+		return d
+	}
+	maxD := 0
+	for _, l := range locs {
+		if d := level(l, map[string]bool{}); d > maxD {
+			maxD = d
+		}
+	}
+	waves := make([][]locale.LocaleSpec, maxD+1)
+	for _, l := range locs {
+		waves[depth[l.ID]] = append(waves[depth[l.ID]], l)
+	}
+	return waves
 }
 
 func (a *App) stopTranslation() {
@@ -1161,7 +1234,7 @@ func (a *App) jumpGap(delta int) {
 		}
 	}
 	for step := 1; step <= n; step++ {
-		idx := ((start + delta*step) % n + n) % n
+		idx := ((start+delta*step)%n + n) % n
 		row := &a.plan.Rows[a.filteredRows[idx]]
 		if row.HasGap || row.HasWarning {
 			a.selectedRow = idx
@@ -1248,77 +1321,106 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 		return
 	}
 
-	tasks := make(map[string][]provider.SourceItem)
 	refID := a.plan.RefLocaleID
-	for _, loc := range targetLocales {
-		if forceLocaleID == "" {
-			cell, ok := row.Cells[loc.ID]
-			if ok && cell.Status == domain.StatusVanished {
+
+	rowTasks := func(locs []locale.LocaleSpec) map[string][]provider.SourceItem {
+		tasks := make(map[string][]provider.SourceItem)
+		for _, loc := range locs {
+			if forceLocaleID == "" {
+				cell, ok := row.Cells[loc.ID]
+				if ok && cell.Status == domain.StatusVanished {
+					continue
+				}
+				if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
+					continue
+				}
+				if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
+					continue
+				}
+			}
+			srcText, srcLoc := localeSource(a.plan, row, loc)
+			if strings.TrimSpace(srcText) == "" {
 				continue
 			}
-			if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
-				continue
+			if srcLoc == "" && a.bundle != nil {
+				srcLoc = a.bundle.SourceLocale
 			}
-			if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
-				continue
-			}
+			tasks[loc.ID] = []provider.SourceItem{{
+				ID:           row.Key.Canonical(),
+				Key:          row.Key,
+				SourceLocale: srcLoc,
+				SrcText:      srcText,
+				RefLocale:    refID,
+				RefText:      row.RefText,
+				Numerus:      row.Numerus,
+			}}
 		}
-		srcText, srcLoc := localeSource(a.plan, row, loc)
-		if strings.TrimSpace(srcText) == "" {
-			continue
-		}
-		if srcLoc == "" && a.bundle != nil {
-			srcLoc = a.bundle.SourceLocale
-		}
-		tasks[loc.ID] = []provider.SourceItem{{
-			ID:           row.Key.Canonical(),
-			Key:          row.Key,
-			SourceLocale: srcLoc,
-			SrcText:      srcText,
-			RefLocale:    refID,
-			RefText:      row.RefText,
-			Numerus:      row.Numerus,
-		}}
+		return tasks
 	}
-	if len(tasks) == 0 {
+	if n := len(rowTasks(targetLocales)); n == 0 {
 		a.setStatus(a.tr().StatusRowNoGaps, false)
 		return
+	} else {
+		a.translatingRow = true
+		a.setStatus(fmt.Sprintf(a.tr().StatusTranslatingRowFmt, n), false)
 	}
-
-	a.translatingRow = true
-	a.setStatus(fmt.Sprintf(a.tr().StatusTranslatingRowFmt, len(tasks)), false)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		opts := provider.DispatchOptions{
-			Registry:    provider.DefaultRegistry(),
-			Cache:       a.cache,
-			ProviderIDs: activeIDs,
-			Locales:     targetLocales,
-			Tasks:       tasks,
-			Concurrency: cfg.Concurrency,
-			BypassCache: cfg.BypassCache || forceLocaleID != "",
+		translated := 0
+		// Dependent locales go in waves so e.g. zh_TW reads zh_CN's just
+		// translated text for this row.
+		for _, waveLocs := range translationWaves(targetLocales) {
+			var tasks map[string][]provider.SourceItem
+			built := make(chan struct{})
+			a.dispatchUI(func() {
+				tasks = rowTasks(waveLocs)
+				close(built)
+			})
+			<-built
+			if len(tasks) == 0 {
+				continue
+			}
+			opts := provider.DispatchOptions{
+				Registry:    provider.DefaultRegistry(),
+				Cache:       a.cache,
+				ProviderIDs: activeIDs,
+				Locales:     waveLocs,
+				Tasks:       tasks,
+				Concurrency: cfg.Concurrency,
+				BypassCache: cfg.BypassCache || forceLocaleID != "",
+			}
+			res := provider.RunConcurrent(ctx, opts)
+			applied := make(chan struct{})
+			a.dispatchUI(func() {
+				for _, cell := range res.Cells {
+					origin := cell.ProviderID
+					if forceLocaleID != "" {
+						origin = domain.OriginManual
+					}
+					a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, origin)
+					planner.UpdateCellByKey(a.plan, cell.Key, cell.LocaleID, a.catalog)
+				}
+				for _, ev := range res.Events {
+					a.logs = append(a.logs, ev)
+				}
+				close(applied)
+			})
+			<-applied
+			translated += len(res.Cells)
+			if ctx.Err() != nil {
+				break
+			}
 		}
-		res := provider.RunConcurrent(ctx, opts)
 		a.dispatchUI(func() {
 			a.translatingRow = false
-			for _, cell := range res.Cells {
-				origin := cell.ProviderID
-				if forceLocaleID != "" {
-					origin = domain.OriginManual
-				}
-				a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, origin)
-			}
-			for _, ev := range res.Events {
-				a.logs = append(a.logs, ev)
-			}
 			a.trimLogs()
-			if len(res.Cells) > 0 {
+			if translated > 0 {
 				a.editBoundLocale = ""
 				a.rebuildPlan()
 				a.syncEditorFromSelection()
 			}
-			a.setStatus(fmt.Sprintf(a.tr().StatusTranslateRowDoneFmt, len(res.Cells)), false)
+			a.setStatus(fmt.Sprintf(a.tr().StatusTranslateRowDoneFmt, translated), false)
 		})
 	}()
 }

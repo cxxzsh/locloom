@@ -1075,6 +1075,28 @@ func TestBuildTranslationTasksUsesPinnedSourceLocale(t *testing.T) {
 	}
 }
 
+func TestTranslationWavesTopoSort(t *testing.T) {
+	locs := []locale.LocaleSpec{
+		{ID: "zh_CN", Enabled: true},
+		{ID: "zh_TW", Enabled: true, SourceLocale: "zh_CN"},
+		{ID: "ja_JP", Enabled: true},
+		{ID: "zh_HK", Enabled: true, SourceLocale: "zh_TW"},
+	}
+	waves := translationWaves(locs)
+	if len(waves) != 3 {
+		t.Fatalf("expected 3 waves, got %d: %+v", len(waves), waves)
+	}
+	if len(waves[0]) != 2 || waves[1][0].ID != "zh_TW" || waves[2][0].ID != "zh_HK" {
+		t.Fatalf("unexpected wave order: %+v", waves)
+	}
+
+	// A pinned source outside the target set keeps its locale in wave 0.
+	ext := []locale.LocaleSpec{{ID: "fr_FR", Enabled: true, SourceLocale: "en_US"}}
+	if w := translationWaves(ext); len(w) != 1 || len(w[0]) != 1 {
+		t.Fatalf("external source should stay in wave 0: %+v", w)
+	}
+}
+
 func TestSidebarCheckboxesDoNotStretchToBlankAreaAndAppendContextTyping(t *testing.T) {
 	a := newTestApp()
 	a.cfg.CreateBackup = false
