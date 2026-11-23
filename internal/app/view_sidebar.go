@@ -17,7 +17,7 @@ func (a *App) viewSidebar(c *ui.Context) {
 	t := c.Theme()
 	tr := a.tr()
 
-	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(2)).Children(func() {
+	card(c, t).Fill().MarginEnd(t.Space(1.5)).Padding(t.Space(2)).Gap(t.Space(2)).Children(func() {
 		ui.Tabs(c, &a.sidebarTab, tr.TabProject, tr.TabPipeline, tr.TabLocales).FillWidth()
 		switch a.sidebarTab {
 		case 0:
@@ -126,8 +126,8 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 				bg := ui.Transparent
 				fg := t.Text
 				if active {
-					bg = t.Accent.Alpha(0.14)
-					fg = t.Accent
+					bg = accentTint(t)
+					fg = accentInk(t)
 				}
 				row := ui.Row(c).
 					Padding(t.Space(1), t.Space(2)).
@@ -141,7 +141,7 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 					a.contextFilter = name
 					a.refilterRows()
 				}
-			}).Height(165).Border(1, t.Border).Radius(t.Radius).Padding(t.Space(1))
+			}).Height(165).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Padding(t.Space(1))
 
 			ui.Divider(c)
 
@@ -161,18 +161,18 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 					}
 				}
 				focused := a.focusedLocale == locID
-				cardBg := t.Surface
-				borderCol := t.Border
+				cardBg := insetBg(t)
+				borderCol := hairline(t)
 				if focused {
-					cardBg = t.Accent.Alpha(0.1)
-					borderCol = t.Accent
+					cardBg = accentTint(t)
+					borderCol = t.Accent.Alpha(0.55)
 				}
 				card := ui.Column(c).
 					Padding(t.Space(1.5), t.Space(2)).
 					Gap(t.Space(1)).
 					Background(cardBg).
 					Border(1, borderCol).
-					Radius(t.Radius).
+					Radius(cardRadius).
 					Cursor(ui.CursorPointer).
 					Tooltip(tr.TipLocaleProgressCard)
 				card.Children(func() {
@@ -221,13 +221,13 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 				Padding(t.Space(1.5), t.Space(2)).
 				Gap(t.Space(1.5)).
 				AlignItems(ui.Center).
-				Background(t.Surface).
-				Border(1, t.Border).
-				Radius(t.Radius).
+				Background(insetBg(t)).
+				Border(1, hairline(t)).
+				Radius(cardRadius).
 				Children(func() {
 					ui.Text(c, fmt.Sprintf(tr.PipelineSummaryFmt, a.cfg.Concurrency, cacheLen, proxyLabel)).
 						FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0)
-					if ui.Button(c, tr.BtnSettings).Padding(t.Space(0.5), t.Space(2)).Tooltip(tr.TipSettings).Clicked() {
+					if ui.Button(c, tr.BtnSettings).Padding(t.Space(0.5), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipSettings).Clicked() {
 						a.settingsTab = 1
 						a.showSettings = true
 					}
@@ -237,7 +237,7 @@ func (a *App) viewSidebarPipeline(c *ui.Context) {
 			ui.Row(c).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
 				ui.Text(c, tr.SectionWaterfall).FontSize(12).FontWeight(600).TextColor(t.TextMuted).Grow(1).MinWidth(0)
 				if !a.isDefaultProviderOrder() {
-					if ui.Button(c, tr.BtnResetOrder).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipResetOrder).Clicked() {
+					if ui.Button(c, tr.BtnResetOrder).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipResetOrder).Clicked() {
 						a.resetProviderOrder()
 					}
 				}
@@ -356,19 +356,17 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 		}
 	}
 
-	border := t.Border
+	border := hairline(t)
 	if enabled {
-		border = t.Accent.Alpha(0.6)
+		border = t.Accent.Alpha(0.55)
 	}
 
 	slot.Children(func() {
-		card := ui.Column(c).
+		card := cardStyles(t, ui.Column(c).
 			Key(pid).
 			Padding(t.Space(2)).
-			Gap(t.Space(1.5)).
-			Background(t.Surface).
+			Gap(t.Space(1.5))).
 			Border(1, border).
-			Radius(t.Radius).
 			Drag(providerDragItem{ID: pid})
 		if card.Dragging() {
 			card = card.Opacity(0.45).Cursor(ui.CursorGrabbing)
@@ -479,7 +477,7 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 								if revealed {
 									toggleLbl = tr.BtnHideSecret
 								}
-								if ui.Button(c, toggleLbl).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipToggleSecret).Clicked() {
+								if ui.Button(c, toggleLbl).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipToggleSecret).Clicked() {
 									a.revealedSecrets[secretKey] = !revealed
 								}
 							})
@@ -492,7 +490,7 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 									vals[fKey] = curVal
 									a.scheduleConfigSave()
 								}
-								if ui.Button(c, tr.BtnBrowse).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipBrowseFile).Clicked() {
+								if ui.Button(c, tr.BtnBrowse).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipBrowseFile).Clicked() {
 									win := a.win
 									go func() {
 										opts := mygo.OpenDialogOptions{
@@ -533,12 +531,12 @@ func (a *App) viewProviderCard(c *ui.Context, provs []provider.Provider, idx int
 				// Actions row: Test Connectivity + Discover Models (if supported)
 				ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 					testing := a.providerTesting[pid]
-					if ui.Button(c, tr.BtnTestConn).Padding(t.Space(1), t.Space(2)).Disabled(testing).Tooltip(tr.TipTestConn).Clicked() {
+					if ui.Button(c, tr.BtnTestConn).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Disabled(testing).Tooltip(tr.TipTestConn).Clicked() {
 						a.testProviderAsync(pid)
 					}
 					if _, ok := p.(provider.ModelDiscoverer); ok {
 						disc := a.discoveringModels[pid]
-						if ui.Button(c, tr.BtnDiscoverModels).Padding(t.Space(1), t.Space(2)).Disabled(disc).Tooltip(tr.TipDiscoverModels).Clicked() {
+						if ui.Button(c, tr.BtnDiscoverModels).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Disabled(disc).Tooltip(tr.TipDiscoverModels).Clicked() {
 							a.discoverModelsAsync(pid)
 						}
 					}
@@ -587,21 +585,22 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
 				for _, prof := range a.cfg.Profiles {
 					p := prof
-					if ui.Button(c, p.DisplayName(lang)).Padding(t.Space(1), t.Space(2)).Clicked() {
+					if ui.Button(c, p.DisplayName(lang)).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Clicked() {
 						a.applyLocaleProfile(p)
 					}
 				}
 			})
 
 			ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
-				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipSelectAllLocales).Clicked() {
+				if ui.Button(c, tr.BtnSelectAll).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipSelectAllLocales).Clicked() {
 					a.selectAllLocales(true)
 				}
-				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipDeselectAllLocales).Clicked() {
+				if ui.Button(c, tr.BtnDeselectAll).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipDeselectAllLocales).Clicked() {
 					a.selectAllLocales(false)
 				}
 				if ui.Button(c, tr.BtnSyncBundleLocales).
 					Padding(t.Space(1), t.Space(2)).
+					Radius(pillRadius).
 					Disabled(a.bundle == nil).
 					Tooltip(tr.TipSyncBundleLocales).
 					Clicked() {
@@ -617,6 +616,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 				}
 				if ui.Button(c, tr.BtnScaffoldTS).
 					Padding(t.Space(1), t.Space(2)).
+					Radius(pillRadius).
 					Disabled(a.bundle == nil || a.bundle.Topology == format.TopologyMultiLocale).
 					Tooltip(tr.TipScaffoldTS).
 					Clicked() {
@@ -645,7 +645,8 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 					Padding(t.Space(1), t.Space(1.5)).
 					Gap(t.Space(1)).
 					AlignItems(ui.Center).
-					Background(t.Surface).
+					Background(insetBg(t)).
+					Border(1, hairline(t)).
 					Radius(t.Radius).
 					Children(func() {
 						if ui.Checkbox(c, &loc.Enabled, "").Disabled(loc.IsRef).Tooltip(tr.TipLocaleEnable).Changed() {
@@ -668,11 +669,11 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 						if loc.IsRef {
 							refLabel = tr.BtnIsRef
 						}
-						if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Disabled(loc.IsRef).Tooltip(tr.TipSetRef).Clicked() {
+						if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Disabled(loc.IsRef).Tooltip(tr.TipSetRef).Clicked() {
 							a.setRefLocale(loc.ID)
 						}
 						if !loc.IsRef {
-							if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipRemoveLocale).Clicked() {
+							if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipRemoveLocale).Clicked() {
 								a.removeLocale(loc.ID)
 								return
 							}
@@ -690,7 +691,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 					ui.TextInput(c, &a.newLocName).Placeholder(tr.PlaceholderLocaleName).Grow(1).MinWidth(0)
 					ui.TextInput(c, &a.newLocCode).Placeholder(tr.PlaceholderEngineCode).Width(90).MinWidth(0)
 				})
-				if ui.Button(c, tr.BtnAddLocale).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipAddLocale).Clicked() {
+				if ui.Button(c, tr.BtnAddLocale).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipAddLocale).Clicked() {
 					a.addCustomLocale()
 				}
 			})

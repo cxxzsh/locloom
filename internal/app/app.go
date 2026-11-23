@@ -21,31 +21,31 @@ import (
 	"locloom/internal/netpool"
 	"locloom/internal/planner"
 	"locloom/internal/provider"
-	"locloom/internal/updater"
 	_ "locloom/internal/providers"
 	"locloom/internal/sheet"
+	"locloom/internal/updater"
 )
 
 // App holds the workbench UI state and coordinates background I/O/translation tasks
 // via lock-free UI-thread dispatch.
 type App struct {
-	win     *mygo.Window
-	cfg     config.AppConfig
-	netPool *netpool.Pool
-	cache   *provider.Cache
-	catalog *domain.Catalog
-	bundle  *format.Bundle
-	plan    *planner.MatrixPlan
+	win          *mygo.Window
+	cfg          config.AppConfig
+	netPool      *netpool.Pool
+	cache        *provider.Cache
+	catalog      *domain.Catalog
+	bundle       *format.Bundle
+	plan         *planner.MatrixPlan
 	extraEntries []domain.EntryKey
 	defaultCtx   string
 
 	// Layout & navigation state
-	sidebarTab    int
-	bottomTab     int
-	statusFilter  int
-	contextFilter string
-	searchQuery   string
-	searchHandle  ui.Handle
+	sidebarTab      int
+	bottomTab       int
+	statusFilter    int
+	contextFilter   string
+	searchQuery     string
+	searchHandle    ui.Handle
 	matrixHeightPct float32
 
 	// Selection & O(1) cell editing state
@@ -58,10 +58,11 @@ type App struct {
 	editBoundRowKey  domain.EntryKey
 	editBoundLocale  string
 
-	filteredRows  []int
-	tableState    ui.ListState
-	ctxListState  ui.ListState
-	logListState  ui.ListState
+	filteredRows []int
+	tableState   ui.ListState
+	rowSel       ui.Selection[string]
+	ctxListState ui.ListState
+	logListState ui.ListState
 
 	pendingTableOps []func()
 	// Modals & popovers
@@ -96,9 +97,9 @@ type App struct {
 	cacheClearLocale   string
 	cacheClearProvider string
 	cacheSearchQuery   string
-	newLocID   string
-	newLocName string
-	newLocCode string
+	newLocID           string
+	newLocName         string
+	newLocCode         string
 
 	// Concurrent translation state
 	translating         bool
@@ -193,6 +194,8 @@ func NewWithConfig(cfg config.AppConfig) *App {
 		}
 		return a.plan.Rows[a.filteredRows[i]].Key.Source
 	}
+	a.tableState.CellSelect = true
+	a.tableState.Selection = &a.rowSel
 	a.tableState.CellMenu = a.buildMatrixCellMenu
 	a.tableState.HeaderMenu = a.buildMatrixHeaderMenu
 
@@ -612,6 +615,7 @@ func (a *App) applyLoadedBundle(bundle *format.Bundle) {
 	a.appendLog("info", "", "", msg)
 	a.scheduleConfigSave()
 }
+
 // ImportFromExcelFile reads an .xlsx workbook and populates the workspace catalog.
 func (a *App) ImportFromExcelFile(xlsxPath, sheetName string, skipRef bool) error {
 	wb, err := sheet.LoadExcel(xlsxPath, sheetName, a.cfg.Locales, skipRef)
@@ -672,18 +676,7 @@ func (a *App) ExportToExcelFile(xlsxPath string, scope sheet.ExportScope) error 
 
 // View renders the entire workbench on the mygo main UI thread without locks.
 func (a *App) View(c *ui.Context) {
-	switch a.effectiveThemeMode() {
-	case 1:
-		c.SetTheme(ui.LightTheme())
-	case 2:
-		c.SetTheme(ui.DarkTheme())
-	default:
-		if a.win != nil && mygo.Theme.IsDark() {
-			c.SetTheme(ui.DarkTheme())
-		} else {
-			c.SetTheme(ui.LightTheme())
-		}
-	}
+	c.SetTheme(beautifulTheme(a.IsDarkTheme()))
 	t := c.Theme()
 
 	// Cross-platform keyboard shortcuts
@@ -722,7 +715,15 @@ func (a *App) View(c *ui.Context) {
 			a.jumpGap(-1)
 		}
 	}
-	root := ui.Column(c).Fill().Background(t.Background)
+	// Matrix rows select as a tinted wash, the RecordsTable way:
+	// chosen rows at accent 7%, the cursor column's cells at accent 12%
+	// with --accent-ink text (a transparent CellText falls back to white).
+	a.tableState.CellsStyle = ui.CellsStyle{
+		Cell:     t.Accent.Alpha(0.14),
+		CellText: accentInk(t),
+		Row:      t.Accent.Alpha(0.09),
+	}
+	root := ui.Column(c).Fill().Background(canvasBg(t))
 	if files := root.DroppedFiles(); len(files) > 0 {
 		a.handleDroppedPaths(files)
 	}
@@ -749,7 +750,7 @@ func (a *App) View(c *ui.Context) {
 			if len(activeParts) > 3 {
 				detail = strings.Join(activeParts[:3], " · ") + fmt.Sprintf(" (+%d)", len(activeParts)-3)
 			}
-			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(t.Accent.Alpha(0.10)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(accentTint(t)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf(tr.StatusTranslatingBannerFmt, a.translateDoneCount, a.translateTotalCount, frac*100)).
 					FontSize(12).FontWeight(600).TextColor(t.Accent).SingleLine()
@@ -761,16 +762,16 @@ func (a *App) View(c *ui.Context) {
 				ui.Column(c).Width(160).Children(func() {
 					ui.Progress(c, frac)
 				})
-				if ui.Button(c, tr.BtnStopTranslate).Padding(t.Space(0.5), t.Space(2)).Background(t.Danger).TextColor(t.AccentText).Tooltip(tr.TipStopTranslate).Clicked() {
+				if ui.Button(c, tr.BtnStopTranslate).Padding(t.Space(0.5), t.Space(2)).Radius(pillRadius).Background(t.Danger).TextColor(t.AccentText).Tooltip(tr.TipStopTranslate).Clicked() {
 					a.stopTranslation()
 				}
 			})
 			ui.Divider(c)
 		} else if a.translatingRow {
 			tr := a.tr()
-			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(t.Accent.Alpha(0.10)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Padding(t.Space(1.5), t.Space(3)).Background(accentTint(t)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, a.statusBanner).FontSize(12).FontWeight(600).TextColor(t.Accent).SingleLine().Grow(1)
+				ui.Text(c, a.statusBanner).FontSize(12).FontWeight(600).TextColor(accentInk(t)).SingleLine().Grow(1)
 				_ = tr
 			})
 			ui.Divider(c)
@@ -779,12 +780,12 @@ func (a *App) View(c *ui.Context) {
 			bg := t.Surface
 			fg := t.Text
 			if a.statusBannerErr {
-				bg = t.Danger.Alpha(0.14)
+				bg = redTint(t)
 				fg = t.Danger
 			}
 			ui.Row(c).Padding(t.Space(1), t.Space(3)).Background(bg).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.statusBanner).FontSize(12).TextColor(fg).SingleLine().Grow(1)
-				if ui.Button(c, a.tr().BtnClose).Padding(t.Space(0.5), t.Space(2)).Clicked() {
+				if ui.Button(c, a.tr().BtnClose).Padding(t.Space(0.5), t.Space(2)).Radius(pillRadius).Clicked() {
 					a.statusBanner = ""
 				}
 			})
@@ -792,8 +793,8 @@ func (a *App) View(c *ui.Context) {
 		}
 
 		if dragOver {
-			ui.Row(c).Padding(t.Space(2), t.Space(3)).Background(t.Accent.Alpha(0.15)).Justify(ui.Center).Children(func() {
-				ui.Text(c, a.tr().DropHint).FontSize(13).FontWeight(600).TextColor(t.Accent)
+			ui.Row(c).Padding(t.Space(2), t.Space(3)).Background(accentTint(t)).Justify(ui.Center).Children(func() {
+				ui.Text(c, a.tr().DropHint).FontSize(13).FontWeight(600).TextColor(accentInk(t))
 			})
 		}
 
@@ -806,7 +807,7 @@ func (a *App) View(c *ui.Context) {
 			}, func() {
 				a.viewInspector(c)
 			}).Fill().SplitReset(64)
-		}).Grow(1).MinHeight(0).SplitReset(310)
+		}).Grow(1).MinHeight(0).SplitReset(310).Padding(t.Space(1.5))
 		if split.Changed() {
 			a.scheduleConfigSave()
 		}

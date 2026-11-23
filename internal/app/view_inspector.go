@@ -15,7 +15,7 @@ func (a *App) viewInspector(c *ui.Context) {
 	t := c.Theme()
 	tr := a.tr()
 
-	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
+	card(c, t).Fill().Margin(t.Space(1.5), 0, 0, 0).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
 		logTabLabel := fmt.Sprintf(tr.TabLogsFmt, len(a.logs))
 		ui.Tabs(c, &a.bottomTab, tr.TabInspector, logTabLabel).Shrink(0)
 
@@ -83,16 +83,17 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 						for _, l := range locs {
 							lid := l.ID
 							active := a.activeEditLocale == lid
-							bg := t.Surface
+							bg := t.Background
 							fg := t.Text
 							border := t.Border
 							if active {
-								bg = t.Accent.Alpha(0.15)
-								fg = t.Accent
+								bg = accentTint(t)
+								fg = accentInk(t)
 								border = t.Accent
 							}
 							pill := ui.Button(c, lid).
 								Padding(t.Space(0.5), t.Space(2)).
+								Radius(pillRadius).
 								Background(bg).
 								TextColor(fg).
 								Border(1, border).
@@ -107,11 +108,11 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 
 				// Source & Reference cards
 				ui.Row(c).Gap(t.Space(1.5)).Children(func() {
-					ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Padding(t.Space(1)).Background(t.Surface).Radius(t.Radius).Children(func() {
+					ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Padding(t.Space(1.5)).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
 						ui.Text(c, tr.LabelSource).FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 						ui.Text(c, row.Key.Source).FontSize(12).MinWidth(0).Selectable()
 					})
-					ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Padding(t.Space(1)).Background(t.Surface).Radius(t.Radius).Children(func() {
+					ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Padding(t.Space(1.5)).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
 						ui.Text(c, tr.LabelRef).FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 						refTxt := row.RefText
 						if refTxt == "" {
@@ -134,6 +135,7 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 					}
 					if ui.Button(c, rowTransLabel).
 						Padding(t.Space(0.5), t.Space(1.5)).
+						Radius(pillRadius).
 						Disabled(a.translating || a.translatingRow).
 						Tooltip(tr.TipTranslateRow).
 						Clicked() {
@@ -141,23 +143,25 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 					}
 					if ui.Button(c, tr.BtnPrevGap).
 						Padding(t.Space(0.5), t.Space(1.5)).
+						Radius(pillRadius).
 						Tooltip(tr.TipPrevGap).
 						Clicked() {
 						a.jumpGap(-1)
 					}
 					if ui.Button(c, tr.BtnNextGap).
 						Padding(t.Space(0.5), t.Space(1.5)).
+						Radius(pillRadius).
 						Tooltip(tr.TipNextGap).
 						Clicked() {
 						a.jumpGap(1)
 					}
-					if ui.Button(c, tr.BtnCopySrc).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipCopySrc).Clicked() {
+					if ui.Button(c, tr.BtnCopySrc).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipCopySrc).Clicked() {
 						a.copySourceToClipboard()
 					}
-					if ui.Button(c, tr.BtnUseSrc).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipUseSrc).Clicked() {
+					if ui.Button(c, tr.BtnUseSrc).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipUseSrc).Clicked() {
 						a.useSourceAsTranslation()
 					}
-					if ui.Button(c, tr.BtnResetCell).Padding(t.Space(0.5), t.Space(1.5)).Tooltip(tr.TipResetCell).Clicked() {
+					if ui.Button(c, tr.BtnResetCell).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipResetCell).Clicked() {
 						a.resetActiveCell()
 					}
 				})
@@ -198,8 +202,8 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 								FontSize(11).
 								TextColor(t.Danger).
 								Padding(t.Space(0.5), t.Space(1.5)).
-								Background(t.Danger.Alpha(0.12)).
-								Radius(t.Radius)
+								Background(redTint(t)).
+								Radius(pillRadius)
 						}
 					})
 				}
@@ -229,12 +233,12 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 				)
 
 				ui.Text(c, tr.LabelBeforeXML).FontSize(11).FontWeight(600).TextColor(t.TextMuted)
-				ui.Box(c).FillWidth().Padding(t.Space(1.5)).Background(t.Surface).Border(1, t.Border).Radius(t.Radius).Children(func() {
+				ui.Box(c).FillWidth().Padding(t.Space(1.5)).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
 					ui.Text(c, beforeSnippet).Font("SF Mono, Menlo, monospace").FontSize(11).TextColor(t.TextMuted).MinWidth(0).Selectable()
 				})
 
 				ui.Text(c, tr.LabelAfterXML).FontSize(11).FontWeight(600).TextColor(t.Accent)
-				ui.Box(c).FillWidth().Padding(t.Space(1.5)).Background(t.Surface).Border(1, t.Accent.Alpha(0.5)).Radius(t.Radius).Children(func() {
+				ui.Box(c).FillWidth().Padding(t.Space(1.5)).Background(insetBg(t)).Border(1, t.Accent.Alpha(0.5)).Radius(t.Radius).Children(func() {
 					ui.Text(c, afterSnippet).Font("SF Mono, Menlo, monospace").FontSize(11).MinWidth(0).Selectable()
 				})
 			})
@@ -248,10 +252,10 @@ func (a *App) viewDiagnosticsLogs(c *ui.Context) {
 
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, fmt.Sprintf(tr.LogCountFmt, len(a.logs))).FontSize(12).TextColor(t.TextMuted).Grow(1)
-		if ui.Button(c, tr.BtnCopyLogs).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipCopyLogs).Clicked() {
+		if ui.Button(c, tr.BtnCopyLogs).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipCopyLogs).Clicked() {
 			a.copyLogsToClipboard()
 		}
-		if ui.Button(c, tr.BtnClearLogs).Padding(t.Space(1), t.Space(2)).Tooltip(tr.TipClearLogs).Clicked() {
+		if ui.Button(c, tr.BtnClearLogs).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipClearLogs).Clicked() {
 			a.logs = nil
 		}
 	})
@@ -276,5 +280,5 @@ func (a *App) viewDiagnosticsLogs(c *ui.Context) {
 			ui.Text(c, prefix).Font("SF Mono, Menlo, monospace").FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(0)
 			ui.Text(c, ev.Message).FontSize(12).TextColor(col).Grow(1).MinWidth(0).Selectable()
 		})
-	}).Grow(1).MinHeight(0).Border(1, t.Border).Radius(t.Radius).Padding(t.Space(1))
+	}).Grow(1).MinHeight(0).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Padding(t.Space(1))
 }

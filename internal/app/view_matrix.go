@@ -13,11 +13,12 @@ import (
 	"locloom/internal/i18n"
 	"locloom/internal/planner"
 )
+
 func (a *App) viewMatrix(c *ui.Context) {
 	t := c.Theme()
 	tr := a.tr()
 
-	ui.Column(c).Fill().Background(t.Background).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
+	card(c, t).Fill().Margin(0, 0, t.Space(1.5), 0).Padding(t.Space(2)).Gap(t.Space(1.5)).Children(func() {
 		// Filter & View Mode Toolbar (kept on 1 crisp line at 1280px)
 		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Wrap().Children(func() {
 			warnLabel := tr.FilterWarnings
@@ -101,7 +102,7 @@ func (a *App) viewMatrix(c *ui.Context) {
 				if m.Item(tr.MenuClearAll).Chosen() {
 					a.clearAllTranslations()
 				}
-			}).Shrink(0).Tooltip(tr.TipMenuClear)
+			}).Shrink(0).Radius(pillRadius).Tooltip(tr.TipMenuClear)
 		})
 
 		if a.plan == nil || len(a.filteredRows) == 0 {
@@ -116,6 +117,7 @@ func (a *App) viewMatrix(c *ui.Context) {
 			return
 		}
 
+		a.syncTableSelection()
 		if a.cfg.MatrixViewMode == 1 {
 			a.viewFullMatrixTable(c)
 		} else {
@@ -205,15 +207,14 @@ func (a *App) viewFocusedMatrixTable(c *ui.Context) {
 			}
 			cell := r.Cells[targetLoc]
 			badge, fg := formatCellStatusBadge(c, cell, tr)
-			pillBg := fg.Alpha(0.12)
+			pillBg := statusTint(t, fg)
 			pillFg := fg
 			if sel {
-				pillBg = t.AccentText.Alpha(0.22)
-				pillFg = t.AccentText
+				pillBg = t.Background
 			}
 			pill := ui.Row(c).
 				Padding(t.Space(0.5), t.Space(1.5)).
-				Radius(t.Radius).
+				Radius(pillRadius).
 				Background(pillBg).
 				AlignItems(ui.Center)
 			if len(cell.Warnings) > 0 {
@@ -299,11 +300,7 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 			tag, fg := shortMatrixTag(c, cell, tr)
 			bg := ui.Transparent
 			if a.activeEditLocale == locID {
-				if sel {
-					bg = t.AccentText.Alpha(0.18)
-				} else {
-					bg = t.Accent.Alpha(0.08)
-				}
+				bg = t.Accent.Alpha(0.08)
 			}
 			tip := cell.Effective
 			if len(cell.Warnings) > 0 {
@@ -327,7 +324,7 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 				if tag != "" {
 					tagFg := fg
 					if sel {
-						tagFg = t.AccentText
+						tagFg = accentInk(t)
 					}
 					ui.Text(c, tag).FontSize(11).FontWeight(700).TextColor(tagFg).SingleLine().Shrink(0)
 				}
@@ -445,8 +442,42 @@ func originLabel(origin string, tr *i18n.Catalog) string {
 	}
 }
 
+// tableCursorColumnID returns the table column holding the locale under
+// edit: "tgt" in the focused matrix, its loc_* column in the full matrix.
+func (a *App) tableCursorColumnID() string {
+	if a.cfg.MatrixViewMode == 0 {
+		return "tgt"
+	}
+	if a.activeEditLocale == "" {
+		return ""
+	}
+	return "loc_" + a.activeEditLocale
+}
+
 func (a *App) deferTableOp(fn func()) {
 	a.pendingTableOps = append(a.pendingTableOps, fn)
+}
+
+// syncTableSelection mirrors the single app-level selection into the
+// table's Selection so CellsStyle paints the chosen row. The app has no
+// multi-row operations; clicks that CellsStyle would have chosen keep
+// the same key, so normalization here is idempotent.
+func (a *App) syncTableSelection() {
+	want := ""
+	if a.selectedRow >= 0 && a.selectedRow < len(a.filteredRows) && a.plan != nil {
+		want = a.plan.Rows[a.filteredRows[a.selectedRow]].Key.Canonical()
+	}
+	cur := ""
+	for k := range a.rowSel.All() {
+		cur = k
+		break
+	}
+	if a.rowSel.Len() != 1 || cur != want {
+		a.rowSel.Clear()
+		if want != "" {
+			a.rowSel.Add(want)
+		}
+	}
 }
 
 func (a *App) flushTableOps(c *ui.Context) {

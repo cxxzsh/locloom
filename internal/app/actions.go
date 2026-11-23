@@ -15,6 +15,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
+	"github.com/egoist/mygo/ui"
 
 	"locloom/internal/config"
 	"locloom/internal/domain"
@@ -182,6 +183,11 @@ func (a *App) syncEditorFromSelection() {
 	a.selectedKey = row.Key
 	if a.activeEditLocale == "" {
 		a.activeEditLocale = a.focusedLocale
+	}
+	// Keep the table's cursor column on the locale being edited: clicks
+	// set it for us, programmatic switches (pills, headers, menus) sync it here.
+	if id := a.tableCursorColumnID(); a.tableState.Cells.Cursor != id || a.tableState.Cells.All {
+		a.tableState.Cells = ui.ColumnRange{Cursor: id, Anchor: id}
 	}
 	if row.Key == a.editBoundRowKey && a.activeEditLocale == a.editBoundLocale {
 		return

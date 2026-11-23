@@ -17,7 +17,7 @@ func (a *App) viewHeader(c *ui.Context) {
 		Padding(t.Space(2), t.Space(3)).
 		Gap(t.Space(2)).
 		AlignItems(ui.Center).
-		Background(t.Surface).
+		Background(t.Background).
 		Children(func() {
 			// Brand, format badge & loaded source summary (shrinkable so right utility buttons never clip at 1280px)
 			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
@@ -61,7 +61,8 @@ func (a *App) viewHeader(c *ui.Context) {
 				if totalWarns > 0 {
 					if ui.Button(c, fmt.Sprintf("⚠ %d", totalWarns)).
 						Padding(t.Space(0.5), t.Space(1.5)).
-						Background(t.Warning.Alpha(0.16)).
+						Radius(pillRadius).
+						Background(orangeTint(t)).
 						TextColor(t.Warning).
 						Shrink(0).
 						Tooltip(tr.TipStatusFilter).
@@ -106,12 +107,13 @@ func (a *App) viewHeader(c *ui.Context) {
 						Background(t.Danger).
 						TextColor(t.AccentText).
 						Padding(t.Space(1.5), t.Space(3)).
+						Radius(pillRadius).
 						Tooltip(tr.TipStopTranslate).
 						Clicked() {
 						a.stopTranslation()
 					}
 				} else {
-					btn := ui.PrimaryButton(c, "").Padding(t.Space(1.5), t.Space(3)).Tooltip(tr.TipStartTranslate)
+					btn := ui.PrimaryButton(c, "").Padding(t.Space(1.5), t.Space(3)).Radius(pillRadius).Tooltip(tr.TipStartTranslate)
 					btn.Children(func() {
 						ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 							ui.Icon(c, iconPlay).Size(14, 14)
@@ -133,6 +135,7 @@ func (a *App) viewHeader(c *ui.Context) {
 				}
 				writeBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(3)).
+					Radius(pillRadius).
 					Disabled(a.translating || a.bundle == nil).
 					Tooltip(tr.TipWriteTS)
 				writeBtn.Children(func() {
@@ -157,6 +160,7 @@ func (a *App) viewHeader(c *ui.Context) {
 
 				if ui.Button(c, tr.BtnLangToggle).
 					Padding(t.Space(1.5), t.Space(2)).
+					Radius(pillRadius).
 					Tooltip(tr.TipLangToggle).
 					Clicked() {
 					if a.UILang() == i18n.LangEN {
@@ -175,12 +179,14 @@ func (a *App) viewHeader(c *ui.Context) {
 				}
 				if ui.Button(c, tr.BtnSettings).
 					Padding(t.Space(1.5), t.Space(2)).
+					Radius(pillRadius).
 					Tooltip(tr.TipSettings).
 					Clicked() {
 					a.showSettings = true
 				}
 				helpBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(2)).
+					Radius(pillRadius).
 					Label(tr.BtnHelp).
 					Tooltip(tr.TipHelp)
 				helpBtn.Children(func() {
@@ -197,6 +203,7 @@ func headerBtn(c *ui.Context, ic *ui.SVG, label, tip string) ui.Element {
 	t := c.Theme()
 	btn := ui.Button(c, "").
 		Padding(t.Space(1.5), t.Space(2.5)).
+		Radius(pillRadius).
 		Label(label).
 		Tooltip(tip)
 	btn.Children(func() {

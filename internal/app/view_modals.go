@@ -22,7 +22,7 @@ func (a *App) viewModals(c *ui.Context) {
 		ui.Column(c).Width(720).MaxWidth(720).MaxHeight(580).Gap(t.Space(2)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, tr.HelpModalTitle).FontSize(16).FontWeight(700).Grow(1)
-				if ui.Button(c, tr.BtnClose).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+				if ui.Button(c, tr.BtnClose).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
 					a.showHelp = false
 				}
 			})
@@ -42,7 +42,7 @@ func (a *App) viewModals(c *ui.Context) {
 		ui.Column(c).Width(480).MaxWidth(480).Gap(t.Space(2.5)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, tr.ExportModalTitle).FontSize(16).FontWeight(700).Grow(1)
-				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1), t.Space(2)).Clicked() {
+				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Clicked() {
 					a.showExportModal = false
 				}
 			})
@@ -63,10 +63,10 @@ func (a *App) viewModals(c *ui.Context) {
 			}
 			ui.Text(c, descriptions[idx]).FontSize(12).TextColor(t.TextMuted).MinWidth(0)
 			ui.Row(c).Justify(ui.End).Gap(t.Space(2)).Children(func() {
-				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1.5), t.Space(3)).Clicked() {
+				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1.5), t.Space(3)).Radius(pillRadius).Clicked() {
 					a.showExportModal = false
 				}
-				if ui.PrimaryButton(c, tr.BtnExportConfirm).Padding(t.Space(1.5), t.Space(3)).Clicked() {
+				if ui.PrimaryButton(c, tr.BtnExportConfirm).Padding(t.Space(1.5), t.Space(3)).Radius(pillRadius).Clicked() {
 					scope := sheet.ExportScope(a.exportScope)
 					a.showExportModal = false
 					a.exportExcelAsync(scope)
@@ -136,7 +136,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 		ui.Column(c).Width(560).MaxWidth(560).MaxHeight(560).Gap(t.Space(2.5)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, tr.SettingsModalTitle).FontSize(16).FontWeight(700).Grow(1)
-				if ui.Button(c, tr.BtnClose).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+				if ui.Button(c, tr.BtnClose).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
 					a.showSettings = false
 				}
 			})
@@ -172,12 +172,12 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 
 						ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 							ui.Text(c, tr.LabelGlobalConcurrency).FontSize(12).FontWeight(600).Grow(1)
-							if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency <= 1).Tooltip(tr.TipConcurrencyDec).Clicked() {
+							if ui.Button(c, "-").Padding(t.Space(0.5), t.Space(2)).Radius(pillRadius).Disabled(a.cfg.Concurrency <= 1).Tooltip(tr.TipConcurrencyDec).Clicked() {
 								a.cfg.Concurrency--
 								a.scheduleConfigSave()
 							}
 							ui.Text(c, fmt.Sprintf("%d", a.cfg.Concurrency)).FontSize(13).FontWeight(600).Width(24).TextAlign(ui.Center)
-							if ui.Button(c, "+").Padding(t.Space(0.5), t.Space(2)).Disabled(a.cfg.Concurrency >= 16).Tooltip(tr.TipConcurrencyInc).Clicked() {
+							if ui.Button(c, "+").Padding(t.Space(0.5), t.Space(2)).Radius(pillRadius).Disabled(a.cfg.Concurrency >= 16).Tooltip(tr.TipConcurrencyInc).Clicked() {
 								a.cfg.Concurrency++
 								a.scheduleConfigSave()
 							}
@@ -223,7 +223,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 								if a.cache != nil {
 									cacheLen = a.cache.Len()
 								}
-								if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Tooltip(tr.TipClearCache).Clicked() {
+								if ui.Button(c, fmt.Sprintf(tr.BtnClearCacheFmt, cacheLen)).Padding(t.Space(0.5), t.Space(2)).Radius(pillRadius).Tooltip(tr.TipClearCache).Clicked() {
 									if a.cache != nil {
 										_ = a.cache.Clear()
 										a.setStatus(tr.StatusCacheCleared, false)
@@ -320,14 +320,14 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 										}
 									}
 									if len(filteredKeys) > 0 {
-										if ui.Button(c, fmt.Sprintf(clearFilteredFmt, len(filteredKeys))).Padding(t.Space(0.5), t.Space(1.5)).Clicked() {
+										if ui.Button(c, fmt.Sprintf(clearFilteredFmt, len(filteredKeys))).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Clicked() {
 											n := a.cache.DeleteKeys(filteredKeys)
 											a.setStatus(fmt.Sprintf("%s (%d)", tr.StatusCacheCleared, n), false)
 										}
 									}
 								})
 
-								ui.Scroll(c).MaxHeight(200).Border(1, t.Border).Radius(6).Padding(t.Space(0.5)).Children(func() {
+								ui.Scroll(c).MaxHeight(200).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Padding(t.Space(0.5)).Children(func() {
 									ui.Column(c).Gap(2).Children(func() {
 										limit := min(len(filtered), 100)
 										for i := 0; i < limit; i++ {
@@ -337,7 +337,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 												ui.Text(c, e.TargetLocale).FontSize(11).TextColor(t.Accent).Width(48).Shrink(0)
 												summary := strings.ReplaceAll(e.Source, "\n", " ") + " → " + strings.ReplaceAll(e.Translated, "\n", " ")
 												ui.Text(c, summary).FontSize(11).Grow(1)
-												if ui.Button(c, "×").Padding(0, t.Space(0.8)).Clicked() {
+												if ui.Button(c, "×").Padding(0, t.Space(0.8)).Radius(pillRadius).Clicked() {
 													if a.cache.DeleteKey(e.Key) {
 														a.setStatus(fmt.Sprintf("%s (1)", tr.StatusCacheCleared), false)
 													}
@@ -367,11 +367,11 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 								if a.checkingUpdate {
 									lbl = tr.BtnCheckingUpdates
 								}
-								if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Disabled(a.checkingUpdate).Clicked() {
+								if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Disabled(a.checkingUpdate).Clicked() {
 									a.checkUpdatesAsync(false)
 								}
 								if a.updateInfo != nil && a.updateInfo.HasUpdate {
-									if ui.Button(c, tr.BtnOpenReleasePage).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+									if ui.Button(c, tr.BtnOpenReleasePage).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
 										a.openReleasePage()
 									}
 								}
@@ -392,7 +392,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 						ui.Divider(c)
 
 						ui.Row(c).AlignItems(ui.Center).Children(func() {
-							if ui.Button(c, tr.BtnOpenOnboarding).Padding(t.Space(1), t.Space(2.5)).Clicked() {
+							if ui.Button(c, tr.BtnOpenOnboarding).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
 								a.showSettings = false
 								a.showOnboarding = true
 							}
@@ -428,9 +428,9 @@ func (a *App) viewOnboardingModal(c *ui.Context) {
 				ui.Column(c).
 					Padding(t.Space(1.5), t.Space(2)).
 					Gap(t.Space(0.5)).
-					Background(t.Surface).
-					Border(1, t.Border).
-					Radius(t.Radius).
+					Background(insetBg(t)).
+					Border(1, hairline(t)).
+					Radius(cardRadius).
 					Children(func() {
 						ui.Text(c, st.title).FontSize(13).FontWeight(600).TextColor(t.Accent)
 						ui.Text(c, st.desc).FontSize(12).TextColor(t.TextMuted)
@@ -438,7 +438,7 @@ func (a *App) viewOnboardingModal(c *ui.Context) {
 			}
 
 			ui.Row(c).Justify(ui.End).Gap(t.Space(2)).Children(func() {
-				if ui.PrimaryButton(c, tr.BtnOnboardingStart).Padding(t.Space(1.5), t.Space(3.5)).Clicked() {
+				if ui.PrimaryButton(c, tr.BtnOnboardingStart).Padding(t.Space(1.5), t.Space(3.5)).Radius(pillRadius).Clicked() {
 					a.showOnboarding = false
 					if !a.cfg.HasSeenOnboarding {
 						a.cfg.HasSeenOnboarding = true
