@@ -184,10 +184,11 @@ func (a *App) syncEditorFromSelection() {
 	if a.activeEditLocale == "" {
 		a.activeEditLocale = a.focusedLocale
 	}
-	// Keep the table's cursor column on the locale being edited: clicks
-	// set it for us, programmatic switches (pills, headers, menus) sync it here.
-	if id := a.tableCursorColumnID(); a.tableState.Cells.Cursor != id || a.tableState.Cells.All {
-		a.tableState.Cells = ui.ColumnRange{Cursor: id, Anchor: id}
+	// The selected row shows as a full-row block, the RecordsTable way:
+	// every cell at accent 14% (Cells.All), the editing locale's column
+	// keeps the cursor for the border a focused table draws on it.
+	if id := a.tableCursorColumnID(); a.tableState.Cells.Cursor != id || !a.tableState.Cells.All {
+		a.tableState.Cells = ui.ColumnRange{Cursor: id, Anchor: id, All: true}
 	}
 	if row.Key == a.editBoundRowKey && a.activeEditLocale == a.editBoundLocale {
 		return
