@@ -312,6 +312,7 @@ func (a *App) viewFullMatrixTable(c *ui.Context) {
 				}
 			}
 			cellRow := ui.Row(c).
+				Margin(-t.Space(1.5), -t.Space(2.5)).
 				Fill().
 				Gap(t.Space(1)).
 				Padding(t.Space(0.5), t.Space(1)).
