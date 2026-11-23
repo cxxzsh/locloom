@@ -92,6 +92,9 @@ Prebuilt community installers do not yet carry commercial Apple Developer or Aut
 3. **Configure Waterfall & Proxy**: Expand any of the 10 built-in provider cards in the **Pipeline** tab, toggle secret visibility, test connectivity, discover LLM models, and optionally configure HTTP/SOCKS5 proxies.
 4. **Inspect, Translate Row & Save Back**: Switch between **Focus Locale** and **Full Matrix** (click any cell to target that locale), use Inspector power actions (**⚡ Translate Row**, **◀ Prev Gap**, **Next Gap ▶**, **Copy Src**, **Use Src**, **Reset Cell**), preview format-aware Before/After diffs, and click **Save Back (N)** with optional `.bak` backups or `*_updated.zip` output.
 5. **Real-Time UI Language Switching**: Click **`[EN]` / `[中文]`** in the top-right header to toggle the entire workbench between English and Simplified Chinese on the fly, or pass `-lang <auto|zh|en>` on startup.
+6. **Translate-from Pinning & Cascade Waves**: Every locale card carries a **译自 / From** selector that pins its translation input to another locale's existing translations (e.g. `zh_TW` from `zh_CN` for Simplified→Traditional, `zh_HK` from `zh_TW`), falling back to the file's source text when the pinned entry is empty. Dependent locales automatically run in topological waves inside a single pass — no manual second run.
+
+Releases ship **signed update manifests** (`update-*.json`, delta `.delta` files, per-platform `install.sh`/`install.ps1`) produced by `mygo build` with `MYGO_UPDATER_PRIVATE_KEY`, enabling in-app self-updates per [mygo/updates.md](https://github.com/egoist/mygo/blob/main/docs/updates.md).
 
 Status badges are strictly for UI preview and are **never** written to localization or `.xlsx` files:
 

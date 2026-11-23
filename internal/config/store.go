@@ -16,7 +16,7 @@ import (
 
 const configFileName = "config.json"
 // AppVersion is the current application semantic version (aligned with mygo.json).
-const AppVersion = "0.1.1"
+const AppVersion = "0.1.2"
 
 // AppConfig persists user preferences, proxy configuration, dynamic locales, and per-provider settings.
 type AppConfig struct {
