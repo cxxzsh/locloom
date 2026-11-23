@@ -15,6 +15,9 @@ type LocaleSpec struct {
 	NativeName  string            `json:"native_name,omitempty"`
 	Enabled     bool              `json:"enabled"`
 	IsRef       bool              `json:"is_ref"`
+	// SourceLocale pins the locale this target translates from (e.g.
+	// zh_TW from zh_CN); empty follows the bundle's reference text.
+	SourceLocale string            `json:"source_locale,omitempty"`
 	EngineCode  string            `json:"engine_code"`
 	EngineCodes map[string]string `json:"engine_codes,omitempty"`
 }

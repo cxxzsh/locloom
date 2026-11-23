@@ -1250,10 +1250,6 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 
 	tasks := make(map[string][]provider.SourceItem)
 	refID := a.plan.RefLocaleID
-	bundleSourceLocale := ""
-	if a.bundle != nil {
-		bundleSourceLocale = a.bundle.SourceLocale
-	}
 	for _, loc := range targetLocales {
 		if forceLocaleID == "" {
 			cell, ok := row.Cells[loc.ID]
@@ -1267,10 +1263,18 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 				continue
 			}
 		}
+		srcText, srcLoc := localeSource(a.plan, row, loc)
+		if strings.TrimSpace(srcText) == "" {
+			continue
+		}
+		if srcLoc == "" && a.bundle != nil {
+			srcLoc = a.bundle.SourceLocale
+		}
 		tasks[loc.ID] = []provider.SourceItem{{
 			ID:           row.Key.Canonical(),
 			Key:          row.Key,
-			SourceLocale: bundleSourceLocale,
+			SourceLocale: srcLoc,
+			SrcText:      srcText,
 			RefLocale:    refID,
 			RefText:      row.RefText,
 			Numerus:      row.Numerus,
@@ -1380,6 +1384,18 @@ func (a *App) copyText(s string) {
 	a.setStatus(a.tr().StatusCopiedText, false)
 }
 
+// localeSource returns the source text and locale ID a target locale
+// translates from: its pinned SourceLocale's own text when that entry
+// has content, else the reference text of the bundle.
+func localeSource(plan *planner.MatrixPlan, row *planner.MatrixRow, loc locale.LocaleSpec) (srcText, srcLoc string) {
+	if loc.SourceLocale != "" {
+		if cell, ok := row.Cells[loc.SourceLocale]; ok && strings.TrimSpace(cell.Effective) != "" {
+			return cell.Effective, loc.SourceLocale
+		}
+	}
+	return row.RefText, ""
+}
+
 func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.LocaleSpec, mode domain.WriteMode, bundleSourceLocale string) (map[string][]provider.SourceItem, int) {
 	tasks := make(map[string][]provider.SourceItem)
 	if plan == nil {
@@ -1391,8 +1407,12 @@ func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.Loca
 		var items []provider.SourceItem
 		for i := range plan.Rows {
 			row := &plan.Rows[i]
-			if strings.TrimSpace(row.RefText) == "" {
+			srcText, srcLoc := localeSource(plan, row, loc)
+			if strings.TrimSpace(srcText) == "" {
 				continue
+			}
+			if srcLoc == "" {
+				srcLoc = bundleSourceLocale
 			}
 			cell, ok := row.Cells[loc.ID]
 			if ok && cell.Status == domain.StatusVanished {
@@ -1407,7 +1427,8 @@ func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.Loca
 			items = append(items, provider.SourceItem{
 				ID:           row.Key.Canonical(),
 				Key:          row.Key,
-				SourceLocale: bundleSourceLocale,
+				SourceLocale: srcLoc,
+				SrcText:      srcText,
 				RefLocale:    refID,
 				RefText:      row.RefText,
 				Numerus:      row.Numerus,

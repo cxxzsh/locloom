@@ -1020,6 +1020,61 @@ func TestBuildTranslationTasksRespectsWriteModeOverwrite(t *testing.T) {
 	}
 }
 
+func TestBuildTranslationTasksUsesPinnedSourceLocale(t *testing.T) {
+	dir := t.TempDir()
+	zhTS := `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="zh_CN">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation></translation>
+    </message>
+</context>
+</TS>`
+	if err := os.WriteFile(filepath.Join(dir, "zh_CN.ts"), []byte(zhTS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	twTS := `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="zh_TW">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Open</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>`
+	if err := os.WriteFile(filepath.Join(dir, "zh_TW.ts"), []byte(twTS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newTestApp()
+	if err := a.LoadProject(dir); err != nil {
+		t.Fatalf("LoadProject failed: %v", err)
+	}
+	targets := []locale.LocaleSpec{{ID: "zh_TW", Name: "繁体中文", Enabled: true, EngineCode: "zh-TW", SourceLocale: "zh_CN"}}
+
+	tasks, total := buildTranslationTasks(a.plan, targets, domain.ModeOverwriteExisting, "")
+	if total != 1 || len(tasks["zh_TW"]) != 1 {
+		t.Fatalf("expected only the row with zh_CN text queued, got total=%d tasks=%+v", total, tasks["zh_TW"])
+	}
+	item := tasks["zh_TW"][0]
+	if item.SrcText != "打开" || item.SourceLocale != "zh_CN" {
+		t.Fatalf("expected zh_CN source text, got SrcText=%q SourceLocale=%q", item.SrcText, item.SourceLocale)
+	}
+}
+
 func TestSidebarCheckboxesDoNotStretchToBlankAreaAndAppendContextTyping(t *testing.T) {
 	a := newTestApp()
 	a.cfg.CreateBackup = false

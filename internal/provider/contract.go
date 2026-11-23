@@ -46,6 +46,9 @@ type SourceItem struct {
 	ID           string
 	Key          domain.EntryKey
 	SourceLocale string
+	// SrcText is the text the target translates from: the pinned source
+	// locale's text (LocaleSpec.SourceLocale) or the reference text.
+	SrcText      string
 	RefLocale    string
 	RefText      string
 	Numerus      bool

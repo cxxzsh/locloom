@@ -309,7 +309,10 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 				maskedItems := make([]SourceItem, 0, len(toTranslate))
 
 				for _, item := range toTranslate {
-					baseSrc := item.Key.Source
+					baseSrc := item.SrcText
+					if baseSrc == "" {
+						baseSrc = item.Key.Source
+					}
 					if baseSrc == "" {
 						baseSrc = item.RefText
 					}
@@ -336,6 +339,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 									ID:           subID,
 									Key:          mk,
 									SourceLocale: item.SourceLocale,
+									SrcText:      m.Masked,
 									RefLocale:    item.RefLocale,
 									Numerus:      true,
 								})
@@ -356,6 +360,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 						ID:           item.ID,
 						Key:          mk,
 						SourceLocale: item.SourceLocale,
+						SrcText:      m.Masked,
 						RefLocale:    item.RefLocale,
 						RefText:      item.RefText,
 						Numerus:      item.Numerus,

@@ -224,6 +224,9 @@ type Catalog struct {
 	BtnSetRef               string
 	BtnIsRef                string
 	TipRemoveLocale         string
+	LabelTranslateFrom      string
+	TipTranslateFrom        string
+	OptSourceDefault        string
 	SectionAddLocale        string
 	PlaceholderLocaleID     string
 	PlaceholderLocaleName   string
@@ -561,6 +564,9 @@ var zhCatalog = Catalog{
 	TipSetRef:             "设为主参考语种：其译文会作为参考列显示，协助其他语种对照翻译",
 	BtnIsRef:              "★ 参考",
 	TipRemoveLocale:       "移除语种",
+	LabelTranslateFrom:    "译自",
+	TipTranslateFrom:      "指定该语种的翻译源：默认用文件原文；改为其他语种时，用该语种已有译文作为源文翻译（如 zh_TW 选 zh_CN 作简繁转换）",
+	OptSourceDefault:      "默认（文件原文）",
 	SectionAddLocale:      "添加自定义语种",
 	PlaceholderLocaleID:   "语种 ID (如 nl_NL)",
 	PlaceholderLocaleName: "名称 (如 荷兰语)",
@@ -894,6 +900,9 @@ var enCatalog = Catalog{
 	TipLocaleEnable:       "Include this locale in translation and write-back scope",
 	TipSetRef:             "Set as reference locale shown alongside source text for cross-checking",
 	TipRemoveLocale:       "Remove locale",
+	LabelTranslateFrom:    "From",
+	TipTranslateFrom:      "Pick the source text for this locale: the bundle's source by default, or another enabled locale's existing translations (e.g. zh_TW from zh_CN for Simplified→Traditional)",
+	OptSourceDefault:      "Default (file source)",
 	SectionAddLocale:      "Add Custom Locale",
 	PlaceholderLocaleID:   "Locale ID (e.g. nl_NL)",
 	PlaceholderLocaleName: "Name (e.g. Dutch)",

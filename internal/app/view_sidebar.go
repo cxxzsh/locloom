@@ -10,6 +10,7 @@ import (
 
 	"locloom/internal/domain"
 	"locloom/internal/format"
+	"locloom/internal/locale"
 	"locloom/internal/provider"
 )
 
@@ -641,42 +642,49 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 						continue
 					}
 				}
-				ui.Row(c).
+				ui.Column(c).
 					Padding(t.Space(1), t.Space(1.5)).
 					Gap(t.Space(1)).
-					AlignItems(ui.Center).
 					Background(insetBg(t)).
 					Border(1, hairline(t)).
 					Radius(t.Radius).
 					Children(func() {
-						if ui.Checkbox(c, &loc.Enabled, "").Disabled(loc.IsRef).Tooltip(tr.TipLocaleEnable).Changed() {
-							a.rebuildPlan()
-							a.scheduleConfigSave()
-						}
-						ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-							ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, loc.ID).FontSize(12).FontWeight(600).SingleLine().MinWidth(0)
-								if loc.EngineCode != "" {
-									ui.Badge(c, loc.EngineCode).Shrink(0)
+						ui.Row(c).
+							Gap(t.Space(1)).
+							AlignItems(ui.Center).
+							Children(func() {
+								if ui.Checkbox(c, &loc.Enabled, "").Disabled(loc.IsRef).Tooltip(tr.TipLocaleEnable).Changed() {
+									a.rebuildPlan()
+									a.scheduleConfigSave()
 								}
-								if inBundle[loc.ID] {
-									ui.Badge(c, tr.BadgeInBundle).Shrink(0)
+								ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+									ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+										ui.Text(c, loc.ID).FontSize(12).FontWeight(600).SingleLine().MinWidth(0)
+										if loc.EngineCode != "" {
+											ui.Badge(c, loc.EngineCode).Shrink(0)
+										}
+										if inBundle[loc.ID] {
+											ui.Badge(c, tr.BadgeInBundle).Shrink(0)
+										}
+									})
+									ui.Text(c, loc.DisplayName(lang)).FontSize(11).TextColor(t.TextMuted).SingleLine().MinWidth(0)
+								})
+								refLabel := tr.BtnSetRef
+								if loc.IsRef {
+									refLabel = tr.BtnIsRef
+								}
+								if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Disabled(loc.IsRef).Tooltip(tr.TipSetRef).Clicked() {
+									a.setRefLocale(loc.ID)
+								}
+								if !loc.IsRef {
+									if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipRemoveLocale).Clicked() {
+										a.removeLocale(loc.ID)
+										return
+									}
 								}
 							})
-							ui.Text(c, loc.DisplayName(lang)).FontSize(11).TextColor(t.TextMuted).SingleLine().MinWidth(0)
-						})
-						refLabel := tr.BtnSetRef
-						if loc.IsRef {
-							refLabel = tr.BtnIsRef
-						}
-						if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Disabled(loc.IsRef).Tooltip(tr.TipSetRef).Clicked() {
-							a.setRefLocale(loc.ID)
-						}
 						if !loc.IsRef {
-							if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipRemoveLocale).Clicked() {
-								a.removeLocale(loc.ID)
-								return
-							}
+							a.viewLocaleSourcePicker(c, loc)
 						}
 					})
 			}
@@ -696,5 +704,38 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 				}
 			})
 		})
+	})
+}
+
+// viewLocaleSourcePicker renders the "translate from" selector on a locale
+// card: empty means the bundle's reference text, otherwise the pinned
+// locale's own entries feed the engine.
+func (a *App) viewLocaleSourcePicker(c *ui.Context, loc *locale.LocaleSpec) {
+	t := c.Theme()
+	tr := a.tr()
+	options := []string{tr.OptSourceDefault}
+	ids := []string{""}
+	for _, l := range a.cfg.Locales {
+		if l.ID == loc.ID || !l.Enabled {
+			continue
+		}
+		options = append(options, l.ID)
+		ids = append(ids, l.ID)
+	}
+	selLabel := options[0]
+	for i, id := range ids {
+		if id == loc.SourceLocale {
+			selLabel = options[i]
+			break
+		}
+	}
+	ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, tr.LabelTranslateFrom).FontSize(11).TextColor(t.TextMuted).Shrink(0)
+		if ui.Select(c, &selLabel, options).Width(150).Shrink(1).Tooltip(tr.TipTranslateFrom).Changed() {
+			if idx := slices.Index(options, selLabel); idx >= 0 && idx < len(ids) {
+				loc.SourceLocale = ids[idx]
+				a.scheduleConfigSave()
+			}
+		}
 	})
 }
