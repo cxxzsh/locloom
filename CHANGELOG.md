@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.8 - 2026-11-24
+
+### Added
+
+- **Background auto-download updates**: packaged builds now automatically download and verify signed `.delta` / `.tar.gz` updates in the background when a new release is found (`AutoDownloadUpdates`, enabled by default), keeping the current session undisturbed until you click **Restart to Apply**.
+- **Header update status pills**: top toolbar now surfaces live update state (`⬆ vX.Y.Z` available, `⬇ XX%` downloading, `↻ Update vX.Y.Z` ready to restart) that jumps straight to Settings → Updates with full Markdown release notes.
+- **Proxy-aware self-updater**: wired LocLoom's configured HTTP/SOCKS5 proxy (`netpool`) into `mygo.Updater.SetSource` so in-app manifest checks and update downloads work reliably behind custom proxies.
+- **Clear self-update diagnostics**: Settings → Updates now uses `mygo.App.Version()` and clearly explains why in-app auto-download is disabled in dev runs (`go run`) or read-only/package-managed install locations.
+
 ## 0.1.7 - 2026-11-24
 
 ### Added

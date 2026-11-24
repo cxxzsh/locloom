@@ -17,7 +17,7 @@ import (
 const configFileName = "config.json"
 
 // AppVersion is the current application semantic version (aligned with mygo.json).
-const AppVersion = "0.1.7"
+const AppVersion = "0.1.8"
 
 // SaveTargetMode controls where "Save Back" writes modified localization files.
 const (
@@ -43,6 +43,7 @@ type AppConfig struct {
 	Concurrency      int                          `json:"concurrency"`
 	HasSeenOnboarding     bool `json:"has_seen_onboarding"`
 	CheckUpdatesOnStartup bool `json:"check_updates_on_startup"`
+	AutoDownloadUpdates   bool `json:"auto_download_updates"`
 	LastTSPath       string                       `json:"last_ts_path,omitempty"`
 	LastXLSXPath     string                       `json:"last_xlsx_path,omitempty"`
 	Proxy            netpool.ProxyConfig          `json:"proxy"`
@@ -70,6 +71,7 @@ func Default() AppConfig {
 		Concurrency:      4,
 		HasSeenOnboarding:     false,
 		CheckUpdatesOnStartup: true,
+		AutoDownloadUpdates:   true,
 		Proxy: netpool.ProxyConfig{
 			ProxyURL:      "",
 			SkipTLSVerify: false,
