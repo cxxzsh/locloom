@@ -453,12 +453,12 @@ func (a *App) importExcelAsync() {
 	}()
 }
 
-func (a *App) exportExcelAsync(scope sheet.ExportScope) {
+func (a *App) exportExcelAsync(scope sheet.ExportScope, relevantOnly bool) {
 	if a.plan == nil {
 		a.setStatus(a.tr().ErrNoExportData, true)
 		return
 	}
-	opts := planner.BuildExportRows(a.plan, scope, a.cfg.Locales)
+	opts := planner.BuildExportRows(a.plan, scope, a.cfg.Locales, relevantOnly)
 	win := a.win
 	tr := a.tr()
 	defaultName := "translations_export.xlsx"

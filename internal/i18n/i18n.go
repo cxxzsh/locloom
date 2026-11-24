@@ -365,6 +365,7 @@ type Catalog struct {
 	ExportDescGaps         string
 	ExportDescChanges      string
 	ExportDescWarnings     string
+	CheckRelevantLocales   string
 	BtnExportConfirm       string
 
 	// Actions, native dialogs & background tasks
@@ -705,7 +706,8 @@ var zhCatalog = Catalog{
 	ExportDescAll:       "导出当前矩阵中的全部词条（含原文、参考译文与各语种译文）。",
 	ExportDescGaps:      "仅导出至少有一个已启用语种仍为空缺的词条，方便分发外包翻译。",
 	ExportDescChanges:   "仅导出本次会写回 .ts 文件的补齐、覆盖或新增词条。",
-	ExportDescWarnings:  "仅导出存在 Qt 占位符缺失、多余或结构告警的词条。",
+	ExportDescWarnings:  "仅导出存在 Qt 占位符缺失、多余或结构告警的词条，告警内容以批注附在对应单元格上（悬停可见）。",
+	CheckRelevantLocales: "仅导出相关语种的列（去掉无匹配词条的语种，参考语保留）",
 	BtnExportConfirm:    "选择路径并导出...",
 
 	DialogOpenTSDir:           "选择本地化项目目录",
@@ -1045,7 +1047,8 @@ var enCatalog = Catalog{
 	ExportDescAll:       "Export all entries in the matrix (source, reference, and all target locales).",
 	ExportDescGaps:      "Export only entries with at least one missing enabled locale for external translation.",
 	ExportDescChanges:   "Export only entries with staged fill, overwrite, or append changes.",
-	ExportDescWarnings:  "Export only entries with Qt placeholder or structural validation warnings.",
+	ExportDescWarnings:  "Export only entries with Qt placeholder or structural validation warnings; each warning is attached as a cell comment (hover to read).",
+	CheckRelevantLocales: "Relevant locales only (drop columns with no matching entries; reference stays)",
 	BtnExportConfirm:    "Choose Path & Export...",
 
 	DialogOpenTSDir:           "Select Localization Folder",

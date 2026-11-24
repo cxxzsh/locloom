@@ -66,23 +66,24 @@ type App struct {
 
 	pendingTableOps []func()
 	// Modals & popovers
-	showHelp        bool
-	showSettings    bool
-	settingsTab     int
-	showOnboarding  bool
-	checkingUpdate  bool
-	updateInfo      *updater.ReleaseInfo
-	pendingUpdate   *mygo.Update // signed update offered by mygo.Updater
-	installingUpd   bool
-	updateDL        int64 // install download progress, bytes
-	updateTotal     int64
-	updateErr       string
-	helpMarkdown    string
-	helpMarkdownZH  string
-	mdOpts          markdown.Options
-	showExportModal bool
-	exportScope     int
-	showClearMenu   bool
+	showHelp           bool
+	showSettings       bool
+	settingsTab        int
+	showOnboarding     bool
+	checkingUpdate     bool
+	updateInfo         *updater.ReleaseInfo
+	pendingUpdate      *mygo.Update // signed update offered by mygo.Updater
+	installingUpd      bool
+	updateDL           int64 // install download progress, bytes
+	updateTotal        int64
+	updateErr          string
+	helpMarkdown       string
+	helpMarkdownZH     string
+	mdOpts             markdown.Options
+	showExportModal    bool
+	exportScope        int
+	exportRelevantOnly bool
+	showClearMenu      bool
 
 	// Provider UI state
 	expandedProvider  map[string]bool
@@ -169,7 +170,6 @@ func NewWithConfig(cfg config.AppConfig) *App {
 	} else {
 		cfg.UILang = i18n.Resolve(rawLang)
 	}
-
 	a := &App{
 		cfg:               cfg,
 		cliThemeOverride:  -1,
@@ -208,6 +208,7 @@ func NewWithConfig(cfg config.AppConfig) *App {
 	a.logListState.FollowEnd = true
 
 	a.rebuildPlan()
+	a.exportRelevantOnly = true
 	a.appendLog("info", "", "", a.tr().LogWorkbenchReady)
 	return a
 }
@@ -683,7 +684,7 @@ func (a *App) ExportToExcelFile(xlsxPath string, scope sheet.ExportScope) error 
 	if a.plan == nil {
 		return fmt.Errorf("%s", a.tr().ErrNoExportData)
 	}
-	opts := planner.BuildExportRows(a.plan, scope, a.cfg.Locales)
+	opts := planner.BuildExportRows(a.plan, scope, a.cfg.Locales, a.exportRelevantOnly)
 	if err := sheet.ExportExcel(xlsxPath, opts); err != nil {
 		msg := fmt.Sprintf(a.tr().ErrExportExcelFmt, err)
 		a.setStatus(msg, true)

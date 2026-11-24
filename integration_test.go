@@ -617,7 +617,7 @@ func TestEndToEndWaterfallExcelAndHeadlessUI(t *testing.T) {
 		WriteMode: domain.ModeFillUnfinished,
 	})
 	exportPath := filepath.Join(dir, "exported.xlsx")
-	exportOpts := planner.BuildExportRows(plan, sheet.ExportAll, locs)
+	exportOpts := planner.BuildExportRows(plan, sheet.ExportAll, locs, false)
 	if err := sheet.ExportExcel(exportPath, exportOpts); err != nil {
 		t.Fatalf("ExportExcel failed: %v", err)
 	}

@@ -57,6 +57,9 @@ type ExportCell struct {
 	Status     domain.TransStatus
 	Changed    bool
 	HasWarning bool
+	// Warnings are validation messages attached as an Excel cell comment
+	// (hover tooltip) when non-empty.
+	Warnings []string
 }
 
 // ExportRow holds one row of data for Excel export.
@@ -369,7 +372,23 @@ func ExportExcel(path string, opts ExportOptions) error {
 			case ec.Text == "" && (ec.Status == domain.StatusMissing || ec.Status == domain.StatusUnfinished || ec.Status == domain.StatusEmpty):
 				style = missingStyle
 			}
+			cell, _ := excelize.CoordinatesToCellName(cIdx+1, excelRow)
 			writeCell(ec.Text, style)
+			// Attach validation messages as a hover comment on the cell.
+			if len(ec.Warnings) > 0 {
+				text := strings.Join(ec.Warnings, "\n")
+				height := uint(20 + 18*len(ec.Warnings))
+				if height > 240 {
+					height = 240
+				}
+				_ = f.AddComment(sheetName, excelize.Comment{
+					Cell:   cell,
+					Author: "LocLoom",
+					Text:   text,
+					Width:  320,
+					Height: height,
+				})
+			}
 		}
 	}
 

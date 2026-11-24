@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"strings"
 	"testing"
 
 	"locloom/internal/domain"
@@ -121,7 +122,7 @@ func TestBuildPlanPhantomProtectionAndUpdateCell(t *testing.T) {
 		t.Fatalf("TotalAppends = %d, want 1", planWithAppend.Summary.TotalAppends)
 	}
 
-	exportOpts := BuildExportRows(planWithAppend, sheet.ExportChanged, locales)
+	exportOpts := BuildExportRows(planWithAppend, sheet.ExportChanged, locales, false)
 	if len(exportOpts.Rows) != 2 {
 		t.Fatalf("BuildExportRows(ExportChanged) = %d rows, want 2", len(exportOpts.Rows))
 	}
@@ -242,7 +243,7 @@ func TestBuildPlanIDKeyedFormatBundleAndBuildFormatPatches(t *testing.T) {
 		t.Fatal("disabled ref locale en should not have patches")
 	}
 
-	exportOpts := BuildExportRows(plan, sheet.ExportAll, locales)
+	exportOpts := BuildExportRows(plan, sheet.ExportAll, locales, false)
 	if !exportOpts.IncludeKeyID {
 		t.Fatal("expected IncludeKeyID = true")
 	}
@@ -358,5 +359,84 @@ func TestUpdateCellByKey(t *testing.T) {
 	// Unknown key returns false without mutating plan.
 	if UpdateCellByKey(plan, domain.EntryKey{ID: "missing"}, "ja", cat) {
 		t.Fatal("expected false for unknown EntryKey")
+	}
+}
+
+// BuildExportRows with relevantOnly drops locale columns that contain no cell
+// matching the scope; ref columns always survive, warnings carry their text.
+func TestBuildExportRowsRelevantColumns(t *testing.T) {
+	jaTS := makeTestTSFile(t, "ja_JP", `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="ja_JP">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Save %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>`)
+	zhTS := makeTestTSFile(t, "zh_CN", `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="zh_CN">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Save %1</source>
+        <translation>保存 %1</translation>
+    </message>
+</context>
+</TS>`)
+	deTS := makeTestTSFile(t, "de_DE", `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="de_DE">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Save %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>`)
+
+	bundle := &tsxml.Bundle{Files: []*tsxml.TSFile{zhTS, jaTS, deTS}}
+	locales := []locale.LocaleSpec{
+		{ID: "zh_CN", Name: "简体中文", Enabled: true, IsRef: true},
+		{ID: "ja_JP", Name: "日本語", Enabled: true},
+		{ID: "de_DE", Name: "Deutsch", Enabled: true},
+	}
+	cat := domain.NewCatalog()
+	// ja_JP staged text missing %1 → warning cell; de_DE stays clean.
+	cat.Set("ja_JP", domain.EntryKey{Context: "MainWindow", Source: "Save %1"}, "保存", domain.OriginXLSX)
+
+	plan := BuildPlan(PlanInput{
+		Bundle:    bundle,
+		Catalog:   cat,
+		Locales:   locales,
+		WriteMode: domain.ModeFillUnfinished,
+	})
+	if plan.Summary.TotalWarnings != 1 {
+		t.Fatalf("TotalWarnings = %d, want 1", plan.Summary.TotalWarnings)
+	}
+
+	warnOpts := BuildExportRows(plan, sheet.ExportWarnings, locales, true)
+	if len(warnOpts.Rows) != 1 {
+		t.Fatalf("warning rows = %d, want 1", len(warnOpts.Rows))
+	}
+	if len(warnOpts.Columns) != 2 || warnOpts.Columns[0].LocaleID != "zh_CN" || warnOpts.Columns[1].LocaleID != "ja_JP" {
+		t.Fatalf("relevant columns = %+v, want [zh_CN ja_JP]", warnOpts.Columns)
+	}
+	cell := warnOpts.Rows[0].Cells["ja_JP"]
+	if len(cell.Warnings) == 0 || !strings.Contains(cell.Warnings[0], "%1") {
+		t.Fatalf("expected carried warning text, got %+v", cell)
+	}
+
+	// Same scope without relevantOnly keeps every enabled column.
+	warnAll := BuildExportRows(plan, sheet.ExportWarnings, locales, false)
+	if len(warnAll.Columns) != 3 {
+		t.Fatalf("unfiltered columns = %+v, want 3", warnAll.Columns)
+	}
+
+	// Gap scope: de_DE unfinished is the only gap; ja_JP staged fill mutates it.
+	gapOpts := BuildExportRows(plan, sheet.ExportUntranslated, locales, true)
+	if len(gapOpts.Columns) != 2 || gapOpts.Columns[1].LocaleID != "de_DE" {
+		t.Fatalf("gap-relevant columns = %+v, want [zh_CN de_DE]", gapOpts.Columns)
 	}
 }

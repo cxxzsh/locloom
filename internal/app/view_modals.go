@@ -62,14 +62,16 @@ func (a *App) viewModals(c *ui.Context) {
 				idx = 0
 			}
 			ui.Text(c, descriptions[idx]).FontSize(12).TextColor(t.TextMuted).MinWidth(0)
+			ui.Checkbox(c, &a.exportRelevantOnly, tr.CheckRelevantLocales).Disabled(idx == 0).MinWidth(0)
 			ui.Row(c).Justify(ui.End).Gap(t.Space(2)).Children(func() {
 				if ui.Button(c, tr.BtnCancel).Padding(t.Space(1.5), t.Space(3)).Radius(pillRadius).Clicked() {
 					a.showExportModal = false
 				}
 				if ui.PrimaryButton(c, tr.BtnExportConfirm).Padding(t.Space(1.5), t.Space(3)).Radius(pillRadius).Clicked() {
 					scope := sheet.ExportScope(a.exportScope)
+					relevantOnly := a.exportRelevantOnly
 					a.showExportModal = false
-					a.exportExcelAsync(scope)
+					a.exportExcelAsync(scope, relevantOnly)
 				}
 			})
 		})

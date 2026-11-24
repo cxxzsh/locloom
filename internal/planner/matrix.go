@@ -13,13 +13,13 @@ import (
 
 // CellPlan describes the current and planned translation state for one (row, locale) cell.
 type CellPlan struct {
-	LocaleID  string
-	OldText   string
-	NewText   string
-	Effective string
-	Origin    string
-	Status    domain.TransStatus
-	Action    domain.PatchActionType
+	LocaleID    string
+	OldText     string
+	NewText     string
+	Effective   string
+	Origin      string
+	Status      domain.TransStatus
+	Action      domain.PatchActionType
 	Numerus     bool
 	PluralCount int
 	Warnings    []string
@@ -614,7 +614,7 @@ func BuildFormatPatches(plan *MatrixPlan) map[string][]format.PatchOp {
 }
 
 // BuildExportRows converts a MatrixPlan into sheet.ExportOptions filtered by scope.
-func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale.LocaleSpec) sheet.ExportOptions {
+func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale.LocaleSpec, relevantOnly bool) sheet.ExportOptions {
 	opts := sheet.ExportOptions{
 		SheetName: "Translations",
 	}
@@ -635,8 +635,35 @@ func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale
 		}
 	}
 
+	// relevant tracks locales that contain at least one cell matching the
+	// scope, so the export can drop columns with nothing actionable.
+	relevant := make(map[string]bool)
+	if relevantOnly && scope != sheet.ExportAll {
+		for i := range plan.Rows {
+			for locID, cp := range plan.Rows[i].Cells {
+				switch scope {
+				case sheet.ExportUntranslated:
+					if cellIsGapAfter(cp) {
+						relevant[locID] = true
+					}
+				case sheet.ExportChanged:
+					if cp.Action.Mutates() {
+						relevant[locID] = true
+					}
+				case sheet.ExportWarnings:
+					if len(cp.Warnings) > 0 {
+						relevant[locID] = true
+					}
+				}
+			}
+		}
+	}
+
 	for _, l := range locales {
 		if !l.Enabled && !l.IsRef {
+			continue
+		}
+		if relevantOnly && scope != sheet.ExportAll && !l.IsRef && !relevant[l.ID] {
 			continue
 		}
 		header := l.ID
@@ -674,6 +701,7 @@ func BuildExportRows(plan *MatrixPlan, scope sheet.ExportScope, locales []locale
 				Status:     cp.Status,
 				Changed:    cp.Action.Mutates(),
 				HasWarning: len(cp.Warnings) > 0,
+				Warnings:   cp.Warnings,
 			}
 		}
 		opts.Rows = append(opts.Rows, sheet.ExportRow{
