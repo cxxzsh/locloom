@@ -537,6 +537,12 @@ func (a *App) buildMatrixCellMenu(m *ui.Menu, row, col int) {
 			a.translateRowAtAsync(planRowIdx, "")
 		})
 	}
+	if m.Item(tr.CtxRetranslateRow).Disabled(busy).Chosen() {
+		a.deferTableOp(func() {
+			focusRowKey()
+			a.retranslateRowAtAsync(planRowIdx)
+		})
+	}
 	if locID != "" {
 		if m.Item(fmt.Sprintf(tr.CtxRetranslateCellFmt, locID)).Disabled(busy).Chosen() {
 			targetLoc := locID

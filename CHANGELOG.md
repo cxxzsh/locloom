@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.6 - 2026-11-24
+
+### Added
+
+- **Retranslate row (all enabled locales)**: new row-level force-retranslate button (🔁 in the editor, ⚡ in the context menu) re-runs every enabled locale through the waterfall, bypassing fill-mode skips and the cache. One click replaces "clear row → translate".
+- **Refresh project**: new header button reloads the current project directory via `format.Load`, picking up externally edited `.ts` / `.po` / `.json` files, newly added locale files, or removed entries. Staged (unwritten) catalog edits are preserved.
+
+### Changed
+
+- **Cache bypass now fully disables the cache**: `BypassCache` previously skipped cache *reads* but still wrote new hits. It now also gates `cache.Put`, so checking "Disable local cache" produces zero reads and zero writes to `translation-cache.json`.
+
 ## 0.1.5 - 2026-11-24
 
 ### Fixed

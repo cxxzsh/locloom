@@ -358,6 +358,34 @@ func (a *App) resetProviderOrder() {
 	a.scheduleConfigSave()
 }
 
+// refreshProjectAsync reloads the current project from disk so externally
+// edited files (new locales, new source strings, deleted rows) show up without
+// closing the app. Staged catalog entries survive; only file state changes.
+func (a *App) refreshProjectAsync() {
+	if a.bundle == nil {
+		a.setStatus(a.tr().ErrLoadTSFirst, true)
+		return
+	}
+	path := a.bundle.SourcePath
+	filePattern := a.cfg.FilePattern
+	locales := slices.Clone(a.cfg.Locales)
+	tr := a.tr()
+
+	a.setStatus(tr.StatusReloadingProject, false)
+	go func() {
+		bundle, err := format.Load(path, filePattern, locales)
+		a.dispatchUI(func() {
+			if err != nil {
+				msg := fmt.Sprintf(tr.ErrLoadTSFmt, err)
+				a.setStatus(msg, true)
+				a.appendLog("error", "", "", msg)
+				return
+			}
+			a.applyLoadedBundle(bundle)
+		})
+	}()
+}
+
 func (a *App) openDirAsync() {
 	win := a.win
 	defaultPath := a.cfg.LastTSPath
@@ -1301,6 +1329,17 @@ func (a *App) useSourceAsTranslation() {
 func (a *App) translateCurrentRowAsync() {
 	rowIdx, _ := a.currentMatrixRow()
 	a.translateRowAtAsync(rowIdx, "")
+}
+
+// retranslateAllLocales is a sentinel for forceLocaleID meaning "re-translate
+// every enabled locale of the row", not a real locale ID.
+const retranslateAllLocales = "*all*"
+
+// retranslateRowAtAsync forces every enabled locale of the row back through
+// the waterfall, ignoring fill-mode skips and the provider cache. It is the
+// single-click version of "clear row, then translate".
+func (a *App) retranslateRowAtAsync(planRowIdx int) {
+	a.translateRowAtAsync(planRowIdx, retranslateAllLocales)
 }
 
 func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {

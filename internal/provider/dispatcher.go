@@ -399,7 +399,9 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 							if cacheSrc == "" {
 								cacheSrc = pl.orig.RefText
 							}
-							cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, restored)
+							if !opts.BypassCache {
+								cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, restored)
+							}
 							newCells = append(newCells, TranslatedCell{
 								LocaleID:   loc.ID,
 								Key:        pl.orig.Key,
@@ -427,7 +429,9 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 							if cacheSrc == "" {
 								cacheSrc = pl.orig.RefText
 							}
-							cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, joined)
+							if !opts.BypassCache {
+								cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, joined)
+							}
 							newCells = append(newCells, TranslatedCell{
 								LocaleID:   loc.ID,
 								Key:        pl.orig.Key,

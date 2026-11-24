@@ -84,6 +84,9 @@ func (a *App) viewHeader(c *ui.Context) {
 				if headerBtn(c, iconImport, tr.BtnImportExcel, tr.TipImportExcel).Clicked() {
 					a.importExcelAsync()
 				}
+				if headerBtn(c, iconRefresh, tr.BtnRefresh, tr.TipRefresh).Clicked() {
+					a.refreshProjectAsync()
+				}
 				if headerBtn(c, iconExport, tr.BtnExportExcel, tr.TipExportExcel).Clicked() {
 					a.showExportModal = true
 				}

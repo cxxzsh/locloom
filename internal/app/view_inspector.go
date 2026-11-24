@@ -141,6 +141,16 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 						Clicked() {
 						a.translateCurrentRowAsync()
 					}
+					if ui.Button(c, "🔁").
+						Padding(t.Space(0.5), t.Space(1.5)).
+						Radius(pillRadius).
+						Disabled(a.translating || a.translatingRow).
+						Tooltip(tr.TipRetranslateRow).
+						Clicked() {
+						if rowIdx, _ := a.currentMatrixRow(); rowIdx >= 0 {
+							a.retranslateRowAtAsync(rowIdx)
+						}
+					}
 					if ui.Button(c, tr.BtnPrevGap).
 						Padding(t.Space(0.5), t.Space(1.5)).
 						Radius(pillRadius).

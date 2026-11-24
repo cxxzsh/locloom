@@ -98,6 +98,8 @@ type Catalog struct {
 	// App-level status & errors
 	ErrLoadTSFmt               string
 	StatusLoadedBundleFmt      string
+	StatusReloadingProject     string
+	StatusReloadedProjectFmt   string
 	StatusDiscoveredLocalesFmt string
 	ErrImportExcelFmt          string
 	StatusImportedExcelFmt     string
@@ -414,6 +416,10 @@ type Catalog struct {
 	StatusRowNoGaps           string
 	CtxTranslateRow           string
 	CtxRetranslateCellFmt     string
+	CtxRetranslateRow         string
+	BtnRefresh                string
+	TipRefresh                string
+	TipRetranslateRow         string
 	CtxClearCellFmt           string
 	CtxClearRow               string
 	CtxRevertCellFmt          string
@@ -448,6 +454,8 @@ var zhCatalog = Catalog{
 
 	ErrLoadTSFmt:               "加载本地化项目失败: %v",
 	StatusLoadedBundleFmt:      "已加载 %s（%d 个文件，%d 条词条）",
+	StatusReloadingProject:     "正在重新加载项目...",
+	StatusReloadedProjectFmt:   "已刷新 %s（%d 个文件，%d 条词条）",
 	StatusDiscoveredLocalesFmt: "，自动发现新语种: %v",
 	ErrImportExcelFmt:          "导入 Excel 失败: %v",
 	StatusImportedExcelFmt:     "已导入 %s（工作表 %s，%d 条译文）",
@@ -516,7 +524,7 @@ var zhCatalog = Catalog{
 
 	SectionConcurrencyCache: "并发与缓存",
 	LabelGlobalConcurrency:  "全局并发数",
-	CheckBypassCache:        "跳过本地翻译缓存",
+	CheckBypassCache:        "完全禁用本地翻译缓存",
 	BtnClearCacheFmt:        "清空(%d)",
 	StatusCacheCleared:      "已清空本地翻译缓存",
 	SectionNetworkProxy:     "网络与代理",
@@ -525,7 +533,7 @@ var zhCatalog = Catalog{
 	CheckProxyAllCloud:      "对所有云端引擎启用此代理",
 	TipConcurrencyDec:       "减少全局并发请求数（1–16）",
 	TipConcurrencyInc:       "增加全局并发请求数（1–16）；免费在线引擎建议 2–4 以避免限流",
-	TipBypassCache:          "勾选后忽略本地 translation-cache.json 缓存，强制重新请求翻译引擎",
+	TipBypassCache:          "勾选后不读不写本地 translation-cache.json，每次都重新请求翻译引擎",
 	TipClearCache:           "清空全部本地持久化的翻译缓存记录（不影响当前已加载项目）",
 	TipProxyURL:             "支持 http://、https://、socks5:// 代理地址；填写后可一键为云端引擎启用",
 	TipSkipTLS:              "仅在公司自签名证书或本地抓包调试时勾选；正常网络请保持关闭",
@@ -695,20 +703,20 @@ var zhCatalog = Catalog{
 	TipCopyLogs:            "复制全部运行日志到剪贴板",
 	TipClearLogs:           "清空当前面板日志",
 
-	HelpModalTitle:      "LocLoom 使用指南",
-	HelpFallbackMD:      "# LocLoom\n\n跨平台多语言并发翻译与原位无损回填工具。",
-	ExportModalTitle:    "导出 Excel 词条表 (.xlsx)",
-	LabelExportScope:    "选择导出范围：",
-	ExportScopeAll:      "全部词条",
-	ExportScopeGaps:     "仅未翻译",
-	ExportScopeChanges:  "仅待写入变更",
-	ExportScopeWarnings: "仅含告警",
-	ExportDescAll:       "导出当前矩阵中的全部词条（含原文、参考译文与各语种译文）。",
-	ExportDescGaps:      "仅导出至少有一个已启用语种仍为空缺的词条，方便分发外包翻译。",
-	ExportDescChanges:   "仅导出本次会写回 .ts 文件的补齐、覆盖或新增词条。",
-	ExportDescWarnings:  "仅导出存在 Qt 占位符缺失、多余或结构告警的词条，告警内容以批注附在对应单元格上（悬停可见）。",
+	HelpModalTitle:       "LocLoom 使用指南",
+	HelpFallbackMD:       "# LocLoom\n\n跨平台多语言并发翻译与原位无损回填工具。",
+	ExportModalTitle:     "导出 Excel 词条表 (.xlsx)",
+	LabelExportScope:     "选择导出范围：",
+	ExportScopeAll:       "全部词条",
+	ExportScopeGaps:      "仅未翻译",
+	ExportScopeChanges:   "仅待写入变更",
+	ExportScopeWarnings:  "仅含告警",
+	ExportDescAll:        "导出当前矩阵中的全部词条（含原文、参考译文与各语种译文）。",
+	ExportDescGaps:       "仅导出至少有一个已启用语种仍为空缺的词条，方便分发外包翻译。",
+	ExportDescChanges:    "仅导出本次会写回 .ts 文件的补齐、覆盖或新增词条。",
+	ExportDescWarnings:   "仅导出存在 Qt 占位符缺失、多余或结构告警的词条，告警内容以批注附在对应单元格上（悬停可见）。",
 	CheckRelevantLocales: "仅导出相关语种的列（去掉无匹配词条的语种，参考语保留）",
-	BtnExportConfirm:    "选择路径并导出...",
+	BtnExportConfirm:     "选择路径并导出...",
 
 	DialogOpenTSDir:           "选择本地化项目目录",
 	ErrLoadTSDirFmt:           "加载目录失败: %v",
@@ -755,6 +763,10 @@ var zhCatalog = Catalog{
 	StatusRowNoGaps:           "当前行所有已启用语种均已有译文",
 	CtxTranslateRow:           "⚡ 翻译此行（所有待补语种）",
 	CtxRetranslateCellFmt:     "⚡ 重新翻译此格 (%s)",
+	CtxRetranslateRow:         "⚡ 重新翻译此行（所有已启用语种）",
+	BtnRefresh:                "刷新项目",
+	TipRefresh:                "重新加载项目目录，同步外部修改",
+	TipRetranslateRow:         "强制重新翻译此行所有已启用语种（忽略缓存与已填译文）",
 	CtxClearCellFmt:           "清空此格译文 (%s)",
 	CtxClearRow:               "清空整行所有语种译文",
 	CtxRevertCellFmt:          "还原此格至文件原值 (%s)",
@@ -789,6 +801,8 @@ var enCatalog = Catalog{
 
 	ErrLoadTSFmt:               "Failed to load localization project: %v",
 	StatusLoadedBundleFmt:      "Loaded %s (%d files, %d entries)",
+	StatusReloadingProject:     "Reloading project...",
+	StatusReloadedProjectFmt:   "Refreshed %s (%d files, %d entries)",
 	StatusDiscoveredLocalesFmt: ", auto-discovered locales: %v",
 	ErrImportExcelFmt:          "Failed to import Excel: %v",
 	StatusImportedExcelFmt:     "Imported %s (sheet %s, %d translations)",
@@ -857,7 +871,7 @@ var enCatalog = Catalog{
 
 	SectionConcurrencyCache: "Concurrency & Cache",
 	LabelGlobalConcurrency:  "Concurrency",
-	CheckBypassCache:        "Bypass local cache",
+	CheckBypassCache:        "Disable local cache",
 	BtnClearCacheFmt:        "Clear(%d)",
 	StatusCacheCleared:      "Local translation cache cleared",
 	SectionNetworkProxy:     "Network & Proxy",
@@ -866,7 +880,7 @@ var enCatalog = Catalog{
 	CheckProxyAllCloud:      "Route all cloud engines through this proxy",
 	TipConcurrencyDec:       "Decrease concurrent translation workers (1–16)",
 	TipConcurrencyInc:       "Increase concurrent translation workers (1–16); 2–4 recommended for free web engines",
-	TipBypassCache:          "Ignore local translation-cache.json and force fresh engine requests",
+	TipBypassCache:          "Skip reading and writing translation-cache.json; always hit the engine",
 	TipClearCache:           "Clear all locally persisted translation cache entries",
 	TipProxyURL:             "HTTP / HTTPS / SOCKS5 proxy URL; enables one-click proxy toggle for cloud engines",
 	TipSkipTLS:              "Skip TLS verification (only for self-signed corporate proxies or debugging)",
@@ -1036,20 +1050,20 @@ var enCatalog = Catalog{
 	OnboardingStep3Desc:    "Review translations and [⚠] placeholder warnings in the matrix or inspector, then click Save Back to patch files losslessly.",
 	BtnOnboardingStart:     "Get Started",
 
-	HelpModalTitle:      "LocLoom User Guide",
-	HelpFallbackMD:      "# LocLoom\n\nCross-platform concurrent localization and lossless patching workbench.",
-	ExportModalTitle:    "Export Excel Workbook (.xlsx)",
-	LabelExportScope:    "Export Scope:",
-	ExportScopeAll:      "All Entries",
-	ExportScopeGaps:     "Gaps Only",
-	ExportScopeChanges:  "Pending Changes",
-	ExportScopeWarnings: "Warnings Only",
-	ExportDescAll:       "Export all entries in the matrix (source, reference, and all target locales).",
-	ExportDescGaps:      "Export only entries with at least one missing enabled locale for external translation.",
-	ExportDescChanges:   "Export only entries with staged fill, overwrite, or append changes.",
-	ExportDescWarnings:  "Export only entries with Qt placeholder or structural validation warnings; each warning is attached as a cell comment (hover to read).",
+	HelpModalTitle:       "LocLoom User Guide",
+	HelpFallbackMD:       "# LocLoom\n\nCross-platform concurrent localization and lossless patching workbench.",
+	ExportModalTitle:     "Export Excel Workbook (.xlsx)",
+	LabelExportScope:     "Export Scope:",
+	ExportScopeAll:       "All Entries",
+	ExportScopeGaps:      "Gaps Only",
+	ExportScopeChanges:   "Pending Changes",
+	ExportScopeWarnings:  "Warnings Only",
+	ExportDescAll:        "Export all entries in the matrix (source, reference, and all target locales).",
+	ExportDescGaps:       "Export only entries with at least one missing enabled locale for external translation.",
+	ExportDescChanges:    "Export only entries with staged fill, overwrite, or append changes.",
+	ExportDescWarnings:   "Export only entries with Qt placeholder or structural validation warnings; each warning is attached as a cell comment (hover to read).",
 	CheckRelevantLocales: "Relevant locales only (drop columns with no matching entries; reference stays)",
-	BtnExportConfirm:    "Choose Path & Export...",
+	BtnExportConfirm:     "Choose Path & Export...",
 
 	DialogOpenTSDir:           "Select Localization Folder",
 	ErrLoadTSDirFmt:           "Failed to load folder: %v",
@@ -1096,6 +1110,10 @@ var enCatalog = Catalog{
 	StatusRowNoGaps:           "Current row has no gaps for enabled locales",
 	CtxTranslateRow:           "⚡ Translate Row (All Gaps)",
 	CtxRetranslateCellFmt:     "⚡ Retranslate Cell (%s)",
+	CtxRetranslateRow:         "⚡ Retranslate Row (All Enabled)",
+	BtnRefresh:                "Refresh Project",
+	TipRefresh:                "Reload the project directory to pick up external changes",
+	TipRetranslateRow:         "Force-retranslate every enabled locale on this row (skips cache and existing text)",
 	CtxClearCellFmt:           "Clear Cell Translation (%s)",
 	CtxClearRow:               "Clear Entire Row (All Locales)",
 	CtxRevertCellFmt:          "Revert Cell to File (%s)",
