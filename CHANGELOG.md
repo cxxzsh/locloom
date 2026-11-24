@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3 - 2026-11-24
+
+### Added
+
+- **Project-scoped locale list**: the sidebar Locales tab now shows only languages present in the loaded project (plus enabled-but-unfiled additions); searching still surfaces hidden presets so they can be re-enabled as a manual add, and Select All only affects the visible set.
+- **Warnings as Excel comments**: every cell with validation warnings in an `.xlsx` export now carries the message as a hover comment (yellow fill unchanged).
+- **Relevant-locale export columns**: Gaps / Pending Changes / Warnings exports can drop locale columns with no matching rows ("仅导出相关语种的列", on by default); the reference column is always kept.
+
+### Packaging
+
+- Arch Linux: per-arch `PKGBUILD` (amd64/arm64) ships in the release and the required resized icon PNGs are now included in the source archive.
+- Self-update plumbing (`mygo.Updater`): signed update manifests, delta archives and `install.sh`/`install.ps1` helpers wired into the release pipeline.
+
 ## 0.1.2 - 2026-11-23
 
 ### Added

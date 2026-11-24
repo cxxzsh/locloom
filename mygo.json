@@ -2,7 +2,7 @@
   "name": "LocLoom",
   "slug": "locloom",
   "identifier": "io.github.cxxzsh.locloom",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "updates": {
     "publicKey": "rFNOcdij3sPKKyvfMng6UTfTFtl5Bhz/5Pn8Km8xoT4=",
     "github": "cxxzsh/locloom"
