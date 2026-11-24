@@ -233,7 +233,11 @@ func (a *App) onEditCell(newText string) {
 	if row == nil || a.activeEditLocale == "" {
 		return
 	}
-	a.catalog.Set(a.activeEditLocale, row.Key, newText, domain.OriginManual)
+	if newText == "" && row.Cells[a.activeEditLocale].OldText != "" {
+		a.catalog.SetCleared(a.activeEditLocale, row.Key, domain.OriginManual)
+	} else {
+		a.catalog.Set(a.activeEditLocale, row.Key, newText, domain.OriginManual)
+	}
 	planner.UpdateCell(a.plan, rowIdx, a.activeEditLocale, a.catalog)
 	a.syncWindowEdited()
 }
@@ -719,6 +723,10 @@ func (a *App) startTranslation() {
 			a.cancelTranslate = nil
 			a.translateWave = 0
 			a.translateWaveTotal = 0
+			if a.translateTotalCount == 0 && totalTranslated == 0 {
+				a.setStatus(a.tr().StatusNoGapsToTranslate, false)
+				return
+			}
 			msg := fmt.Sprintf(a.tr().StatusTranslateDoneFmt, totalTranslated, dur.Round(time.Millisecond))
 			a.setStatus(msg, false)
 			a.appendLog("info", "", "", msg)
@@ -742,7 +750,11 @@ func (a *App) translationOnUpdate() func(map[string]provider.LocaleStatus, []pro
 			a.translateDoneCount = done
 
 			for _, cell := range newCells {
-				a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+				if prev, ok := a.catalog.LookupExact(cell.LocaleID, cell.Key); ok && (prev.Cleared || prev.ForceOverwrite) {
+					a.catalog.SetOverwrite(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+				} else {
+					a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+				}
 			}
 			if len(newCells) > 0 {
 				updatedAny := false
@@ -821,39 +833,47 @@ func (a *App) writeBackAsync() {
 		a.setStatus(a.tr().ErrLoadTSFirst, true)
 		return
 	}
+	if a.writing || a.translating {
+		return
+	}
+	// Snapshot patches synchronously on the UI thread before spawning the worker so
+	// concurrent UI edits can never race with plan.Rows / Cells maps.
+	patchesByLocale := planner.BuildFormatPatches(a.plan)
+	totalApplied := 0
+	totalAppended := 0
+	for _, ops := range patchesByLocale {
+		for _, op := range ops {
+			if op.Action == domain.ActionAppendNew {
+				totalAppended++
+			} else if op.Action.Mutates() {
+				totalApplied++
+			}
+		}
+	}
+	if totalApplied == 0 && totalAppended == 0 {
+		a.setStatus(a.tr().StatusNoTSChanges, false)
+		return
+	}
+
 	bundle := a.bundle
-	plan := a.plan
 	locales := slices.Clone(a.cfg.Locales)
 	filePattern := a.cfg.FilePattern
 	opts := format.SaveOptions{
 		CreateBackup: a.cfg.CreateBackup,
 	}
+	if a.cfg.SaveTargetMode == config.SaveTargetNewFolder {
+		opts.OutputPath = format.DefaultOutputPath(bundle)
+	}
 
+	a.writing = true
 	a.bgWG.Add(1)
 	go func() {
 		defer a.bgWG.Done()
-		patchesByLocale := planner.BuildFormatPatches(plan)
-		totalApplied := 0
-		totalAppended := 0
-		for _, ops := range patchesByLocale {
-			for _, op := range ops {
-				if op.Action == domain.ActionAppendNew {
-					totalAppended++
-				} else if op.Action.Mutates() {
-					totalApplied++
-				}
-			}
-		}
-		if totalApplied == 0 && totalAppended == 0 {
-			a.dispatchUI(func() {
-				a.setStatus(a.tr().StatusNoTSChanges, false)
-			})
-			return
-		}
 
 		report, err := format.Save(bundle, patchesByLocale, locales, filePattern, opts)
 		if err != nil {
 			a.dispatchUI(func() {
+				a.writing = false
 				msg := fmt.Sprintf(a.tr().ErrWriteTSFmt, err)
 				a.setStatus(msg, true)
 				a.appendLog("error", "", "", msg)
@@ -869,16 +889,46 @@ func (a *App) writeBackAsync() {
 				if reloadErr == nil && reloaded != nil && bundle.IsZip {
 					reloaded.SourcePath = bundle.SourcePath
 				}
+			} else if statErr != nil {
+				reloadErr = statErr
 			}
 		}
 
 		a.dispatchUI(func() {
+			a.writing = false
+			outDisplay := filepath.Base(report.OutputPath)
+			if bundle.IsSingleFile && opts.OutputPath != "" {
+				outDisplay = filepath.Join(filepath.Base(filepath.Dir(report.OutputPath)), filepath.Base(report.OutputPath))
+			}
 			msg := fmt.Sprintf(a.tr().StatusWriteTSDoneFmt,
-				report.FilesWritten, totalApplied, totalAppended, filepath.Base(report.OutputPath))
+				report.FilesWritten, totalApplied, totalAppended, outDisplay)
 			a.setStatus(msg, false)
-			a.appendLog("info", "", "", msg)
-			if reloadErr == nil && reloaded != nil {
+			a.appendLog("info", "", "", fmt.Sprintf("%s (%s)", msg, report.OutputPath))
+			if report.BackupDir != "" {
+				a.appendLog("info", "", "", fmt.Sprintf("backup -> %s (%d)", report.BackupDir, len(report.BackupPaths)))
+			}
+			if reloadErr != nil {
+				a.appendLog("warn", "", "", fmt.Sprintf("reload after save failed: %v", reloadErr))
+				return
+			}
+			if reloaded != nil {
+				// Prune staged catalog entries that were just persisted to disk (including
+				// Excel/fallback-keyed entries matched by Lookup) so subsequent edits or
+				// Refresh aren't shadowed by stale overrides.
+				for locID, ops := range patchesByLocale {
+					for _, op := range ops {
+						if !op.Action.Mutates() {
+							continue
+						}
+						if cur, ok := a.catalog.Lookup(locID, op.Key); ok {
+							if (op.NewText == "" && cur.Cleared) || (!cur.Cleared && cur.Text == op.NewText) {
+								a.catalog.DeleteKeyVariants(locID, op.Key)
+							}
+						}
+					}
+				}
 				a.bundle = reloaded
+				a.editBoundLocale = ""
 				a.rebuildPlan()
 			}
 		})
@@ -1020,7 +1070,7 @@ func providerHasFieldKey(p provider.Provider, key string) bool {
 func isCloudProviderLoopback(p provider.Provider, values map[string]string) bool {
 	if p.ID() == domain.OriginDeepL {
 		mode := strings.ToLower(strings.TrimSpace(values["mode"]))
-		if mode == "free" || mode == "pro" {
+		if mode == "official" || mode == "free" || mode == "pro" {
 			return false
 		}
 	}
@@ -1105,18 +1155,136 @@ func (a *App) setCloudProvidersUseProxy(on bool) {
 	}
 }
 
-func (a *App) applyLocaleProfile(p locale.Profile) {
-	set := make(map[string]bool, len(p.LocaleIDs))
-	for _, id := range p.LocaleIDs {
-		set[id] = true
+func normLocaleKey(id string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(id), "-", "_"))
+}
+
+func (a *App) bundleLocaleSet() map[string]bool {
+	if a.bundle == nil || len(a.bundle.Locales) == 0 {
+		return nil
 	}
-	for i := range a.cfg.Locales {
-		if a.cfg.Locales[i].IsRef {
-			a.cfg.Locales[i].Enabled = true
+	set := make(map[string]bool, len(a.bundle.Locales)*2)
+	for _, id := range a.bundle.Locales {
+		set[id] = true
+		set[normLocaleKey(id)] = true
+	}
+	return set
+}
+
+// hasProjectTargetLocales reports whether a loaded project already carries
+// multiple target locales (as opposed to no bundle or a single-locale template
+// where the user freely picks new target locales to scaffold).
+func (a *App) hasProjectTargetLocales() bool {
+	if a.bundle == nil || a.bundle.IsSingleFile || len(a.bundle.Locales) == 0 {
+		return false
+	}
+	srcNorm := normLocaleKey(a.bundle.SourceLocale)
+	targets := 0
+	for _, id := range a.bundle.Locales {
+		if srcNorm != "" && normLocaleKey(id) == srcNorm {
 			continue
 		}
-		a.cfg.Locales[i].Enabled = set[a.cfg.Locales[i].ID]
+		targets++
 	}
+	return targets > 1 || (targets == 1 && srcNorm != "")
+}
+
+// profileTargetSet computes the exact set of non-ref locale IDs that applying p
+// should enable under the current project context.
+func (a *App) profileTargetSet(p locale.Profile) map[string]bool {
+	scopedToBundle := a.hasProjectTargetLocales()
+	inBundle := a.bundleLocaleSet()
+	srcNorm := ""
+	if a.bundle != nil {
+		srcNorm = normLocaleKey(a.bundle.SourceLocale)
+	}
+
+	rawSet := make(map[string]bool, len(p.LocaleIDs)*2)
+	for _, id := range p.LocaleIDs {
+		rawSet[id] = true
+		rawSet[normLocaleKey(id)] = true
+	}
+
+	out := make(map[string]bool, len(a.cfg.Locales))
+	for _, loc := range a.cfg.Locales {
+		if loc.IsRef {
+			continue
+		}
+		norm := normLocaleKey(loc.ID)
+		if srcNorm != "" && norm == srcNorm {
+			continue
+		}
+		if scopedToBundle && !inBundle[loc.ID] && !inBundle[norm] {
+			continue
+		}
+		if p.ID == "all" || rawSet[loc.ID] || rawSet[norm] {
+			out[loc.ID] = true
+		}
+	}
+	return out
+}
+
+func (a *App) isProfileActive(p locale.Profile) bool {
+	want := a.profileTargetSet(p)
+	if len(want) == 0 {
+		return false
+	}
+	enabled := a.enabledNonRefLocales()
+	if len(enabled) != len(want) {
+		return false
+	}
+	for _, l := range enabled {
+		if !want[l.ID] {
+			return false
+		}
+	}
+	return true
+}
+
+// ensureActiveLocaleValid keeps focusedLocale and activeEditLocale aligned with
+// a currently enabled non-ref locale whenever locale selections change.
+func (a *App) ensureActiveLocaleValid() {
+	enabled := a.enabledNonRefLocales()
+	if len(enabled) == 0 {
+		a.focusedLocale = ""
+		a.activeEditLocale = ""
+		a.editBoundLocale = ""
+		return
+	}
+	isEnabled := func(id string) bool {
+		for _, l := range enabled {
+			if l.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+	if !isEnabled(a.focusedLocale) {
+		a.focusedLocale = enabled[0].ID
+	}
+	if !isEnabled(a.activeEditLocale) {
+		a.activeEditLocale = a.focusedLocale
+		a.editBoundLocale = ""
+	}
+}
+
+func (a *App) applyLocaleProfile(p locale.Profile) {
+	want := a.profileTargetSet(p)
+	inBundle := a.bundleLocaleSet()
+	scopedToBundle := a.hasProjectTargetLocales()
+
+	for i := range a.cfg.Locales {
+		if a.cfg.Locales[i].IsRef {
+			if scopedToBundle {
+				a.cfg.Locales[i].Enabled = inBundle[a.cfg.Locales[i].ID] || inBundle[normLocaleKey(a.cfg.Locales[i].ID)]
+			} else {
+				a.cfg.Locales[i].Enabled = true
+			}
+			continue
+		}
+		a.cfg.Locales[i].Enabled = want[a.cfg.Locales[i].ID]
+	}
+	a.ensureActiveLocaleValid()
 	a.rebuildPlan()
 	a.scheduleConfigSave()
 }
@@ -1130,14 +1298,11 @@ func (a *App) sidebarLocaleScope() map[string]bool {
 	if a.bundle == nil || len(a.bundle.Locales) == 0 {
 		return nil
 	}
-	inBundle := make(map[string]bool, len(a.bundle.Locales))
-	for _, id := range a.bundle.Locales {
-		inBundle[id] = true
-	}
+	inBundle := a.bundleLocaleSet()
 	scope := make(map[string]bool, len(a.cfg.Locales))
 	hidden := 0
 	for _, loc := range a.cfg.Locales {
-		if inBundle[loc.ID] || loc.Enabled {
+		if inBundle[loc.ID] || inBundle[normLocaleKey(loc.ID)] || loc.Enabled {
 			scope[loc.ID] = true
 		} else {
 			hidden++
@@ -1151,16 +1316,32 @@ func (a *App) sidebarLocaleScope() map[string]bool {
 
 func (a *App) selectAllLocales(on bool) {
 	scope := a.sidebarLocaleScope()
+	inBundle := a.bundleLocaleSet()
+	srcNorm := ""
+	if a.bundle != nil {
+		srcNorm = normLocaleKey(a.bundle.SourceLocale)
+	}
 	for i := range a.cfg.Locales {
+		id := a.cfg.Locales[i].ID
+		norm := normLocaleKey(id)
 		if a.cfg.Locales[i].IsRef {
-			a.cfg.Locales[i].Enabled = true
+			if a.hasProjectTargetLocales() {
+				a.cfg.Locales[i].Enabled = inBundle[id] || inBundle[norm]
+			} else {
+				a.cfg.Locales[i].Enabled = true
+			}
 			continue
 		}
-		if scope != nil && !scope[a.cfg.Locales[i].ID] {
+		if scope != nil && !scope[id] {
+			continue
+		}
+		if on && srcNorm != "" && norm == srcNorm {
+			a.cfg.Locales[i].Enabled = false
 			continue
 		}
 		a.cfg.Locales[i].Enabled = on
 	}
+	a.ensureActiveLocaleValid()
 	a.rebuildPlan()
 	a.scheduleConfigSave()
 }
@@ -1169,28 +1350,42 @@ func (a *App) syncBundleLocales() {
 	if a.bundle == nil || len(a.bundle.Locales) == 0 {
 		return
 	}
-	inBundle := make(map[string]bool, len(a.bundle.Locales))
-	for _, id := range a.bundle.Locales {
-		inBundle[id] = true
-	}
+	inBundle := a.bundleLocaleSet()
+	srcNorm := normLocaleKey(a.bundle.SourceLocale)
 	for i := range a.cfg.Locales {
+		id := a.cfg.Locales[i].ID
+		norm := normLocaleKey(id)
+		present := inBundle[id] || inBundle[norm]
 		if a.cfg.Locales[i].IsRef {
-			a.cfg.Locales[i].Enabled = true
+			a.cfg.Locales[i].Enabled = present
 			continue
 		}
-		a.cfg.Locales[i].Enabled = inBundle[a.cfg.Locales[i].ID]
+		a.cfg.Locales[i].Enabled = present && (srcNorm == "" || norm != srcNorm)
 	}
+	a.ensureActiveLocaleValid()
 	a.rebuildPlan()
 	a.scheduleConfigSave()
 }
 
 func (a *App) setRefLocale(id string) {
+	wasRef := false
+	for _, l := range a.cfg.Locales {
+		if l.ID == id && l.IsRef {
+			wasRef = true
+			break
+		}
+	}
 	for i := range a.cfg.Locales {
+		if wasRef {
+			a.cfg.Locales[i].IsRef = false
+			continue
+		}
 		a.cfg.Locales[i].IsRef = a.cfg.Locales[i].ID == id
 		if a.cfg.Locales[i].IsRef {
 			a.cfg.Locales[i].Enabled = true
 		}
 	}
+	a.ensureActiveLocaleValid()
 	a.rebuildPlan()
 	a.scheduleConfigSave()
 }
@@ -1203,27 +1398,47 @@ func (a *App) addCustomLocale() {
 		a.setStatus(a.tr().ErrEnterLocaleID, true)
 		return
 	}
-	for _, loc := range a.cfg.Locales {
-		if loc.ID == id {
-			a.setStatus(fmt.Sprintf(a.tr().ErrLocaleExistsFmt, id), true)
+	normID := normLocaleKey(id)
+	for i, loc := range a.cfg.Locales {
+		if normLocaleKey(loc.ID) == normID {
+			if !loc.Enabled {
+				a.cfg.Locales[i].Enabled = true
+				a.newLocID = ""
+				a.newLocName = ""
+				a.newLocCode = ""
+				a.ensureActiveLocaleValid()
+				a.rebuildPlan()
+				a.scheduleConfigSave()
+				return
+			}
+			a.setStatus(fmt.Sprintf(a.tr().ErrLocaleExistsFmt, loc.ID), true)
 			return
 		}
 	}
-	if name == "" {
-		name = id
-	}
-	if code == "" {
-		code = id
-	}
-	a.cfg.Locales = append(a.cfg.Locales, locale.LocaleSpec{
+	// Inherit rich metadata (native/English name + engine code) when id matches a known locale.
+	merged, _ := locale.MergeDiscovered(nil, []string{id})
+	spec := locale.LocaleSpec{
 		ID:         id,
-		Name:       name,
+		Name:       id,
 		Enabled:    true,
-		EngineCode: code,
-	})
+		EngineCode: id,
+	}
+	if len(merged) == 1 {
+		spec = merged[0]
+		spec.ID = id
+		spec.Enabled = true
+	}
+	if name != "" {
+		spec.Name = name
+	}
+	if code != "" {
+		spec.EngineCode = code
+	}
+	a.cfg.Locales = append(a.cfg.Locales, spec)
 	a.newLocID = ""
 	a.newLocName = ""
 	a.newLocCode = ""
+	a.ensureActiveLocaleValid()
 	a.rebuildPlan()
 	a.scheduleConfigSave()
 }
@@ -1232,6 +1447,7 @@ func (a *App) removeLocale(id string) {
 	a.cfg.Locales = slices.DeleteFunc(a.cfg.Locales, func(l locale.LocaleSpec) bool {
 		return l.ID == id && !l.IsRef
 	})
+	a.ensureActiveLocaleValid()
 	a.rebuildPlan()
 	a.scheduleConfigSave()
 }
@@ -1373,7 +1589,7 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 	}
 
 	targetLocales := a.enabledNonRefLocales()
-	if forceLocaleID != "" {
+	if forceLocaleID != "" && forceLocaleID != retranslateAllLocales {
 		var single []locale.LocaleSpec
 		for _, l := range a.cfg.Locales {
 			if l.ID == forceLocaleID {
@@ -1399,9 +1615,6 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 					continue
 				}
 				if ok && cell.Effective != "" && cfg.WriteMode == domain.ModeFillUnfinished {
-					continue
-				}
-				if ok && cfg.WriteMode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
 					continue
 				}
 			}
@@ -1431,7 +1644,9 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 		a.translatingRow = true
 		a.setStatus(fmt.Sprintf(a.tr().StatusTranslatingRowFmt, n), false)
 	}
+	a.bgWG.Add(1)
 	go func() {
+		defer a.bgWG.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		translated := 0
@@ -1456,11 +1671,12 @@ func (a *App) translateRowAtAsync(planRowIdx int, forceLocaleID string) {
 			})
 			a.runOnUI(func() {
 				for _, cell := range res.Cells {
-					origin := cell.ProviderID
-					if forceLocaleID != "" {
-						origin = domain.OriginManual
+					prev, hasPrev := a.catalog.LookupExact(cell.LocaleID, cell.Key)
+					if forceLocaleID != "" || (hasPrev && (prev.Cleared || prev.ForceOverwrite)) {
+						a.catalog.SetOverwrite(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
+					} else {
+						a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, cell.ProviderID)
 					}
-					a.catalog.Set(cell.LocaleID, cell.Key, cell.Text, origin)
 					planner.UpdateCellByKey(a.plan, cell.Key, cell.LocaleID, a.catalog)
 				}
 				for _, ev := range res.Events {
@@ -1638,7 +1854,8 @@ func (a *App) checkUpdatesAsync(silent bool) {
 			})
 			return
 		}
-		client, _ := a.netPool.Client(true)
+		useProxy := strings.TrimSpace(a.netPool.Config().ProxyURL) != ""
+		client, _ := a.netPool.Client(useProxy)
 		info, err := updater.CheckLatest(ctx, client, updater.DefaultLatestReleaseURL, config.AppVersion)
 		a.dispatchUI(func() {
 			a.checkingUpdate = false

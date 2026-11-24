@@ -402,6 +402,8 @@ func escapeAndroidXML(s string) string {
 	b.Grow(len(s) + 8)
 	for _, r := range s {
 		switch r {
+		case '\\':
+			b.WriteString(`\\`)
 		case '&':
 			b.WriteString("&amp;")
 		case '<':

@@ -2,12 +2,14 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"locloom/internal/config"
 	"locloom/internal/domain"
 	"locloom/internal/format"
 	"locloom/internal/locale"
@@ -51,6 +53,30 @@ func (a *App) viewSidebarWorkspace(c *ui.Context) {
 					wmDesc = tr.DescWriteModeOverwrite
 				}
 				ui.Text(c, wmDesc).FontSize(11).TextColor(t.TextMuted)
+			})
+			ui.Column(c).Gap(t.Space(1)).Children(func() {
+				ui.Text(c, tr.SectionSaveTarget).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+				stm := a.cfg.SaveTargetMode
+				if ui.Segmented(c, &stm, tr.SaveTargetFolder, tr.SaveTargetInPlace).FillEqually().Cursor(ui.CursorPointer).Tooltip(tr.TipSaveTarget).Changed() {
+					a.cfg.SaveTargetMode = stm
+					a.scheduleConfigSave()
+				}
+				stDesc := tr.DescSaveTargetInPlace
+				if a.cfg.SaveTargetMode == config.SaveTargetNewFolder {
+					targetHint := "*_updated/"
+					if a.bundle != nil {
+						out := format.DefaultOutputPath(a.bundle)
+						if a.bundle.IsSingleFile {
+							targetHint = filepath.Base(filepath.Dir(out)) + "/"
+						} else if a.bundle.IsZip {
+							targetHint = filepath.Base(out)
+						} else if out != "" {
+							targetHint = filepath.Base(out) + "/"
+						}
+					}
+					stDesc = fmt.Sprintf(tr.DescSaveTargetFolder, targetHint)
+				}
+				ui.Text(c, stDesc).FontSize(11).TextColor(t.TextMuted)
 			})
 			ui.Divider(c)
 
@@ -586,7 +612,11 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			ui.Row(c).Gap(t.Space(1)).Wrap().Children(func() {
 				for _, prof := range a.cfg.Profiles {
 					p := prof
-					if ui.Button(c, p.DisplayName(lang)).Padding(t.Space(1), t.Space(2)).Radius(pillRadius).Clicked() {
+					btn := ui.Button(c, p.DisplayName(lang)).Padding(t.Space(1), t.Space(2)).Radius(pillRadius)
+					if a.isProfileActive(p) {
+						btn = btn.Background(accentTint(t)).TextColor(accentInk(t))
+					}
+					if btn.Clicked() {
 						a.applyLocaleProfile(p)
 					}
 				}
@@ -642,6 +672,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			ui.SearchField(c, &a.localeSearchQuery).Placeholder(tr.PlaceholderLocaleSearch).MinWidth(0)
 
 			locQuery := strings.ToLower(strings.TrimSpace(a.localeSearchQuery))
+			pendingRemoveID := ""
 			for i := range a.cfg.Locales {
 				loc := &a.cfg.Locales[i]
 				if locQuery == "" && scope != nil && !scope[loc.ID] {
@@ -656,6 +687,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 					}
 				}
 				ui.Column(c).
+					Key("loc:"+loc.ID).
 					Padding(t.Space(1), t.Space(1.5)).
 					Gap(t.Space(1)).
 					Background(insetBg(t)).
@@ -667,6 +699,7 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 							AlignItems(ui.Center).
 							Children(func() {
 								if ui.Checkbox(c, &loc.Enabled, "").Disabled(loc.IsRef).Tooltip(tr.TipLocaleEnable).Changed() {
+									a.ensureActiveLocaleValid()
 									a.rebuildPlan()
 									a.scheduleConfigSave()
 								}
@@ -682,17 +715,26 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 									})
 									ui.Text(c, loc.DisplayName(lang)).FontSize(11).TextColor(t.TextMuted).SingleLine().MinWidth(0)
 								})
-								refLabel := tr.BtnSetRef
+								var refBtn ui.Element
 								if loc.IsRef {
-									refLabel = tr.BtnIsRef
+									refBtn = ui.Button(c, tr.BtnIsRef).
+										Padding(t.Space(0.5), t.Space(1.5)).
+										Radius(pillRadius).
+										Background(accentTint(t)).
+										TextColor(accentInk(t)).
+										Tooltip(tr.TipSetRef)
+								} else {
+									refBtn = ui.Button(c, tr.BtnSetRef).
+										Padding(t.Space(0.5), t.Space(1.5)).
+										Radius(pillRadius).
+										Tooltip(tr.TipSetRef)
 								}
-								if ui.Button(c, refLabel).Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Disabled(loc.IsRef).Tooltip(tr.TipSetRef).Clicked() {
+								if refBtn.Clicked() {
 									a.setRefLocale(loc.ID)
 								}
 								if !loc.IsRef {
 									if ui.Button(c, "×").Padding(t.Space(0.5), t.Space(1.5)).Radius(pillRadius).Tooltip(tr.TipRemoveLocale).Clicked() {
-										a.removeLocale(loc.ID)
-										return
+										pendingRemoveID = loc.ID
 									}
 								}
 							})
@@ -700,6 +742,9 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 							a.viewLocaleSourcePicker(c, loc)
 						}
 					})
+			}
+			if pendingRemoveID != "" {
+				a.removeLocale(pendingRemoveID)
 			}
 
 			ui.Divider(c)
@@ -728,12 +773,18 @@ func (a *App) viewLocaleSourcePicker(c *ui.Context, loc *locale.LocaleSpec) {
 	tr := a.tr()
 	options := []string{tr.OptSourceDefault}
 	ids := []string{""}
+	seenID := map[string]bool{"": true}
 	for _, l := range a.cfg.Locales {
 		if l.ID == loc.ID || !l.Enabled {
 			continue
 		}
 		options = append(options, l.ID)
 		ids = append(ids, l.ID)
+		seenID[l.ID] = true
+	}
+	if loc.SourceLocale != "" && !seenID[loc.SourceLocale] {
+		options = append(options, loc.SourceLocale)
+		ids = append(ids, loc.SourceLocale)
 	}
 	selLabel := options[0]
 	for i, id := range ids {

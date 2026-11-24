@@ -18,8 +18,9 @@ func init() {
 type jsonI18nAdapter struct{}
 
 type jsonI18nOpaque struct {
-	IsFlat   bool
-	KeyPaths map[string][]string
+	IsFlat    bool
+	Namespace string
+	KeyPaths  map[string][]string
 }
 
 var excludedJSONNames = map[string]bool{
@@ -148,8 +149,9 @@ func (a *jsonI18nAdapter) ParseDoc(relPath string, raw []byte, filePattern strin
 	}
 
 	opaque := &jsonI18nOpaque{
-		IsFlat:   isFlat,
-		KeyPaths: make(map[string][]string),
+		IsFlat:    isFlat,
+		Namespace: nsContext,
+		KeyPaths:  make(map[string][]string),
 	}
 	var entries []NormalizedEntry
 
@@ -255,6 +257,9 @@ func (a *jsonI18nAdapter) ApplyPatches(doc *DocRecord, patches []PatchOp) ([]byt
 		if !p.Action.Mutates() {
 			continue
 		}
+		if opaque != nil && opaque.Namespace != "" && p.Key.Context != "" && p.Key.Context != opaque.Namespace {
+			continue
+		}
 		var path []string
 		if opaque != nil {
 			if knownPath, ok := opaque.KeyPaths[p.Key.ID]; ok {
@@ -350,6 +355,18 @@ func (a *jsonI18nAdapter) ApplyPatches(doc *DocRecord, patches []PatchOp) ([]byt
 }
 
 func (a *jsonI18nAdapter) NewLocaleDoc(template *DocRecord, target locale.LocaleSpec, newRelPath string) (*DocRecord, error) {
+	if template == nil || len(template.Raw) == 0 {
+		raw := []byte("{}\n")
+		doc, err := a.ParseDoc(newRelPath, raw, "", []locale.LocaleSpec{target})
+		if err != nil {
+			return nil, err
+		}
+		doc.LocaleID = target.ID
+		doc.IsTemplate = false
+		doc.SourceLang = ""
+		doc.Locales = []string{target.ID}
+		return doc, nil
+	}
 	cst, err := parseJSONCST(template.Raw)
 	if err != nil {
 		return nil, err

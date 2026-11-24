@@ -332,3 +332,53 @@ func TestApplyPatchesCRLFMultilineNoBareLF(t *testing.T) {
 		t.Fatalf("found bare LF in CRLF-patched output:\n%q", string(res.OutputRaw))
 	}
 }
+
+func TestHighByteTagDuplicateContextsAndHTMLEntities(t *testing.T) {
+	raw := `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="de_DE">
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>First<byte value="xa0"/>Space</source>
+        <translation>&nbsp;Erster</translation>
+    </message>
+</context>
+<context>
+    <name>MainWindow</name>
+    <message>
+        <source>Second</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>`
+	tf, err := ParseBytes("de_DE.ts", []byte(raw))
+	if err != nil {
+		t.Fatalf("ParseBytes failed: %v", err)
+	}
+	if got := tf.Contexts[0].Messages[0].Source; got != "First\u00a0Space" {
+		t.Fatalf("high <byte value=\"xa0\"/> produced %q, want valid UTF-8 NBSP", got)
+	}
+
+	res, err := ApplyPatches(tf, []PatchItem{
+		{
+			Key:     domain.EntryKey{Context: "MainWindow", Source: "Second"},
+			NewText: "Zweiter",
+			Action:  domain.ActionFillGap,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplyPatches failed (duplicate context or HTML entity): %v", err)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("Applied = %d, want 1", res.Applied)
+	}
+	if !strings.Contains(string(res.OutputRaw), "<translation>Zweiter</translation>") {
+		t.Fatalf("expected second duplicate context message patched, got:\n%s", string(res.OutputRaw))
+	}
+
+	_, afterCleared := FormatSnippetDiff("MainWindow", "Second", "Zweiter", "", domain.StatusFinished, false)
+	if !strings.Contains(afterCleared, `<translation type="unfinished"></translation>`) {
+		t.Fatalf("expected cleared FormatSnippetDiff to render unfinished tag, got:\n%s", afterCleared)
+	}
+}

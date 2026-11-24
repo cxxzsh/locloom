@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -57,5 +59,90 @@ func TestSidebarLocaleScope(t *testing.T) {
 		if !scope[l.ID] && l.Enabled {
 			t.Fatalf("selectAll enabled hidden locale %s", l.ID)
 		}
+	}
+}
+
+func TestLocaleProfilesProjectScopingAndRefToggle(t *testing.T) {
+	dir := t.TempDir()
+	// Create a project mimicking test_data/ts: English source, zh_CN + ja_JP + da_DK + nb_NO + pt_PT (no zh_HK, no pt_BR, no cs_CZ).
+	files := []string{"zh_CN.ts", "ja_JP.ts", "da_DK.ts", "nb_NO.ts", "pt_PT.ts"}
+	for _, name := range files {
+		lang := name[:len(name)-3]
+		xml := `<?xml version="1.0" encoding="utf-8"?><TS version="2.1" language="` + lang + `"><context><name>M</name><message><source>Save</source><translation type="unfinished"></translation></message></context></TS>`
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(xml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := config.Default()
+	a := NewWithConfig(cfg)
+	if err := a.LoadProject(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	findProfile := func(id string) locale.Profile {
+		for _, p := range a.cfg.Profiles {
+			if p.ID == id {
+				return p
+			}
+		}
+		t.Fatalf("profile %q not found", id)
+		return locale.Profile{}
+	}
+	enabledMap := func() map[string]bool {
+		m := map[string]bool{}
+		for _, l := range a.enabledNonRefLocales() {
+			m[l.ID] = true
+		}
+		return m
+	}
+
+	// 1. Europe profile must select da_DK, nb_NO, pt_PT and NOT inject non-project ghost locales (pt_BR, de_DE, cs_CZ).
+	a.applyLocaleProfile(findProfile("europe"))
+	em := enabledMap()
+	if !em["da_DK"] || !em["nb_NO"] || !em["pt_PT"] || len(em) != 3 {
+		t.Fatalf("europe profile enabled = %v, want exactly {da_DK, nb_NO, pt_PT}", em)
+	}
+	if !a.isProfileActive(findProfile("europe")) {
+		t.Fatal("expected europe profile to report active")
+	}
+	// focusedLocale must snap to one of the enabled locales (not stay on disabled ja_JP).
+	if !em[a.focusedLocale] {
+		t.Fatalf("focusedLocale = %q should be in enabled set %v", a.focusedLocale, em)
+	}
+
+	// 2. CJK profile must select ja_JP only (zh_CN is ref) and NOT inject ghost zh_HK.
+	a.applyLocaleProfile(findProfile("cjk"))
+	em = enabledMap()
+	if !em["ja_JP"] || em["zh_HK"] || len(em) != 1 {
+		t.Fatalf("cjk profile enabled = %v, want {ja_JP}", em)
+	}
+
+	// 3. All profile must re-enable ALL project locales including discovered da_DK & nb_NO, without ghost locales.
+	a.applyLocaleProfile(findProfile("all"))
+	em = enabledMap()
+	if !em["ja_JP"] || !em["da_DK"] || !em["nb_NO"] || !em["pt_PT"] || len(em) != 4 {
+		t.Fatalf("all profile enabled = %v, want 4 project target locales", em)
+	}
+
+	// 4. Toggling Ref off on zh_CN makes zh_CN a normal translatable target locale!
+	a.setRefLocale("zh_CN")
+	em = enabledMap()
+	if !em["zh_CN"] || len(em) != 5 {
+		t.Fatalf("after clearing ref on zh_CN, enabledNonRef = %v, want 5 locales including zh_CN", em)
+	}
+	if a.plan.RefLocaleID != "" {
+		t.Fatalf("expected RefLocaleID == \"\", got %q", a.plan.RefLocaleID)
+	}
+
+	// 5. syncBundleLocales on a JSON project with SourceLocale="en" must not enable "en" as a target.
+	jsonDir := writeHermeticJSONBundle(t)
+	if err := a.LoadProject(jsonDir); err != nil {
+		t.Fatal(err)
+	}
+	a.syncBundleLocales()
+	em = enabledMap()
+	if em["en"] {
+		t.Fatalf("syncBundleLocales unexpectedly enabled source locale 'en': %v", em)
 	}
 }

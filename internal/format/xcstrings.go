@@ -405,6 +405,16 @@ func (a *xcstringsAdapter) ApplyPatches(doc *DocRecord, patches []PatchOp) ([]by
 					continue
 				}
 			}
+			if _, hasVar := locNode.Prop("variations"); !hasVar {
+				locDepth := nodeDepth[locNode]
+				payload := buildLocPayload(p)
+				if varPayload, ok := payload["variations"]; ok {
+					rawVar := marshalIndentedJSON(varPayload, strings.Repeat(cst.Indent, locDepth+1), cst.Indent, cst.LineEnding)
+					addInsert(locNode, locDepth, "variations", rawVar)
+					applied++
+					continue
+				}
+			}
 		}
 
 		if suNode, ok := locNode.Prop("stringUnit"); ok && suNode.Kind == jsonObject {

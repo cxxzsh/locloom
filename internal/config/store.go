@@ -15,8 +15,15 @@ import (
 )
 
 const configFileName = "config.json"
+
 // AppVersion is the current application semantic version (aligned with mygo.json).
-const AppVersion = "0.1.2"
+const AppVersion = "0.1.6"
+
+// SaveTargetMode controls where "Save Back" writes modified localization files.
+const (
+	SaveTargetNewFolder = 0 // Write a complete updated copy into a sibling *_updated folder
+	SaveTargetInPlace   = 1 // Overwrite original files in place
+)
 
 // AppConfig persists user preferences, proxy configuration, dynamic locales, and per-provider settings.
 type AppConfig struct {
@@ -27,6 +34,7 @@ type AppConfig struct {
 	MatrixViewMode   int                          `json:"matrix_view_mode"`
 	FilePattern      string                       `json:"file_pattern"`
 	WriteMode        domain.WriteMode             `json:"write_mode"`
+	SaveTargetMode   int                          `json:"save_target_mode"`
 	AppendMissing    bool                         `json:"append_missing"`
 	AppendContext    string                       `json:"append_context"`
 	CreateBackup     bool                         `json:"create_backup"`
@@ -234,6 +242,9 @@ func normalizeLoaded(cfg *AppConfig) {
 	if cfg.AppendContext == "" {
 		cfg.AppendContext = def.AppendContext
 	}
+	if cfg.SaveTargetMode != SaveTargetNewFolder && cfg.SaveTargetMode != SaveTargetInPlace {
+		cfg.SaveTargetMode = SaveTargetNewFolder
+	}
 	if cfg.Concurrency <= 0 {
 		cfg.Concurrency = def.Concurrency
 	}
@@ -245,6 +256,18 @@ func normalizeLoaded(cfg *AppConfig) {
 	}
 	if len(cfg.Profiles) == 0 {
 		cfg.Profiles = def.Profiles
+	} else {
+		// Refresh built-in preset definitions (e.g. expanded European/SEA lists)
+		// while preserving any user-defined custom profiles.
+		builtinByID := make(map[string]locale.Profile, len(def.Profiles))
+		for _, p := range def.Profiles {
+			builtinByID[p.ID] = p
+		}
+		for i := range cfg.Profiles {
+			if fresh, ok := builtinByID[cfg.Profiles[i].ID]; ok {
+				cfg.Profiles[i] = fresh
+			}
+		}
 	}
 	if len(cfg.ProviderOrder) == 0 || isLegacyDefaultProviderOrder(cfg.ProviderOrder) {
 		cfg.ProviderOrder = slices.Clone(def.ProviderOrder)

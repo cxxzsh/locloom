@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -129,19 +130,25 @@ func ValidateTranslationLang(source, target string, numerus bool, lang string) [
 	// Trailing sentence punctuation parity: engines sometimes drop a source's
 	// final colon/period, which then cascades into downstream "translate from"
 	// outputs. Warn so the gap surfaces instead of silently propagating.
-	if ws, wt := punctClass(trailingPunct(source)), punctClass(trailingPunct(target)); ws != wt {
-		src := string(trailingPunct(source))
-		tgt := string(trailingPunct(target))
-		if src == "" {
-			src = "∅"
+	if srcR, srcCls := trailingPunctClass(source); true {
+		targets := []string{target}
+		if numerus && strings.Contains(target, PluralSeparator) {
+			targets = SplitNumerus(target)
 		}
-		if tgt == "" {
-			tgt = "∅"
-		}
-		if isEn {
-			warnings = append(warnings, fmt.Sprintf("Trailing punctuation differs: source ends %q, target ends %q", src, tgt))
-		} else {
-			warnings = append(warnings, fmt.Sprintf("末尾标点不一致：原文以 %q 结尾，译文以 %q 结尾", src, tgt))
+		for _, part := range targets {
+			if strings.TrimSpace(part) == "" {
+				continue
+			}
+			if tgtR, tgtCls := trailingPunctClass(part); srcCls != tgtCls {
+				src := formatPunctRune(srcR)
+				tgt := formatPunctRune(tgtR)
+				if isEn {
+					warnings = append(warnings, fmt.Sprintf("Trailing punctuation differs: source ends %q, target ends %q", src, tgt))
+				} else {
+					warnings = append(warnings, fmt.Sprintf("末尾标点不一致：原文以 %q 结尾，译文以 %q 结尾", src, tgt))
+				}
+				break
+			}
 		}
 	}
 
@@ -156,45 +163,53 @@ func ValidateTranslationLang(source, target string, numerus bool, lang string) [
 	return warnings
 }
 
-// trailingPunct returns the last rune of s when it is a sentence terminator
-// (./:/?/!/;/, and CJK 。/：/！/？/；/，); it returns 0 otherwise.
-func trailingPunct(s string) rune {
-	s = strings.TrimRight(s, " \t")
-	if s == "" {
-		return 0
+func formatPunctRune(r rune) string {
+	if r == 0 {
+		return "∅"
 	}
-	// Ellipsis sequences ("...", "…", "。。。") collapse to a single class so
+	return string(r)
+}
+
+func hasGreekRune(s string) bool {
+	for _, r := range s {
+		if unicode.In(r, unicode.Greek) {
+			return true
+		}
+	}
+	return false
+}
+
+// trailingPunctClass returns the trailing sentence terminator rune and its
+// equivalence class so ASCII, CJK, Greek, and Arabic equivalents match.
+func trailingPunctClass(s string) (rune, int) {
+	s = strings.TrimRight(s, " \t\r\n")
+	if s == "" {
+		return 0, 0
+	}
+	// Ellipsis sequences ("...", "…", "。。") collapse to a single class so
 	// Hi... -> 你好… does not false-positive as a dropped period.
 	if strings.HasSuffix(s, "...") || strings.HasSuffix(s, "…") || strings.HasSuffix(s, "。。") {
-		return '…'
+		return '…', 7
 	}
 	runes := []rune(s)
 	last := runes[len(runes)-1]
+	// In Greek typography, ';' (or U+037E ';') is the standard question mark.
+	if last == ';' || (last == ';' && hasGreekRune(s)) {
+		return last, 3
+	}
 	switch last {
-	case '.', ':', '?', '!', ';', ',', '。', '：', '！', '？', '；', '，':
-		return last
-	}
-	return 0
-}
-
-// punctClass maps a trailing punctuation rune to an equivalence class so ASCII
-// and CJK forms (e.g. ? / ？, : / ：, . / 。) count as the same terminator.
-func punctClass(r rune) int {
-	switch r {
 	case '.', '。':
-		return 1
+		return last, 1
 	case ':', '：':
-		return 2
-	case '?', '？':
-		return 3
+		return last, 2
+	case '?', '？', '؟':
+		return last, 3
 	case '!', '！':
-		return 4
-	case ';', '；':
-		return 5
-	case ',', '，':
-		return 6
-	case '…':
-		return 7
+		return last, 4
+	case ';', '；', '؛':
+		return last, 5
+	case ',', '，', '،':
+		return last, 6
 	}
-	return 0
+	return 0, 0
 }

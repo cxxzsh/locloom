@@ -73,6 +73,22 @@ type DispatchResult struct {
 	Duration time.Duration
 }
 
+// cacheSourceKey returns the cache lookup key for item, scoping by SourceLocale
+// when translating from a pinned source locale whose text differs from Key.Source.
+func cacheSourceKey(item SourceItem) string {
+	src := item.SrcText
+	if src == "" {
+		src = item.Key.Source
+	}
+	if src == "" {
+		src = item.RefText
+	}
+	if item.SourceLocale != "" && item.SrcText != "" && item.SrcText != item.Key.Source {
+		return item.SourceLocale + "\x1f" + src
+	}
+	return src
+}
+
 // RunConcurrent fans out semaphore-bounded per-locale workers running ProviderIDs in waterfall order.
 func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 	start := time.Now()
@@ -259,10 +275,7 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 				var cacheCells []TranslatedCell
 				if !opts.BypassCache {
 					for _, item := range remaining {
-						cacheSrc := item.Key.Source
-						if cacheSrc == "" {
-							cacheSrc = item.RefText
-						}
+						cacheSrc := cacheSourceKey(item)
 						if cached, hit := cache.Get(cachePID, loc.ID, cacheSrc, item.Key.Context); hit {
 							cacheCells = append(cacheCells, TranslatedCell{
 								LocaleID:   loc.ID,
@@ -299,165 +312,180 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 					break
 				}
 
-				// Mask placeholders (splitting numerus forms cleanly when needed).
+				// Process engine items in progress chunks so large batches stream live updates
+				// and preserve partial progress on rate limits or cancellation.
+				const dispatchChunkSize = 50
 				type itemPlan struct {
 					orig   SourceItem
 					subIDs []string
 					masked []MaskedText
 				}
-				plans := make([]itemPlan, 0, len(toTranslate))
-				maskedItems := make([]SourceItem, 0, len(toTranslate))
-
-				for _, item := range toTranslate {
-					baseSrc := item.SrcText
-					if baseSrc == "" {
-						baseSrc = item.Key.Source
-					}
-					if baseSrc == "" {
-						baseSrc = item.RefText
-					}
-					if item.Numerus {
-						pluralSrc := baseSrc
-						if !strings.Contains(pluralSrc, domain.PluralSeparator) && strings.Contains(item.RefText, domain.PluralSeparator) {
-							pluralSrc = item.RefText
-						}
-						forms := domain.SplitNumerus(pluralSrc)
-						if len(forms) > 1 {
-							pl := itemPlan{
-								orig:   item,
-								subIDs: make([]string, len(forms)),
-								masked: make([]MaskedText, len(forms)),
-							}
-							for fi, form := range forms {
-								subID := fmt.Sprintf("%s#%d", item.ID, fi)
-								m := MaskPlaceholders(form)
-								pl.subIDs[fi] = subID
-								pl.masked[fi] = m
-								mk := item.Key
-								mk.Source = m.Masked
-								maskedItems = append(maskedItems, SourceItem{
-									ID:           subID,
-									Key:          mk,
-									SourceLocale: item.SourceLocale,
-									SrcText:      m.Masked,
-									RefLocale:    item.RefLocale,
-									Numerus:      true,
-								})
-							}
-							plans = append(plans, pl)
-							continue
-						}
-					}
-					m := MaskPlaceholders(baseSrc)
-					plans = append(plans, itemPlan{
-						orig:   item,
-						subIDs: []string{item.ID},
-						masked: []MaskedText{m},
-					})
-					mk := item.Key
-					mk.Source = m.Masked
-					maskedItems = append(maskedItems, SourceItem{
-						ID:           item.ID,
-						Key:          mk,
-						SourceLocale: item.SourceLocale,
-						SrcText:      m.Masked,
-						RefLocale:    item.RefLocale,
-						RefText:      item.RefText,
-						Numerus:      item.Numerus,
-					})
-				}
-
-				outMap, err := p.Translate(ctx, Request{
-					TargetLocale: loc,
-					EngineCode:   engineCode,
-					Items:        maskedItems,
-				})
-				if err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", pid, err))
-					ev := LogEvent{
-						Time:       time.Now(),
-						Level:      "error",
-						ProviderID: pid,
-						LocaleID:   loc.ID,
-						Message:    err.Error(),
-					}
-					emit(loc.ID, func(st *LocaleStatus) {
-						st.Errors = append(st.Errors, fmt.Sprintf("%s: %v", pid, err))
-					}, nil, []LogEvent{ev})
-					remaining = toTranslate
-					continue
-				}
-
-				var newCells []TranslatedCell
 				var nextRemaining []SourceItem
-				for _, pl := range plans {
-					if len(pl.subIDs) == 1 {
-						raw := outMap[pl.subIDs[0]]
-						restored := RestorePlaceholders(raw, pl.masked[0])
-						if restored != "" {
-							cacheSrc := pl.orig.Key.Source
-							if cacheSrc == "" {
-								cacheSrc = pl.orig.RefText
+
+				for chunkStart := 0; chunkStart < len(toTranslate); chunkStart += dispatchChunkSize {
+					if ctx.Err() != nil {
+						nextRemaining = append(nextRemaining, toTranslate[chunkStart:]...)
+						break
+					}
+					chunkEnd := min(chunkStart+dispatchChunkSize, len(toTranslate))
+					chunk := toTranslate[chunkStart:chunkEnd]
+
+					plans := make([]itemPlan, 0, len(chunk))
+					maskedItems := make([]SourceItem, 0, len(chunk))
+
+					for _, item := range chunk {
+						baseSrc := item.SrcText
+						if baseSrc == "" {
+							baseSrc = item.Key.Source
+						}
+						if baseSrc == "" {
+							baseSrc = item.RefText
+						}
+						if item.Numerus {
+							pluralSrc := baseSrc
+							if !strings.Contains(pluralSrc, domain.PluralSeparator) && strings.Contains(item.RefText, domain.PluralSeparator) {
+								pluralSrc = item.RefText
 							}
-							if !opts.BypassCache {
-								cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, restored)
+							forms := domain.SplitNumerus(pluralSrc)
+							if len(forms) > 1 {
+								pl := itemPlan{
+									orig:   item,
+									subIDs: make([]string, len(forms)),
+									masked: make([]MaskedText, len(forms)),
+								}
+								for fi, form := range forms {
+									subID := fmt.Sprintf("%s#%d", item.ID, fi)
+									m := MaskPlaceholders(form)
+									pl.subIDs[fi] = subID
+									pl.masked[fi] = m
+									mk := item.Key
+									mk.Source = m.Masked
+									maskedItems = append(maskedItems, SourceItem{
+										ID:           subID,
+										Key:          mk,
+										SourceLocale: item.SourceLocale,
+										SrcText:      m.Masked,
+										RefLocale:    item.RefLocale,
+										Numerus:      true,
+									})
+								}
+								plans = append(plans, pl)
+								continue
 							}
-							newCells = append(newCells, TranslatedCell{
-								LocaleID:   loc.ID,
-								Key:        pl.orig.Key,
-								Text:       restored,
-								ProviderID: pid,
-							})
-							completed++
-						} else {
-							nextRemaining = append(nextRemaining, pl.orig)
+						}
+						m := MaskPlaceholders(baseSrc)
+						plans = append(plans, itemPlan{
+							orig:   item,
+							subIDs: []string{item.ID},
+							masked: []MaskedText{m},
+						})
+						mk := item.Key
+						mk.Source = m.Masked
+						maskedItems = append(maskedItems, SourceItem{
+							ID:           item.ID,
+							Key:          mk,
+							SourceLocale: item.SourceLocale,
+							SrcText:      m.Masked,
+							RefLocale:    item.RefLocale,
+							RefText:      item.RefText,
+							Numerus:      item.Numerus,
+						})
+					}
+
+					outMap, err := p.Translate(ctx, Request{
+						TargetLocale: loc,
+						EngineCode:   engineCode,
+						Items:        maskedItems,
+					})
+
+					// Always harvest any partial translations returned alongside an error
+					// so completed work is never discarded on rate limits or cancellation.
+					var newCells []TranslatedCell
+					if len(outMap) > 0 {
+						for _, pl := range plans {
+							if len(pl.subIDs) == 1 {
+								raw := outMap[pl.subIDs[0]]
+								restored := RestorePlaceholders(raw, pl.masked[0])
+								if restored != "" {
+									if !opts.BypassCache {
+										cache.Put(cachePID, loc.ID, cacheSourceKey(pl.orig), pl.orig.Key.Context, restored)
+									}
+									newCells = append(newCells, TranslatedCell{
+										LocaleID:   loc.ID,
+										Key:        pl.orig.Key,
+										Text:       restored,
+										ProviderID: pid,
+									})
+									completed++
+								} else {
+									nextRemaining = append(nextRemaining, pl.orig)
+								}
+							} else {
+								forms := make([]string, len(pl.subIDs))
+								allOK := true
+								for fi, subID := range pl.subIDs {
+									restored := RestorePlaceholders(outMap[subID], pl.masked[fi])
+									if restored == "" {
+										allOK = false
+										break
+									}
+									forms[fi] = restored
+								}
+								if allOK {
+									joined := domain.JoinNumerus(forms)
+									if !opts.BypassCache {
+										cache.Put(cachePID, loc.ID, cacheSourceKey(pl.orig), pl.orig.Key.Context, joined)
+									}
+									newCells = append(newCells, TranslatedCell{
+										LocaleID:   loc.ID,
+										Key:        pl.orig.Key,
+										Text:       joined,
+										ProviderID: pid,
+									})
+									completed++
+								} else {
+									nextRemaining = append(nextRemaining, pl.orig)
+								}
+							}
 						}
 					} else {
-						forms := make([]string, len(pl.subIDs))
-						allOK := true
-						for fi, subID := range pl.subIDs {
-							restored := RestorePlaceholders(outMap[subID], pl.masked[fi])
-							if restored == "" {
-								allOK = false
-								break
-							}
-							forms[fi] = restored
-						}
-						if allOK {
-							joined := domain.JoinNumerus(forms)
-							cacheSrc := pl.orig.Key.Source
-							if cacheSrc == "" {
-								cacheSrc = pl.orig.RefText
-							}
-							if !opts.BypassCache {
-								cache.Put(cachePID, loc.ID, cacheSrc, pl.orig.Key.Context, joined)
-							}
-							newCells = append(newCells, TranslatedCell{
-								LocaleID:   loc.ID,
-								Key:        pl.orig.Key,
-								Text:       joined,
-								ProviderID: pid,
-							})
-							completed++
-						} else {
+						for _, pl := range plans {
 							nextRemaining = append(nextRemaining, pl.orig)
 						}
+					}
+
+					if len(newCells) > 0 {
+						ev := LogEvent{
+							Time:       time.Now(),
+							Level:      "info",
+							ProviderID: pid,
+							LocaleID:   loc.ID,
+							Message:    fmt.Sprintf("translated %d entries", len(newCells)),
+						}
+						emit(loc.ID, func(st *LocaleStatus) {
+							st.Completed = completed
+						}, newCells, []LogEvent{ev})
+					}
+
+					if err != nil {
+						errs = append(errs, fmt.Sprintf("%s: %v", pid, err))
+						ev := LogEvent{
+							Time:       time.Now(),
+							Level:      "error",
+							ProviderID: pid,
+							LocaleID:   loc.ID,
+							Message:    err.Error(),
+						}
+						emit(loc.ID, func(st *LocaleStatus) {
+							st.Errors = append(st.Errors, fmt.Sprintf("%s: %v", pid, err))
+						}, nil, []LogEvent{ev})
+						if chunkEnd < len(toTranslate) {
+							nextRemaining = append(nextRemaining, toTranslate[chunkEnd:]...)
+						}
+						break
 					}
 				}
 				remaining = nextRemaining
-
-				if len(newCells) > 0 {
-					ev := LogEvent{
-						Time:       time.Now(),
-						Level:      "info",
-						ProviderID: pid,
-						LocaleID:   loc.ID,
-						Message:    fmt.Sprintf("translated %d entries", len(newCells)),
-					}
-					emit(loc.ID, func(st *LocaleStatus) {
-						st.Completed = completed
-					}, newCells, []LogEvent{ev})
-				}
 			}
 
 			finalPhase := PhaseDone
@@ -469,6 +497,8 @@ func RunConcurrent(ctx context.Context, opts DispatchOptions) *DispatchResult {
 				finalPhase = PhasePartial
 			} else if len(errs) > 0 {
 				finalPhase = PhaseFailed
+			} else if len(items) > 0 {
+				finalPhase = PhasePartial
 			}
 
 			emit(loc.ID, func(st *LocaleStatus) {

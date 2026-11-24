@@ -557,3 +557,127 @@ func TestZipPathTraversalAndSizeGuard(t *testing.T) {
 		t.Fatalf("expected unsafe zip entry error on drive-qualified entry, got err=%v", err)
 	}
 }
+
+func TestAndroidXMLBackslashRoundTrip(t *testing.T) {
+	a, ok := GetAdapter(FormatAndroidXML)
+	if !ok {
+		t.Fatal("FormatAndroidXML adapter not registered")
+	}
+	raw := `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="path">old</string>
+</resources>
+`
+	doc, err := a.ParseDoc("res/values-ja/strings.xml", []byte(raw), "", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("ParseDoc failed: %v", err)
+	}
+	want := `C:\Users\new\tab`
+	out, applied, _, err := a.ApplyPatches(doc, []PatchOp{
+		{Key: domain.EntryKey{ID: "path"}, NewText: want, Action: domain.ActionOverwrite},
+	})
+	if err != nil || applied != 1 {
+		t.Fatalf("ApplyPatches failed: applied=%d err=%v", applied, err)
+	}
+	if !strings.Contains(string(out), `C:\\Users\\new\\tab`) {
+		t.Fatalf("expected backslashes escaped in output:\n%s", string(out))
+	}
+	reparsed, err := a.ParseDoc("res/values-ja/strings.xml", out, "", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("re-parse failed: %v", err)
+	}
+	if len(reparsed.Entries) != 1 || reparsed.Entries[0].Text != want {
+		t.Fatalf("backslash round-trip mismatch: got %q, want %q", reparsed.Entries[0].Text, want)
+	}
+}
+
+func TestSaveOutputFolderCompleteAndCentralizedBackups(t *testing.T) {
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "ts")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	enRaw := `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="zh_CN">
+<context><name>App</name><message><source>Save</source><translation>保存</translation></message></context>
+</TS>
+`
+	jaRaw := `<?xml version="1.0" encoding="utf-8"?>
+<TS version="2.1" language="ja_JP">
+<context><name>App</name><message><source>Save</source><translation type="unfinished"></translation></message></context>
+</TS>
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "zh_CN.ts"), []byte(enRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "ja_JP.ts"), []byte(jaRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bundle, err := Load(srcDir, "{id}.ts", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	outDir := DefaultOutputPath(bundle)
+	if outDir != srcDir+"_updated" {
+		t.Fatalf("DefaultOutputPath = %q, want %q", outDir, srcDir+"_updated")
+	}
+
+	// Save into separate folder: only ja_JP is patched, zh_CN must still be copied untouched.
+	patches := map[string][]PatchOp{
+		"ja_JP": {
+			{Key: domain.EntryKey{Context: "App", Source: "Save"}, NewText: "保存する", Action: domain.ActionFillGap},
+		},
+	}
+	rep, err := Save(bundle, patches, locale.DefaultLocales(), "{id}.ts", SaveOptions{
+		CreateBackup: true,
+		OutputPath:   outDir,
+	})
+	if err != nil {
+		t.Fatalf("Save to new folder failed: %v", err)
+	}
+	if rep.FilesWritten != 1 || rep.OutputPath != outDir {
+		t.Fatalf("unexpected report: %+v", rep)
+	}
+	// Originals untouched.
+	origJA, _ := os.ReadFile(filepath.Join(srcDir, "ja_JP.ts"))
+	if strings.Contains(string(origJA), "保存する") {
+		t.Fatalf("original file should not have been modified")
+	}
+	// Complete copy in outDir (both zh_CN.ts and ja_JP.ts exist).
+	if _, err := os.Stat(filepath.Join(outDir, "zh_CN.ts")); err != nil {
+		t.Fatalf("untouched zh_CN.ts missing from output folder: %v", err)
+	}
+	updatedJA, err := os.ReadFile(filepath.Join(outDir, "ja_JP.ts"))
+	if err != nil || !strings.Contains(string(updatedJA), "保存する") {
+		t.Fatalf("updated ja_JP.ts missing or unpatched: %v / %s", err, string(updatedJA))
+	}
+
+	// Second save into the same outDir with CreateBackup=true must put backup inside .locloom_backup/<ts>/,
+	// never scatter ja_JP.ts.bak beside ja_JP.ts, and Load(outDir) must ignore .locloom_backup.
+	patches2 := map[string][]PatchOp{
+		"ja_JP": {
+			{Key: domain.EntryKey{Context: "App", Source: "Save"}, NewText: "保存完了", Action: domain.ActionOverwrite},
+		},
+	}
+	rep2, err := Save(bundle, patches2, locale.DefaultLocales(), "{id}.ts", SaveOptions{
+		CreateBackup: true,
+		OutputPath:   outDir,
+	})
+	if err != nil {
+		t.Fatalf("second Save failed: %v", err)
+	}
+	if rep2.BackupDir == "" || !strings.Contains(rep2.BackupDir, BackupDirName) || len(rep2.BackupPaths) != 1 {
+		t.Fatalf("expected centralized backup inside %s, got %+v", BackupDirName, rep2)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "ja_JP.ts.bak")); err == nil {
+		t.Fatalf("legacy scattered .bak file should not exist")
+	}
+	reloaded, err := Load(outDir, "{id}.ts", locale.DefaultLocales())
+	if err != nil {
+		t.Fatalf("Load(outDir) failed: %v", err)
+	}
+	if len(reloaded.Docs) != 2 {
+		t.Fatalf("Load(outDir) should skip %s and find 2 docs, got %d", BackupDirName, len(reloaded.Docs))
+	}
+}

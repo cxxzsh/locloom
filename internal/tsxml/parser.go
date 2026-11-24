@@ -219,24 +219,20 @@ func parseTSXML(tf *TSFile) error {
 				}
 			case "byte":
 				if b, ok := parseByteTag(tok.Attr); ok {
-					writeByteOrRune := func(buf *bytes.Buffer) {
-						if b <= 0xFF {
-							buf.WriteByte(byte(b))
-						} else {
-							buf.WriteRune(rune(b))
-						}
+					writeRune := func(buf *bytes.Buffer) {
+						buf.WriteRune(rune(b))
 					}
 					switch {
 					case inSource:
-						writeByteOrRune(&sourceBuf)
+						writeRune(&sourceBuf)
 					case inComment:
-						writeByteOrRune(&commentBuf)
+						writeRune(&commentBuf)
 					case inExtraComment:
-						writeByteOrRune(&extraCommentBuf)
+						writeRune(&extraCommentBuf)
 					case inNumerusForm:
-						writeByteOrRune(&numerusBuf)
+						writeRune(&numerusBuf)
 					case inTranslation:
-						writeByteOrRune(&transBuf)
+						writeRune(&transBuf)
 					}
 				}
 			}

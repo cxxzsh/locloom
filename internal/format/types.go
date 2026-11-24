@@ -94,6 +94,7 @@ type SaveOptions struct {
 type SaveReport struct {
 	OutputPath   string
 	FilesWritten int
+	BackupDir    string
 	BackupPaths  []string
 }
 

@@ -98,16 +98,22 @@ type App struct {
 
 	// Locale sidebar search
 	localeSearchQuery string
-	// Custom locale form
-	cacheClearLocale   string
-	cacheClearProvider string
-	cacheSearchQuery   string
-	newLocID           string
-	newLocName         string
-	newLocCode         string
+	// Custom locale form & memoized cache inspector snapshot
+	cacheClearLocale    string
+	cacheClearProvider  string
+	cacheSearchQuery    string
+	cacheViewRev        uint64
+	cacheViewLoaded     bool
+	cacheViewLocCounts  map[string]int
+	cacheViewProvCounts map[string]int
+	cacheViewEntries    []provider.CacheEntry
+	newLocID            string
+	newLocName          string
+	newLocCode          string
 
-	// Concurrent translation state
+	// Concurrent translation & write-back state
 	translating         bool
+	writing             bool
 	translatingRow      bool
 	cancelTranslate     context.CancelFunc
 	translateStatuses   map[string]provider.LocaleStatus
@@ -176,6 +182,7 @@ func NewWithConfig(cfg config.AppConfig) *App {
 		netPool:           netpool.New(cfg.Proxy),
 		cache:             provider.GlobalCache(),
 		catalog:           domain.NewCatalog(),
+		defaultCtx:        cfg.AppendContext,
 		selectedRow:       -1,
 		matrixHeightPct:   64,
 		expandedProvider:  make(map[string]bool),
@@ -561,6 +568,13 @@ func (a *App) LoadProject(path string) error {
 }
 
 func (a *App) applyLoadedBundle(bundle *format.Bundle) {
+	// Clear staged catalog overrides when switching from one project to a different project,
+	// while keeping staged edits on Refresh (same SourcePath) and pre-loaded Excel imports (bundle == nil).
+	if a.bundle != nil && bundle != nil && a.bundle.SourcePath != bundle.SourcePath {
+		a.catalog.ClearAll()
+		a.extraEntries = nil
+		a.editBoundLocale = ""
+	}
 	a.bundle = bundle
 	a.cfg.LastTSPath = bundle.SourcePath
 
@@ -672,6 +686,8 @@ func (a *App) applyLoadedWorkbook(wb *sheet.WorkbookData, skipRef bool) {
 		}
 	}
 	a.extraEntries = extra
+	a.editBoundLocale = ""
+	a.rebuildPlan()
 
 	msg := fmt.Sprintf(a.tr().StatusImportedExcelFmt, filepath.Base(wb.FilePath), wb.SheetName, count)
 	a.setStatus(msg, false)

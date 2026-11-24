@@ -413,3 +413,36 @@ func TestXCStringsMultiLocalePluralsAndNewLocale(t *testing.T) {
 			foundFRGreeting, foundJAGreeting, foundFRNoLocs)
 	}
 }
+
+func TestJSONNamespaceIsolationAndNilTemplateGuards(t *testing.T) {
+	jsonA, _ := GetAdapter(FormatJSON)
+	arbA, _ := GetAdapter(FormatARB)
+
+	// Nil template guards must return empty valid doc rather than panicking.
+	if doc, err := jsonA.NewLocaleDoc(nil, locale.LocaleSpec{ID: "ja_JP"}, "locales/ja/common.json"); err != nil || doc == nil {
+		t.Fatalf("JSON NewLocaleDoc(nil) failed: doc=%v err=%v", doc, err)
+	}
+	if doc, err := arbA.NewLocaleDoc(nil, locale.LocaleSpec{ID: "ja_JP"}, "app_ja.arb"); err != nil || doc == nil || !strings.Contains(string(doc.Raw), `"@@locale": "ja_JP"`) {
+		t.Fatalf("ARB NewLocaleDoc(nil) failed: doc=%v err=%v", doc, err)
+	}
+
+	// Multi-namespace JSON must not apply patches belonging to another namespace.
+	raw := "{\n  \"title\": \"Common\"\n}\n"
+	doc, err := jsonA.ParseDoc("locales/ja/common.json", []byte(raw), "", nil)
+	if err != nil {
+		t.Fatalf("ParseDoc failed: %v", err)
+	}
+	out, applied, appended, err := jsonA.ApplyPatches(doc, []PatchOp{
+		{Key: domain.EntryKey{ID: "title", Context: "settings"}, NewText: "Settings Title", Action: domain.ActionOverwrite},
+		{Key: domain.EntryKey{ID: "extra", Context: "settings"}, NewText: "Should Skip", Action: domain.ActionAppendNew},
+	})
+	if err != nil {
+		t.Fatalf("ApplyPatches failed: %v", err)
+	}
+	if applied != 0 || appended != 0 {
+		t.Fatalf("expected cross-namespace patches skipped, got applied=%d appended=%d out=%s", applied, appended, string(out))
+	}
+	if !strings.Contains(string(out), `"title": "Common"`) || strings.Contains(string(out), "Should Skip") {
+		t.Fatalf("common.json unexpectedly mutated:\n%s", string(out))
+	}
+}

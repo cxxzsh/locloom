@@ -229,7 +229,7 @@ func (a *App) viewInspectorDetail(c *ui.Context) {
 					oldStatus = domain.StatusUnfinished
 				}
 				newText := cell.Effective
-				if newText == "" {
+				if newText == "" && !cell.Action.Mutates() {
 					newText = cell.OldText
 				}
 				beforeSnippet, afterSnippet := format.PreviewDiff(

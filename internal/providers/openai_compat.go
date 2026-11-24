@@ -298,7 +298,7 @@ func (p *openAICompatProvider) Translate(ctx context.Context, req provider.Reque
 		end := min(start+batchSize, len(req.Items))
 		chunk := req.Items[start:end]
 
-		resMap, err := p.translateChunkWithRetry(ctx, client, baseURL, model, apiKey, domainPrompt, targetLang, chunk)
+		resMap, err := p.translateChunkWithFallback(ctx, client, baseURL, model, apiKey, domainPrompt, targetLang, chunk)
 		if err != nil {
 			return out, err
 		}
@@ -311,15 +311,41 @@ func (p *openAICompatProvider) Translate(ctx context.Context, req provider.Reque
 	return out, nil
 }
 
-func (p *openAICompatProvider) translateChunkWithRetry(
+func (p *openAICompatProvider) translateChunkWithFallback(
 	ctx context.Context,
 	client *http.Client,
 	baseURL, model, apiKey, domainPrompt, targetLang string,
 	chunk []provider.SourceItem,
 ) (map[string]string, error) {
+	res, parseErr, err := p.translateChunkWithRetry(ctx, client, baseURL, model, apiKey, domainPrompt, targetLang, chunk)
+	if err == nil {
+		return res, nil
+	}
+	if parseErr && len(chunk) > 1 && ctx.Err() == nil {
+		mid := len(chunk) / 2
+		left, errL := p.translateChunkWithFallback(ctx, client, baseURL, model, apiKey, domainPrompt, targetLang, chunk[:mid])
+		if errL != nil {
+			return left, errL
+		}
+		right, errR := p.translateChunkWithFallback(ctx, client, baseURL, model, apiKey, domainPrompt, targetLang, chunk[mid:])
+		for k, v := range right {
+			left[k] = v
+		}
+		return left, errR
+	}
+	return nil, err
+}
+
+func (p *openAICompatProvider) translateChunkWithRetry(
+	ctx context.Context,
+	client *http.Client,
+	baseURL, model, apiKey, domainPrompt, targetLang string,
+	chunk []provider.SourceItem,
+) (map[string]string, bool, error) {
 	type promptEntry struct {
 		ID      string `json:"id"`
 		Context string `json:"context,omitempty"`
+		Comment string `json:"comment,omitempty"`
 		Source  string `json:"source"`
 		Ref     string `json:"ref,omitempty"`
 	}
@@ -345,6 +371,7 @@ func (p *openAICompatProvider) translateChunkWithRetry(
 		entries[i] = promptEntry{
 			ID:      it.ID,
 			Context: it.Key.Context,
+			Comment: it.Key.Comment,
 			Source:  src,
 			Ref:     ref,
 		}
@@ -377,19 +404,20 @@ func (p *openAICompatProvider) translateChunkWithRetry(
 
 	const maxAttempts = 3
 	var lastErr error
+	var lastParseErr bool
 	for attempt := range maxAttempts {
 		if attempt > 0 {
 			backoff := time.Duration(500*(1<<(attempt-1))) * time.Millisecond
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, false, ctx.Err()
 			case <-time.After(backoff):
 			}
 		}
 
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(reqBody))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
 		if apiKey != "" {
@@ -399,6 +427,7 @@ func (p *openAICompatProvider) translateChunkWithRetry(
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			lastErr = err
+			lastParseErr = false
 			continue
 		}
 
@@ -406,15 +435,17 @@ func (p *openAICompatProvider) translateChunkWithRetry(
 		_ = resp.Body.Close()
 		if rerr != nil {
 			lastErr = rerr
+			lastParseErr = false
 			continue
 		}
 
 		if isRetryableStatus(resp.StatusCode) {
 			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateStr(string(body), 160))
+			lastParseErr = false
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateStr(string(body), 200))
+			return nil, false, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateStr(string(body), 200))
 		}
 
 		var chatResp struct {
@@ -425,15 +456,25 @@ func (p *openAICompatProvider) translateChunkWithRetry(
 			} `json:"choices"`
 		}
 		if err := json.Unmarshal(body, &chatResp); err != nil {
-			return nil, fmt.Errorf("invalid chat response JSON: %w", err)
+			lastErr = fmt.Errorf("invalid chat response JSON: %w", err)
+			lastParseErr = true
+			continue
 		}
 		if len(chatResp.Choices) == 0 {
-			return nil, fmt.Errorf("empty choices in chat response")
+			lastErr = fmt.Errorf("empty choices in chat response")
+			lastParseErr = true
+			continue
 		}
-		return extractJSONMap(chatResp.Choices[0].Message.Content)
+		parsed, perr := extractJSONMap(chatResp.Choices[0].Message.Content)
+		if perr != nil {
+			lastErr = perr
+			lastParseErr = true
+			continue
+		}
+		return parsed, false, nil
 	}
 
-	return nil, lastErr
+	return nil, lastParseErr, lastErr
 }
 
 func isRetryableStatus(code int) bool {

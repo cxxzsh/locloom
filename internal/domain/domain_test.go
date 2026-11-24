@@ -229,3 +229,32 @@ func TestValidateTrailingPunctuationEllipsis(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateTrailingPunctuationNullRuneAndGreek(t *testing.T) {
+	// Missing punctuation must print "∅", never NUL "\x00".
+	wEn := ValidateTranslationLang("Developed By", "Razvil:", false, "en")
+	if len(wEn) != 1 || strings.Contains(wEn[0], `\x00`) || !strings.Contains(wEn[0], `"∅"`) {
+		t.Fatalf("expected ∅ without NUL escape in EN warning, got %v", wEn)
+	}
+	wZh := ValidateTranslationLang("Patient Views:", "患者查看报告次数", false, "zh")
+	if len(wZh) != 1 || strings.Contains(wZh[0], `\x00`) || !strings.Contains(wZh[0], `"∅"`) {
+		t.Fatalf("expected ∅ without NUL escape in ZH warning, got %v", wZh)
+	}
+
+	// Greek question mark ';' (and U+037E) and Arabic '؟' match ASCII '?'.
+	for _, pair := range [][2]string{
+		{"Forgot password?", "Ξεχάσατε τον κωδικό πρόσβασης;"},
+		{"Forgot password?", "Ξεχάσατε τον κωδικό πρόσβασης;"},
+		{"Forgot password?", "هل نسيت كلمة المرور؟"},
+		{"Done.\n", "完成。"},
+	} {
+		if w := ValidateTranslationLang(pair[0], pair[1], false, "en"); len(w) != 0 {
+			t.Fatalf("unexpected warning for %q -> %q: %v", pair[0], pair[1], w)
+		}
+	}
+
+	// Non-Greek semicolon should still warn against '?'.
+	if w := ValidateTranslationLang("Save?", "Save;", false, "en"); len(w) == 0 {
+		t.Fatal("expected warning when non-Greek target ends with ';' for '?' source")
+	}
+}

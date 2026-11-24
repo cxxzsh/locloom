@@ -139,7 +139,7 @@ func (a *App) viewHeader(c *ui.Context) {
 				writeBtn := ui.Button(c, "").
 					Padding(t.Space(1.5), t.Space(3)).
 					Radius(pillRadius).
-					Disabled(a.translating || a.bundle == nil).
+					Disabled(a.translating || a.writing || a.bundle == nil).
 					Tooltip(tr.TipWriteTS)
 				writeBtn.Children(func() {
 					ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {

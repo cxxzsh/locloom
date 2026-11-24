@@ -234,8 +234,15 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 							})
 							if a.cache != nil && a.cache.Len() > 0 {
 								isEN := a.UILang() == "en"
-								locCounts := a.cache.CountsByLocale()
-								provCounts := a.cache.CountsByProvider()
+								if curRev := a.cache.Revision(); !a.cacheViewLoaded || curRev != a.cacheViewRev {
+									a.cacheViewLocCounts = a.cache.CountsByLocale()
+									a.cacheViewProvCounts = a.cache.CountsByProvider()
+									a.cacheViewEntries = a.cache.Entries()
+									a.cacheViewRev = curRev
+									a.cacheViewLoaded = true
+								}
+								locCounts := a.cacheViewLocCounts
+								provCounts := a.cacheViewProvCounts
 
 								allLocLbl := "全部语种"
 								allProvLbl := "全部引擎"
@@ -282,7 +289,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 									a.cacheClearProvider = ""
 								}
 
-								entries := a.cache.Entries()
+								entries := a.cacheViewEntries
 								q := strings.ToLower(strings.TrimSpace(a.cacheSearchQuery))
 								filtered := make([]provider.CacheEntry, 0, len(entries))
 								filteredKeys := make([]string, 0, len(entries))

@@ -484,3 +484,110 @@ func containsSubstring(s, sub string) bool {
 		return false
 	}())
 }
+
+func TestRunConcurrentPreservesPartialResultsAndPinnedSourceCache(t *testing.T) {
+	reg := NewRegistry()
+	primary := &stubProvider{
+		id:   "primary",
+		kind: KindEngine,
+		translate: func(_ context.Context, req Request) (map[string]string, error) {
+			// Succeed on item 1, fail mid-batch with rate limit error.
+			return map[string]string{req.Items[0].ID: "P1"}, errors.New("HTTP 429 rate limited")
+		},
+	}
+	fallback := &stubProvider{
+		id:   "fallback",
+		kind: KindEngine,
+		translate: func(_ context.Context, req Request) (map[string]string, error) {
+			out := make(map[string]string, len(req.Items))
+			for _, it := range req.Items {
+				out[it.ID] = "FB:" + it.SrcText
+			}
+			return out, nil
+		},
+	}
+	reg.Register(primary)
+	reg.Register(fallback)
+
+	cache := NewCache("")
+	loc := locale.LocaleSpec{ID: "ja_JP", Enabled: true}
+	tasks := map[string][]SourceItem{
+		"ja_JP": {
+			{ID: "1", Key: domain.EntryKey{Context: "M", Source: "One"}, SrcText: "One"},
+			{ID: "2", Key: domain.EntryKey{Context: "M", Source: "Two"}, SrcText: "Two"},
+		},
+	}
+
+	res := RunConcurrent(context.Background(), DispatchOptions{
+		Registry:    reg,
+		Cache:       cache,
+		ProviderIDs: []string{"primary", "fallback"},
+		Locales:     []locale.LocaleSpec{loc},
+		Tasks:       tasks,
+		Concurrency: 1,
+	})
+	if len(res.Cells) != 2 {
+		t.Fatalf("expected 2 cells (1 harvested partial + 1 fallback), got %+v", res.Cells)
+	}
+	bySrc := map[string]TranslatedCell{}
+	for _, c := range res.Cells {
+		bySrc[c.Key.Source] = c
+	}
+	if bySrc["One"].Text != "P1" || bySrc["One"].ProviderID != "primary" {
+		t.Fatalf("partial result from primary was lost: %+v", bySrc["One"])
+	}
+	if bySrc["Two"].Text != "FB:Two" || bySrc["Two"].ProviderID != "fallback" {
+		t.Fatalf("expected remaining item to fall back cleanly: %+v", bySrc["Two"])
+	}
+
+	// Pinned SourceLocale cache isolation: translating from zh_CN must not return English-source cached entry.
+	nsProv := &namespacedStubProvider{
+		stubProvider: stubProvider{id: "openai_compat", kind: KindEngine},
+		ns:           "gpt-4o|url",
+	}
+	nsProv.translate = func(_ context.Context, req Request) (map[string]string, error) {
+		out := make(map[string]string, len(req.Items))
+		for _, it := range req.Items {
+			out[it.ID] = "TR:" + it.SrcText
+		}
+		return out, nil
+	}
+	reg.Register(nsProv)
+	twLoc := locale.LocaleSpec{ID: "zh_TW", Enabled: true}
+	resEN := RunConcurrent(context.Background(), DispatchOptions{
+		Registry:    reg,
+		Cache:       cache,
+		ProviderIDs: []string{"openai_compat"},
+		Locales:     []locale.LocaleSpec{twLoc},
+		Tasks: map[string][]SourceItem{
+			"zh_TW": {{ID: "k1", Key: domain.EntryKey{Context: "M", Source: "Save"}, SrcText: "Save"}},
+		},
+		Concurrency: 1,
+	})
+	if resEN.Cells[0].Text != "TR:Save" {
+		t.Fatalf("unexpected EN-source result: %+v", resEN.Cells)
+	}
+	resZH := RunConcurrent(context.Background(), DispatchOptions{
+		Registry:    reg,
+		Cache:       cache,
+		ProviderIDs: []string{"openai_compat"},
+		Locales:     []locale.LocaleSpec{twLoc},
+		Tasks: map[string][]SourceItem{
+			"zh_TW": {{ID: "k1", Key: domain.EntryKey{Context: "M", Source: "Save"}, SourceLocale: "zh_CN", SrcText: "保存"}},
+		},
+		Concurrency: 1,
+	})
+	if resZH.Cells[0].Text != "TR:保存" {
+		t.Fatalf("pinned SourceLocale hit stale English cache: %+v", resZH.Cells)
+	}
+
+	// ClearByProvider must match namespaced "openai_compat@..." keys and bump Revision().
+	revBefore := cache.Revision()
+	removed := cache.ClearByProvider("openai_compat")
+	if removed != 2 {
+		t.Fatalf("ClearByProvider(openai_compat) removed %d, want 2", removed)
+	}
+	if cache.Revision() <= revBefore {
+		t.Fatalf("expected cache Revision to increase after ClearByProvider")
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -20,6 +21,10 @@ import (
 	"locloom/internal/platform"
 	"locloom/internal/tsxml"
 )
+
+// BackupDirName is the hidden folder inside the save target directory that
+// collects timestamped backup snapshots instead of scattering .bak files.
+const BackupDirName = ".locloom_backup"
 
 const (
 	maxZipEntryBytes = 64 << 20  // 64 MiB per entry
@@ -240,7 +245,7 @@ func loadDir(dirPath string, filePattern string, known []locale.LocaleSpec) (*Bu
 			return walkErr
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "node_modules" {
+			if d.Name() == ".git" || d.Name() == "node_modules" || d.Name() == BackupDirName {
 				return filepath.SkipDir
 			}
 			return nil
@@ -714,15 +719,53 @@ func Save(bundle *Bundle, patchesByLocale map[string][]PatchOp, locales []locale
 	return writeBundleOutput(bundle, patched, opts)
 }
 
+// DefaultOutputPath returns the default non-destructive output location for bundle:
+//   - .zip archive  -> <stem>_updated.zip (reused if already ending in _updated.zip)
+//   - single file   -> <dir>/<stem>_updated/<filename> (reused if parent already ends in _updated)
+//   - directory     -> <dir>_updated (reused if already ending in _updated)
+func DefaultOutputPath(bundle *Bundle) string {
+	if bundle == nil {
+		return ""
+	}
+	src := strings.TrimSpace(bundle.SourcePath)
+	if src == "" {
+		return ""
+	}
+	cleanSrc := filepath.Clean(src)
+	if bundle.IsZip {
+		ext := filepath.Ext(cleanSrc)
+		stem := strings.TrimSuffix(cleanSrc, ext)
+		if strings.HasSuffix(stem, "_updated") {
+			return cleanSrc
+		}
+		return stem + "_updated.zip"
+	}
+	if bundle.IsSingleFile {
+		dir := filepath.Dir(cleanSrc)
+		base := filepath.Base(cleanSrc)
+		if strings.HasSuffix(filepath.Base(dir), "_updated") {
+			return cleanSrc
+		}
+		ext := filepath.Ext(base)
+		stem := strings.TrimSuffix(base, ext)
+		if stem == "" {
+			stem = base
+		}
+		return filepath.Join(dir, stem+"_updated", base)
+	}
+	if strings.HasSuffix(filepath.Base(cleanSrc), "_updated") {
+		return cleanSrc
+	}
+	return cleanSrc + "_updated"
+}
+
 func writeBundleOutput(bundle *Bundle, patched map[string][]byte, opts SaveOptions) (*SaveReport, error) {
 	report := &SaveReport{}
 
 	if bundle.IsZip {
 		outZip := strings.TrimSpace(opts.OutputPath)
 		if outZip == "" {
-			ext := filepath.Ext(bundle.SourcePath)
-			stem := strings.TrimSuffix(bundle.SourcePath, ext)
-			outZip = stem + "_updated.zip"
+			outZip = DefaultOutputPath(bundle)
 		}
 		report.OutputPath = outZip
 
@@ -802,15 +845,17 @@ func writeBundleOutput(bundle *Bundle, patched map[string][]byte, opts SaveOptio
 		outPath := strings.TrimSpace(opts.OutputPath)
 		if outPath == "" {
 			outPath = bundle.SourcePath
-		} else if info, err := os.Stat(outPath); err == nil && info.IsDir() {
+		} else if info, err := os.Stat(outPath); (err == nil && info.IsDir()) || (err != nil && filepath.Ext(outPath) == "") {
 			outPath = filepath.Join(outPath, filepath.Base(bundle.SourcePath))
 		}
 		report.OutputPath = outPath
+		backupRoot := newBackupSessionDir(filepath.Dir(outPath))
 		for _, data := range patched {
 			if opts.CreateBackup {
-				if bakPath, err := writeBackupIfExists(outPath); err != nil {
+				if bakPath, err := writeBackupToFolder(backupRoot, filepath.Base(outPath), outPath); err != nil {
 					return nil, err
 				} else if bakPath != "" {
+					report.BackupDir = backupRoot
 					report.BackupPaths = append(report.BackupPaths, bakPath)
 				}
 			}
@@ -827,8 +872,52 @@ func writeBundleOutput(bundle *Bundle, patched map[string][]byte, opts SaveOptio
 	if outDir == "" {
 		outDir = bundle.SourcePath
 	}
-	report.OutputPath = outDir
 	cleanOutDir := filepath.Clean(outDir)
+	cleanSrcDir := filepath.Clean(bundle.SourcePath)
+	report.OutputPath = cleanOutDir
+	backupRoot := newBackupSessionDir(cleanOutDir)
+
+	// When exporting into a separate output directory, copy untouched docs verbatim so the
+	// output folder is a complete, self-contained localization bundle ready to use or reload.
+	if cleanOutDir != cleanSrcDir {
+		for _, doc := range bundle.Docs {
+			if doc == nil {
+				continue
+			}
+			if _, isPatched := patched[doc.RelPath]; isPatched {
+				continue
+			}
+			cleanRel, relErr := sanitizeRelPath(doc.RelPath)
+			if relErr != nil {
+				return nil, fmt.Errorf("unsafe output relative path %q: %w", doc.RelPath, relErr)
+			}
+			targetPath := filepath.Clean(filepath.Join(cleanOutDir, filepath.FromSlash(cleanRel)))
+			relCheck, checkErr := filepath.Rel(cleanOutDir, targetPath)
+			if checkErr != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
+				return nil, fmt.Errorf("output path %q escapes target directory %q", doc.RelPath, cleanOutDir)
+			}
+			data := doc.Raw
+			if doc.HasBOM && !bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
+				data = append([]byte{0xEF, 0xBB, 0xBF}, data...)
+			}
+			if existing, readErr := platform.ReadFileShared(targetPath); readErr == nil {
+				if bytes.Equal(existing, data) {
+					continue
+				}
+				if opts.CreateBackup {
+					if bakPath, err := writeBackupToFolder(backupRoot, cleanRel, targetPath); err != nil {
+						return nil, err
+					} else if bakPath != "" {
+						report.BackupDir = backupRoot
+						report.BackupPaths = append(report.BackupPaths, bakPath)
+					}
+				}
+			}
+			if err := platform.AtomicWriteFile(targetPath, data, 0o644); err != nil {
+				return nil, fmt.Errorf("copy untouched %q: %w", targetPath, err)
+			}
+		}
+	}
 
 	relKeys := make([]string, 0, len(patched))
 	for k := range patched {
@@ -848,9 +937,10 @@ func writeBundleOutput(bundle *Bundle, patched map[string][]byte, opts SaveOptio
 			return nil, fmt.Errorf("output path %q escapes target directory %q", relPath, cleanOutDir)
 		}
 		if opts.CreateBackup {
-			if bakPath, err := writeBackupIfExists(cleanTarget); err != nil {
+			if bakPath, err := writeBackupToFolder(backupRoot, cleanRel, cleanTarget); err != nil {
 				return nil, err
 			} else if bakPath != "" {
+				report.BackupDir = backupRoot
 				report.BackupPaths = append(report.BackupPaths, bakPath)
 			}
 		}
@@ -902,7 +992,22 @@ func ScaffoldRelPath(fid FormatID, tmpl *DocRecord, spec locale.LocaleSpec, file
 	return scaffoldRelPath(fid, tmpl, spec, filePattern)
 }
 
-func writeBackupIfExists(targetPath string) (string, error) {
+func newBackupSessionDir(baseDir string) string {
+	stamp := time.Now().Format("20060102_150405")
+	cand := filepath.Join(baseDir, BackupDirName, stamp)
+	if _, err := os.Stat(cand); err != nil {
+		return cand
+	}
+	for i := 1; i < 1000; i++ {
+		next := filepath.Join(baseDir, BackupDirName, fmt.Sprintf("%s_%d", stamp, i))
+		if _, err := os.Stat(next); err != nil {
+			return next
+		}
+	}
+	return filepath.Join(baseDir, BackupDirName, fmt.Sprintf("%s_%d", stamp, time.Now().UnixNano()))
+}
+
+func writeBackupToFolder(backupRoot, relSlash, targetPath string) (string, error) {
 	if _, err := os.Stat(targetPath); err != nil {
 		return "", nil
 	}
@@ -910,7 +1015,11 @@ func writeBackupIfExists(targetPath string) (string, error) {
 	if err != nil {
 		return "", nil
 	}
-	bakPath := targetPath + ".bak"
+	cleanRel, err := sanitizeRelPath(relSlash)
+	if err != nil {
+		cleanRel = filepath.Base(targetPath)
+	}
+	bakPath := filepath.Join(backupRoot, filepath.FromSlash(cleanRel))
 	if err := platform.AtomicWriteFile(bakPath, orig, 0o644); err != nil {
 		return "", fmt.Errorf("write backup %q: %w", bakPath, err)
 	}

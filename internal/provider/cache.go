@@ -19,9 +19,18 @@ const (
 type Cache struct {
 	mu    sync.RWMutex
 	dirty bool
+	rev   uint64
 	path  string
 	data  map[string]string // key: cacheProviderID + "\x00" + targetLocale + "\x00" + contextName + "\x00" + source
 	order []string
+}
+
+// Revision returns a monotonically increasing mutation counter for UI memoization.
+func (c *Cache) Revision() uint64 {
+	c.mu.RLock()
+	r := c.rev
+	c.mu.RUnlock()
+	return r
 }
 
 var (
@@ -118,6 +127,7 @@ func (c *Cache) Put(providerID, targetLocale, source, contextName, translated st
 	c.data[k] = translated
 	c.evictExcessLocked()
 	c.dirty = true
+	c.rev++
 	c.mu.Unlock()
 }
 
@@ -161,6 +171,7 @@ func (c *Cache) Clear() error {
 	c.data = make(map[string]string)
 	c.order = nil
 	c.dirty = false
+	c.rev++
 	path := c.path
 	c.mu.Unlock()
 
@@ -187,10 +198,10 @@ func (c *Cache) ClearByLocale(targetLocale string) int {
 	})
 }
 
-// ClearByProvider removes all cached entries for the given providerID and returns the number removed.
+// ClearByProvider removes all cached entries for the given providerID (including namespaced entries "id@ns") and returns the number removed.
 func (c *Cache) ClearByProvider(providerID string) int {
 	return c.clearWhere(func(prov, locale string) bool {
-		return prov == providerID
+		return prov == providerID || strings.HasPrefix(prov, providerID+"@")
 	})
 }
 
@@ -225,6 +236,7 @@ func (c *Cache) clearWhere(match func(providerID, targetLocale string) bool) int
 	c.order = kept
 	if removed > 0 {
 		c.dirty = true
+		c.rev++
 	}
 	c.mu.Unlock()
 	if removed > 0 {
@@ -328,6 +340,7 @@ func (c *Cache) DeleteKeys(keys []string) int {
 		}
 		c.order = kept
 		c.dirty = true
+		c.rev++
 	}
 	c.mu.Unlock()
 	if removed > 0 {

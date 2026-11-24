@@ -134,20 +134,44 @@ func renderMessageBlock(p PatchItem, msgIndent, le string) []byte {
 	return buf.Bytes()
 }
 
-func findMessageInContext(ctx *ContextBlock, key domain.EntryKey) *MessageEntry {
-	for i := range ctx.Messages {
-		m := &ctx.Messages[i]
-		if m.Source == key.Source && m.Comment == key.Comment {
-			return m
+// escapeXMLAttr escapes &, <, >, and " for XML attribute values.
+func escapeXMLAttr(s string) string {
+	return strings.ReplaceAll(EscapeXMLText(s), `"`, "&quot;")
+}
+
+func findMessageInContexts(ctxs []*ContextBlock, key domain.EntryKey) *MessageEntry {
+	var vanishedExact *MessageEntry
+	for _, ctx := range ctxs {
+		for i := range ctx.Messages {
+			m := &ctx.Messages[i]
+			if m.Source == key.Source && m.Comment == key.Comment {
+				if m.Status != domain.StatusVanished {
+					return m
+				}
+				if vanishedExact == nil {
+					vanishedExact = m
+				}
+			}
 		}
 	}
-	for i := range ctx.Messages {
-		m := &ctx.Messages[i]
-		if m.Source == key.Source {
-			return m
+	if vanishedExact != nil {
+		return vanishedExact
+	}
+	var vanishedSrc *MessageEntry
+	for _, ctx := range ctxs {
+		for i := range ctx.Messages {
+			m := &ctx.Messages[i]
+			if m.Source == key.Source {
+				if m.Status != domain.StatusVanished {
+					return m
+				}
+				if vanishedSrc == nil {
+					vanishedSrc = m
+				}
+			}
 		}
 	}
-	return nil
+	return vanishedSrc
 }
 
 // ApplyPatches applies patches to tf.Raw using strict context-scoped matching,
@@ -161,11 +185,32 @@ func ApplyPatches(tf *TSFile, patches []PatchItem) (*PatchResult, error) {
 		le = "\n"
 	}
 
-	ctxByName := make(map[string]*ContextBlock, len(tf.Contexts))
+	type msgIndex struct {
+		ctxs     []*ContextBlock
+		exact    map[[2]string]*MessageEntry // [source, comment] -> active (or vanished fallback)
+		bySource map[string]*MessageEntry    // source -> active (or vanished fallback)
+	}
+	ctxIndex := make(map[string]*msgIndex, len(tf.Contexts))
 	for i := range tf.Contexts {
 		c := &tf.Contexts[i]
-		if _, exists := ctxByName[c.Name]; !exists {
-			ctxByName[c.Name] = c
+		mi, exists := ctxIndex[c.Name]
+		if !exists {
+			mi = &msgIndex{
+				exact:    make(map[[2]string]*MessageEntry, len(c.Messages)),
+				bySource: make(map[string]*MessageEntry, len(c.Messages)),
+			}
+			ctxIndex[c.Name] = mi
+		}
+		mi.ctxs = append(mi.ctxs, c)
+		for j := range c.Messages {
+			m := &c.Messages[j]
+			ek := [2]string{m.Source, m.Comment}
+			if prev, ok := mi.exact[ek]; !ok || (prev.Status == domain.StatusVanished && m.Status != domain.StatusVanished) {
+				mi.exact[ek] = m
+			}
+			if prev, ok := mi.bySource[m.Source]; !ok || (prev.Status == domain.StatusVanished && m.Status != domain.StatusVanished) {
+				mi.bySource[m.Source] = m
+			}
 		}
 	}
 
@@ -180,21 +225,31 @@ func ApplyPatches(tf *TSFile, patches []PatchItem) (*PatchResult, error) {
 		}
 
 		if p.Action == domain.ActionAppendNew {
-			if ctx, ok := ctxByName[p.Key.Context]; ok && ctx.CloseTagStart > 0 {
-				indent := ctx.Indent
-				if indent == "" {
-					indent = "    "
+			if mi, ok := ctxIndex[p.Key.Context]; ok {
+				var targetCtx *ContextBlock
+				for k := len(mi.ctxs) - 1; k >= 0; k-- {
+					if mi.ctxs[k].CloseTagStart > 0 {
+						targetCtx = mi.ctxs[k]
+						break
+					}
 				}
-				// Ensure insertion starts at a clean line if needed
-				block := renderMessageBlock(p, indent, le)
-				ops = append(ops, spanPatch{
-					start: ctx.CloseTagStart,
-					end:   ctx.CloseTagStart,
-					order: idx,
-					data:  block,
-				})
-				res.Appended++
-			} else if tf.CloseTagStart > 0 {
+				if targetCtx != nil {
+					indent := targetCtx.Indent
+					if indent == "" {
+						indent = "    "
+					}
+					block := renderMessageBlock(p, indent, le)
+					ops = append(ops, spanPatch{
+						start: targetCtx.CloseTagStart,
+						end:   targetCtx.CloseTagStart,
+						order: idx,
+						data:  block,
+					})
+					res.Appended++
+					continue
+				}
+			}
+			if tf.CloseTagStart > 0 {
 				if _, seen := newContexts[p.Key.Context]; !seen {
 					newContextOrder = append(newContextOrder, p.Key.Context)
 				}
@@ -207,12 +262,18 @@ func ApplyPatches(tf *TSFile, patches []PatchItem) (*PatchResult, error) {
 		}
 
 		// ActionFillGap or ActionOverwrite: strict same-context matching only.
-		ctx, ok := ctxByName[p.Key.Context]
+		mi, ok := ctxIndex[p.Key.Context]
 		if !ok {
 			res.Skipped++
 			continue
 		}
-		m := findMessageInContext(ctx, p.Key)
+		m := mi.exact[[2]string{p.Key.Source, p.Key.Comment}]
+		if m == nil {
+			m = mi.bySource[p.Key.Source]
+		}
+		if m == nil {
+			m = findMessageInContexts(mi.ctxs, p.Key)
+		}
 		if m == nil || m.TransEnd <= m.TransStart {
 			res.Skipped++
 			continue
@@ -328,6 +389,7 @@ func ApplyPatches(tf *TSFile, patches []PatchItem) (*PatchResult, error) {
 func validateXML(data []byte) error {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = true
+	dec.Entity = xml.HTMLEntity
 	dec.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) {
 		return input, nil
 	}
@@ -363,13 +425,22 @@ func CloneSkeleton(template *TSFile, targetLocale locale.LocaleSpec, newRelPath 
 	// Update or insert language="..." in <TS ...> opening tag.
 	if loc := reTSOpenTag.FindIndex(template.Raw); loc != nil {
 		tag := string(template.Raw[loc[0]:loc[1]])
+		escapedID := escapeXMLAttr(targetLocale.ID)
 		var updatedTag string
 		if reLangAttrVal.MatchString(tag) {
-			updatedTag = reLangAttrVal.ReplaceAllString(tag, `${1}${2}`+EscapeXMLText(targetLocale.ID)+`${2}`)
+			updatedTag = reLangAttrVal.ReplaceAllStringFunc(tag, func(m string) string {
+				sub := reLangAttrVal.FindStringSubmatchIndex(m)
+				if len(sub) >= 6 {
+					prefix := m[sub[2]:sub[3]]
+					quote := m[sub[4]:sub[5]]
+					return prefix + quote + escapedID + quote
+				}
+				return m
+			})
 		} else if strings.HasSuffix(tag, "/>") {
-			updatedTag = tag[:len(tag)-2] + fmt.Sprintf(` language="%s"/>`, EscapeXMLText(targetLocale.ID))
+			updatedTag = tag[:len(tag)-2] + fmt.Sprintf(` language="%s"/>`, escapedID)
 		} else {
-			updatedTag = tag[:len(tag)-1] + fmt.Sprintf(` language="%s">`, EscapeXMLText(targetLocale.ID))
+			updatedTag = tag[:len(tag)-1] + fmt.Sprintf(` language="%s">`, escapedID)
 		}
 		ops = append(ops, spanPatch{
 			start: loc[0],
@@ -450,7 +521,7 @@ func NewEmptyTSFile(targetLocale locale.LocaleSpec, relPath string, lineEnding s
 		le = "\n"
 	}
 	raw := fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>%s<!DOCTYPE TS>%s<TS version="2.1" language="%s">%s</TS>%s`,
-		le, le, EscapeXMLText(targetLocale.ID), le, le)
+		le, le, escapeXMLAttr(targetLocale.ID), le, le)
 	tf, _ := ParseBytes(relPath, []byte(raw))
 	if tf != nil {
 		tf.LocaleID = targetLocale.ID
@@ -618,5 +689,6 @@ func FormatSnippetDiff(ctxName, source, oldText, newText string, oldStatus domai
 	}
 
 	oldUnfinished := oldStatus == domain.StatusUnfinished || oldStatus == domain.StatusEmpty || oldStatus == domain.StatusMissing
-	return render(oldText, oldUnfinished), render(newText, false)
+	afterUnfinished := newText == ""
+	return render(oldText, oldUnfinished), render(newText, afterUnfinished)
 }

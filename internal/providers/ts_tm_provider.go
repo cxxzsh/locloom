@@ -3,7 +3,9 @@ package providers
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -18,6 +20,7 @@ type tmCacheKey struct {
 	path        string
 	modUnixNano int64
 	size        int64
+	fileCount   int
 }
 
 type tsTMProvider struct {
@@ -108,6 +111,33 @@ func (p *tsTMProvider) loadBundleCached() (*format.Bundle, error) {
 		modUnixNano: info.ModTime().UnixNano(),
 		size:        info.Size(),
 	}
+	if info.IsDir() {
+		var maxMod int64 = info.ModTime().UnixNano()
+		var totalSize int64
+		var count int
+		_ = filepath.WalkDir(tmPath, func(_ string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return nil
+			}
+			if d.IsDir() {
+				if d.Name() == ".git" || d.Name() == "node_modules" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if fi, err := d.Info(); err == nil {
+				count++
+				totalSize += fi.Size()
+				if mt := fi.ModTime().UnixNano(); mt > maxMod {
+					maxMod = mt
+				}
+			}
+			return nil
+		})
+		key.modUnixNano = maxMod
+		key.size = totalSize
+		key.fileCount = count
+	}
 
 	p.loadMu.Lock()
 	defer p.loadMu.Unlock()
@@ -167,6 +197,7 @@ func (p *tsTMProvider) Translate(_ context.Context, req provider.Request) (map[s
 		ctx string
 		src string
 	}
+	byExact := make(map[domain.EntryKey]string)
 	byIDCtx := make(map[domain.EntryKey]string)
 	byCtxSrc := make(map[ctxSrc]string)
 	bySrc := make(map[string]string)
@@ -196,6 +227,9 @@ func (p *tsTMProvider) Translate(_ context.Context, req provider.Request) (map[s
 			if text == "" {
 				continue
 			}
+			if _, exists := byExact[e.Key]; !exists {
+				byExact[e.Key] = text
+			}
 			if e.Key.ID != "" {
 				ik := e.Key.IDContext()
 				if _, exists := byIDCtx[ik]; !exists {
@@ -216,6 +250,10 @@ func (p *tsTMProvider) Translate(_ context.Context, req provider.Request) (map[s
 
 	out := make(map[string]string, len(req.Items))
 	for _, item := range req.Items {
+		if v, ok := byExact[item.Key]; ok && v != "" {
+			out[item.ID] = v
+			continue
+		}
 		if item.Key.ID != "" {
 			if v, ok := byIDCtx[item.Key.IDContext()]; ok && v != "" {
 				out[item.ID] = v

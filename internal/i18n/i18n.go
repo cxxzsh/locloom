@@ -150,6 +150,12 @@ type Catalog struct {
 	SectionWriteStrategy   string
 	WriteModeFill          string
 	WriteModeOverwrite     string
+	SectionSaveTarget      string
+	SaveTargetFolder       string
+	SaveTargetInPlace      string
+	DescSaveTargetFolder   string
+	DescSaveTargetInPlace  string
+	TipSaveTarget          string
 	CheckAppendMissing     string
 	DescWriteModeFill      string
 	DescWriteModeOverwrite string
@@ -484,7 +490,7 @@ var zhCatalog = Catalog{
 	BtnTranslatingRow:          "⚡ 翻译中...",
 	BtnWriteTS:                 "写回保存",
 	BtnWriteTSCountFmt:         "写回保存 (%d)",
-	TipWriteTS:                 "将待写回变更原位无损保存到文件或 ZIP (Cmd/Ctrl+S)",
+	TipWriteTS:                 "将待写回变更无损保存到目标文件夹、原文件或 ZIP (Cmd/Ctrl+S)",
 	ThemeSystem:                "跟随系统",
 	ThemeLight:                 "浅色",
 	ThemeDark:                  "深色",
@@ -503,16 +509,22 @@ var zhCatalog = Catalog{
 	SectionWriteStrategy:   "写回策略",
 	DescWriteModeFill:      "仅翻译空缺词条，保留已有译文",
 	DescWriteModeOverwrite: "重译全部词条并覆盖已有译文",
+	SectionSaveTarget:      "保存位置",
+	SaveTargetFolder:       "输出到新文件夹",
+	SaveTargetInPlace:      "原位覆盖",
+	DescSaveTargetFolder:   "输出完整副本到 %s（不改动原文件）",
+	DescSaveTargetInPlace:  "直接覆盖原文件，修改前可备份到 .locloom_backup/",
+	TipSaveTarget:          "输出到新文件夹：生成独立的 *_updated 文件夹存放完整结果；\n原位覆盖：直接修改原文件（ZIP 仍输出 *_updated.zip）",
 	LabelAppendContext:     "新词条默认分组",
 	WriteModeFill:          "安全补齐空缺",
 	WriteModeOverwrite:     "覆盖已有译文",
 	CheckAppendMissing:     "允许从 Excel 追加新词条",
 	PlaceholderDefaultCtx:  "留空则归入 Common",
-	CheckCreateBackup:      "写回前备份 .bak",
+	CheckCreateBackup:      "写回前备份到文件夹",
 	CheckPluralForms:       "启用复数多词形编辑",
 	TipWriteMode:           "安全补齐空缺：仅翻译未完成词条，保留已有译文；\n覆盖已有译文：按当前引擎瀑布流重新翻译所有非消失词条",
 	TipAppendMissing:       "勾选后，从 .xlsx 词表导入但原文件中不存在的新词条也会追加写回（默认隔离外部幽灵词条）",
-	TipCreateBackup:        "写回修改前在同目录自动生成 .bak 备份文件，防止误操作丢失原文件",
+	TipCreateBackup:        "覆盖已有文件前，自动集中备份到 .locloom_backup/<时间戳>/ 子文件夹，不污染原目录",
 	TipPluralForms:         "对包含复数规则的词条按 One / Other 等分栏单独编辑，避免手动拼接分隔符",
 	TipLocaleProgressCard:  "点击切换到「聚焦单语种」并定位该语种",
 	SectionContextNavFmt:   "上下文导航 (%d)",
@@ -575,7 +587,7 @@ var zhCatalog = Catalog{
 	TipFilePattern:          "生成缺失语种文件时的命名模板，{id} 会替换为语种 ID（如 zh_CN.ts）",
 	TipScaffoldTS:           "为已启用但磁盘尚不存在的语种自动生成骨架文件（.xcstrings 多语种单文件除外）",
 	TipLocaleEnable:         "勾选后纳入当前项目的翻译与写回范围",
-	TipSetRef:               "设为主参考语种：其译文会作为参考列显示，协助其他语种对照翻译",
+	TipSetRef:               "设为主参考语种：其译文会作为参考列显示；再次点击「★ 参考」可取消参考状态使其参与翻译",
 	BtnIsRef:                "★ 参考",
 	TipRemoveLocale:         "移除语种",
 	LabelTranslateFrom:      "译自",
@@ -852,14 +864,20 @@ var enCatalog = Catalog{
 	WriteModeOverwrite:     "Overwrite Existing",
 	DescWriteModeFill:      "Fills empty entries only; keeps existing translations",
 	DescWriteModeOverwrite: "Re-translates all entries and overwrites existing ones",
+	SectionSaveTarget:      "Save Location",
+	SaveTargetFolder:       "New Folder",
+	SaveTargetInPlace:      "In Place",
+	DescSaveTargetFolder:   "Writes a complete copy into %s (originals untouched)",
+	DescSaveTargetInPlace:  "Overwrites originals in place (backups go to .locloom_backup/)",
+	TipSaveTarget:          "New Folder: saves a standalone *_updated folder without touching originals;\nIn Place: updates source files directly (ZIP still writes *_updated.zip)",
 	LabelAppendContext:     "Default group for new keys",
 	CheckAppendMissing:     "Allow Adding New Keys from Excel",
 	PlaceholderDefaultCtx:  "Blank = Common",
-	CheckCreateBackup:      "Backup .bak before write",
+	CheckCreateBackup:      "Backup to folder",
 	CheckPluralForms:       "Enable Plural Forms Editing",
 	TipWriteMode:           "Fill Gaps Only: keeps existing translations and fills gaps;\nOverwrite Existing: re-translates all non-vanished entries",
 	TipAppendMissing:       "When enabled, new keys from .xlsx absent from source files are appended on Save Back",
-	TipCreateBackup:        "Create a .bak backup alongside each modified file before writing back",
+	TipCreateBackup:        "Collects timestamped backups into .locloom_backup/<timestamp>/ before overwriting existing files",
 	TipPluralForms:         "Edit plural forms (One / Other / etc.) in separate labeled fields",
 	TipLocaleProgressCard:  "Click to focus and edit this locale in the matrix",
 	SectionContextNavFmt:   "Contexts (%d)",
@@ -923,7 +941,7 @@ var enCatalog = Catalog{
 	TipFilePattern:          "Filename template for scaffolding missing locales ({id} expands to locale ID)",
 	TipScaffoldTS:           "Generate skeleton files for enabled locales missing on disk (N/A for single-file multi-locale formats)",
 	TipLocaleEnable:         "Include this locale in translation and write-back scope",
-	TipSetRef:               "Set as reference locale shown alongside source text for cross-checking",
+	TipSetRef:               "Set as reference locale for cross-checking; click '★ Ref' again to clear reference mode and make it translatable",
 	TipRemoveLocale:         "Remove locale",
 	LabelTranslateFrom:      "From",
 	TipTranslateFrom:        "Pick the source text for this locale: the bundle's source by default, or another enabled locale's existing translations (e.g. zh_TW from zh_CN for Simplified→Traditional)",

@@ -221,12 +221,21 @@ func (p *myMemoryProvider) Translate(ctx context.Context, req provider.Request) 
 		if text == "" {
 			continue
 		}
-		if strings.EqualFold(sourceLang, tl) {
+		itemSrcLang := sourceLang
+		if it.SourceLocale != "" {
+			norm := strings.ReplaceAll(strings.TrimSpace(it.SourceLocale), "_", "-")
+			if parts := strings.SplitN(norm, "-", 2); len(parts) == 2 {
+				itemSrcLang = strings.ToLower(parts[0]) + "-" + strings.ToUpper(parts[1])
+			} else if norm != "" {
+				itemSrcLang = strings.ToLower(norm)
+			}
+		}
+		if strings.EqualFold(itemSrcLang, tl) {
 			out[it.ID] = text
 			continue
 		}
 
-		translated, err := callMyMemory(ctx, client, baseURL, sourceLang, tl, email, apiKey, text)
+		translated, err := callMyMemory(ctx, client, baseURL, itemSrcLang, tl, email, apiKey, text)
 		if err != nil {
 			return out, err
 		}

@@ -406,7 +406,7 @@ func evalCellPlan(
 		}
 	case status == domain.StatusFinished:
 		if hasCand && cand.Text != "" && cand.Text != oldText {
-			if mode == domain.ModeOverwriteExisting || cand.Origin == domain.OriginManual {
+			if mode == domain.ModeOverwriteExisting || cand.Origin == domain.OriginManual || cand.ForceOverwrite {
 				cp.Action = domain.ActionOverwrite
 				cp.NewText = cand.Text
 				cp.Effective = cand.Text

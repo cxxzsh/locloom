@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"locloom/internal/domain"
 	"locloom/internal/netpool"
@@ -274,7 +275,8 @@ func (p *googleWebProvider) translateBatchWithFallback(
 
 	if canBatch {
 		joined := strings.Join(items, "\n")
-		if len(joined) <= 3500 {
+		// Check URL-encoded length too so multi-byte CJK/Cyrillic/Greek batches don't trigger HTTP 414.
+		if len(joined) <= 3500 && len(url.QueryEscape(joined)) <= 4500 {
 			res, err := callGoogleEndpoint(ctx, client, host, primaryEP, sl, tl, joined)
 			if err == nil {
 				lines := strings.Split(res, "\n")
@@ -326,62 +328,82 @@ func callGoogleEndpoint(ctx context.Context, client *http.Client, host, ep, sl, 
 		)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (compatible; locloom/2.0)")
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := range maxAttempts {
+		if attempt > 0 {
+			backoff := time.Duration(500*(1<<(attempt-1))) * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
 
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return "", err
+		}
+		httpReq.Header.Set("User-Agent", "Mozilla/5.0 (compatible; locloom/2.0)")
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue
+		}
 
-	if ep == "clients5" {
-		var arr []any
-		if err := json.Unmarshal(body, &arr); err == nil && len(arr) > 0 {
-			switch v := arr[0].(type) {
-			case string:
-				return v, nil
-			case []any:
-				if len(v) > 0 {
-					if s, ok := v[0].(string); ok {
-						return s, nil
+		body, rerr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		_ = resp.Body.Close()
+		if rerr != nil {
+			lastErr = rerr
+			continue
+		}
+		if isRetryableStatus(resp.StatusCode) {
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateStr(strings.TrimSpace(string(body)), 160))
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateStr(strings.TrimSpace(string(body)), 200))
+		}
+
+		if ep == "clients5" {
+			var arr []any
+			if err := json.Unmarshal(body, &arr); err == nil && len(arr) > 0 {
+				switch v := arr[0].(type) {
+				case string:
+					return v, nil
+				case []any:
+					if len(v) > 0 {
+						if s, ok := v[0].(string); ok {
+							return s, nil
+						}
 					}
 				}
 			}
+			return "", fmt.Errorf("unexpected clients5 response: %s", truncateStr(string(body), 160))
 		}
-		return "", fmt.Errorf("unexpected clients5 response: %s", truncateStr(string(body), 160))
-	}
 
-	// gtx response: [[["translated", "original", ...], ...], ...]
-	var root []any
-	if err := json.Unmarshal(body, &root); err != nil || len(root) == 0 {
-		return "", fmt.Errorf("unexpected gtx response: %s", truncateStr(string(body), 160))
-	}
-	sentences, ok := root[0].([]any)
-	if !ok {
-		return "", fmt.Errorf("unexpected gtx sentences: %s", truncateStr(string(body), 160))
-	}
-	var b strings.Builder
-	for _, s := range sentences {
-		pair, ok := s.([]any)
-		if ok && len(pair) > 0 {
-			if part, ok := pair[0].(string); ok {
-				b.WriteString(part)
+		// gtx response: [[["translated", "original", ...], ...], ...]
+		var root []any
+		if err := json.Unmarshal(body, &root); err != nil || len(root) == 0 {
+			return "", fmt.Errorf("unexpected gtx response: %s", truncateStr(string(body), 160))
+		}
+		sentences, ok := root[0].([]any)
+		if !ok {
+			return "", fmt.Errorf("unexpected gtx sentences: %s", truncateStr(string(body), 160))
+		}
+		var b strings.Builder
+		for _, s := range sentences {
+			pair, ok := s.([]any)
+			if ok && len(pair) > 0 {
+				if part, ok := pair[0].(string); ok {
+					b.WriteString(part)
+				}
 			}
 		}
+		return b.String(), nil
 	}
-	return b.String(), nil
+	return "", lastErr
 }
 
 func normalizeGoogleSourceLang(refLocale string) string {
@@ -402,8 +424,9 @@ func normalizeGoogleSourceLang(refLocale string) string {
 }
 
 func truncateStr(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return string(runes[:maxLen]) + "..."
 }

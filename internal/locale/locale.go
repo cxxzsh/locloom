@@ -121,7 +121,7 @@ func DefaultProfiles() []Profile {
 			ID:          "tier1",
 			Name:        "主流语言 (Tier-1)",
 			EnglishName: "Tier-1 (CJK + Western)",
-			LocaleIDs:   []string{"zh_CN", "zh_TW", "ja_JP", "ko_KR", "de_DE", "fr_FR", "es_ES", "pt_BR", "ru_RU"},
+			LocaleIDs:   []string{"zh_CN", "zh_TW", "ja_JP", "ko_KR", "de_DE", "fr_FR", "es_ES", "pt_BR", "pt_PT", "ru_RU"},
 		},
 		{
 			ID:          "cjk",
@@ -133,13 +133,19 @@ func DefaultProfiles() []Profile {
 			ID:          "europe",
 			Name:        "欧洲语言 (Europe)",
 			EnglishName: "European",
-			LocaleIDs:   []string{"de_DE", "fr_FR", "es_ES", "pt_BR", "pt_PT", "it_IT", "nl_NL", "pl_PL", "ru_RU", "cs_CZ", "uk_UA", "tr_TR"},
+			LocaleIDs: []string{
+				"de_DE", "fr_FR", "es_ES", "pt_PT", "it_IT", "nl_NL", "pl_PL",
+				"ru_RU", "cs_CZ", "uk_UA", "tr_TR", "en_GB",
+				"da_DK", "el_GR", "hr_HR", "hu_HU", "nb_NO", "nn_NO",
+				"sk_SK", "sl_SI", "sv_SE", "fi_FI", "ro_RO", "bg_BG",
+				"et_EE", "lt_LT", "lv_LV", "sr_RS", "ca_ES",
+			},
 		},
 		{
 			ID:          "sea_mena",
 			Name:        "东南亚与中东 (SEA & MENA)",
 			EnglishName: "SEA & Middle East",
-			LocaleIDs:   []string{"vi_VN", "th_TH", "id_ID", "ar_SA", "tr_TR"},
+			LocaleIDs:   []string{"vi_VN", "th_TH", "id_ID", "ms_MY", "tl_PH", "ar_SA", "he_IL", "fa_IR", "tr_TR", "hi_IN"},
 		},
 		{
 			ID:          "all",
@@ -178,6 +184,11 @@ func deriveProviderEngineCode(localeID, providerID string) string {
 	}
 
 	switch providerID {
+	case "google_web":
+		if base == "nb" || base == "nn" {
+			return "no"
+		}
+		return ""
 	case "bing_web":
 		switch lower {
 		case "zh_cn", "zh_hans", "zh":
@@ -228,6 +239,24 @@ func deriveProviderEngineCode(localeID, providerID string) string {
 			return "vie"
 		case "uk":
 			return "ukr"
+		case "da":
+			return "dan"
+		case "hr":
+			return "hrv"
+		case "nb", "no", "nn":
+			return "nor"
+		case "sl":
+			return "slo"
+		case "sv":
+			return "swe"
+		case "fi":
+			return "fin"
+		case "ro":
+			return "rom"
+		case "et":
+			return "est"
+		case "bg":
+			return "bul"
 		}
 		return base
 	case "niutrans":
@@ -277,8 +306,38 @@ var (
 	reRefMarker  = regexp.MustCompile(`(?i)(?:[\(\[（【]\s*(?:参考|ref|reference)\s*[\)\]）】]|(?:^|\s)(?:参考|reference)(?:\s|$))`)
 )
 
+// extraKnownLocales provides rich metadata for common locales outside the 22 default presets
+// so auto-discovered project locales (e.g. da_DK, el_GR, nb_NO, sv_SE) get readable names & engine codes.
+func extraKnownLocales() []LocaleSpec {
+	return []LocaleSpec{
+		{ID: "da_DK", Name: "Dansk", EnglishName: "Danish", NativeName: "Dansk", EngineCode: "da"},
+		{ID: "el_GR", Name: "Ελληνικά", EnglishName: "Greek", NativeName: "Ελληνικά", EngineCode: "el"},
+		{ID: "hr_HR", Name: "Hrvatski", EnglishName: "Croatian", NativeName: "Hrvatski", EngineCode: "hr"},
+		{ID: "hu_HU", Name: "Magyar", EnglishName: "Hungarian", NativeName: "Magyar", EngineCode: "hu"},
+		{ID: "nb_NO", Name: "Norsk Bokmål", EnglishName: "Norwegian Bokmål", NativeName: "Norsk Bokmål", EngineCode: "no"},
+		{ID: "sk_SK", Name: "Slovenčina", EnglishName: "Slovak", NativeName: "Slovenčina", EngineCode: "sk"},
+		{ID: "sl_SI", Name: "Slovenščina", EnglishName: "Slovenian", NativeName: "Slovenščina", EngineCode: "sl"},
+		{ID: "sv_SE", Name: "Svenska", EnglishName: "Swedish", NativeName: "Svenska", EngineCode: "sv"},
+		{ID: "fi_FI", Name: "Suomi", EnglishName: "Finnish", NativeName: "Suomi", EngineCode: "fi"},
+		{ID: "ro_RO", Name: "Română", EnglishName: "Romanian", NativeName: "Română", EngineCode: "ro"},
+		{ID: "bg_BG", Name: "Български", EnglishName: "Bulgarian", NativeName: "Български", EngineCode: "bg"},
+		{ID: "et_EE", Name: "Eesti", EnglishName: "Estonian", NativeName: "Eesti", EngineCode: "et"},
+		{ID: "lt_LT", Name: "Lietuvių", EnglishName: "Lithuanian", NativeName: "Lietuvių", EngineCode: "lt"},
+		{ID: "lv_LV", Name: "Latviešu", EnglishName: "Latvian", NativeName: "Latviešu", EngineCode: "lv"},
+		{ID: "he_IL", Name: "עברית", EnglishName: "Hebrew", NativeName: "עברית", EngineCode: "he"},
+		{ID: "ms_MY", Name: "Bahasa Melayu", EnglishName: "Malay", NativeName: "Bahasa Melayu", EngineCode: "ms"},
+		{ID: "hi_IN", Name: "हिन्दी", EnglishName: "Hindi", NativeName: "हिन्दी", EngineCode: "hi"},
+		{ID: "fa_IR", Name: "فارسی", EnglishName: "Persian", NativeName: "فارسی", EngineCode: "fa"},
+		{ID: "sr_RS", Name: "Српски", EnglishName: "Serbian", NativeName: "Српски", EngineCode: "sr"},
+		{ID: "en_GB", Name: "English (UK)", EnglishName: "English (UK)", NativeName: "English (UK)", EngineCode: "en"},
+	}
+}
+
 func buildKnownLookup(known []LocaleSpec) map[string]LocaleSpec {
-	m := make(map[string]LocaleSpec, len(known)*2+32)
+	m := make(map[string]LocaleSpec, len(known)*2+64)
+	for _, l := range extraKnownLocales() {
+		m[strings.ToLower(strings.ReplaceAll(l.ID, "-", "_"))] = l
+	}
 	for _, l := range DefaultLocales() {
 		m[strings.ToLower(strings.ReplaceAll(l.ID, "-", "_"))] = l
 	}
@@ -455,6 +514,18 @@ var aliasToLocaleID = map[string]string{
 	"印尼语": "id_ID", "印度尼西亚语": "id_ID", "bahasa indonesia": "id_ID", "indonesian": "id_ID", "id": "id_ID",
 	"捷克语": "cs_CZ", "čeština": "cs_CZ", "cestina": "cs_CZ", "czech": "cs_CZ", "cs": "cs_CZ",
 	"乌克兰语": "uk_UA", "українська": "uk_UA", "ukrainian": "uk_UA", "uk": "uk_UA",
+	"丹麦语": "da_DK", "dansk": "da_DK", "danish": "da_DK", "da": "da_DK",
+	"希腊语": "el_GR", "ελληνικά": "el_GR", "greek": "el_GR", "el": "el_GR",
+	"克罗地亚语": "hr_HR", "hrvatski": "hr_HR", "croatian": "hr_HR", "hr": "hr_HR",
+	"匈牙利语": "hu_HU", "magyar": "hu_HU", "hungarian": "hu_HU", "hu": "hu_HU",
+	"挪威语": "nb_NO", "norsk": "nb_NO", "norsk bokmål": "nb_NO", "norwegian": "nb_NO", "norwegian bokmål": "nb_NO", "nb": "nb_NO", "no": "nb_NO",
+	"斯洛伐克语": "sk_SK", "slovenčina": "sk_SK", "slovencina": "sk_SK", "slovak": "sk_SK", "sk": "sk_SK",
+	"斯洛文尼亚语": "sl_SI", "slovenščina": "sl_SI", "slovenscina": "sl_SI", "slovenian": "sl_SI", "sl": "sl_SI",
+	"瑞典语": "sv_SE", "svenska": "sv_SE", "swedish": "sv_SE", "sv": "sv_SE",
+	"芬兰语": "fi_FI", "suomi": "fi_FI", "finnish": "fi_FI", "fi": "fi_FI",
+	"罗马尼亚语": "ro_RO", "română": "ro_RO", "romana": "ro_RO", "romanian": "ro_RO", "ro": "ro_RO",
+	"保加利亚语": "bg_BG", "български": "bg_BG", "bulgarian": "bg_BG", "bg": "bg_BG",
+	"希伯来语": "he_IL", "עברית": "he_IL", "hebrew": "he_IL", "he": "he_IL",
 	"英语": "en_US", "英文": "en_US", "english (us)": "en_US",
 }
 
@@ -497,14 +568,17 @@ func ParseHeaderLocale(header string, known []LocaleSpec) (localeID string, isRe
 		}
 	}
 
-	// 3. Code in parentheses/brackets (e.g. "Japanese (ja_JP)" or "日本語 [ja]").
-	if m := reParenCode.FindStringSubmatch(cleaned); len(m) > 1 {
-		code := m[1]
-		if id := normalizeCandidate(code, knownMap); id != "" {
-			return id, isRef, true
-		}
-		if id, exists := aliasToLocaleID[strings.ToLower(code)]; exists {
-			return id, isRef, true
+	// 3. Code in parentheses/brackets (e.g. "Japanese (ja_JP)", "Português (PT) (pt_PT)", or "日本語 [ja]").
+	// Scan from the last parenthesized group backward so trailing canonical codes like (pt_PT) win over region tags like (PT).
+	if matches := reParenCode.FindAllStringSubmatch(cleaned, -1); len(matches) > 0 {
+		for i := len(matches) - 1; i >= 0; i-- {
+			code := matches[i][1]
+			if id := normalizeCandidate(code, knownMap); id != "" {
+				return id, isRef, true
+			}
+			if id, exists := aliasToLocaleID[strings.ToLower(code)]; exists {
+				return id, isRef, true
+			}
 		}
 	}
 
@@ -527,6 +601,9 @@ func MergeDiscovered(existing []LocaleSpec, discoveredIDs []string) (merged []Lo
 	}
 
 	defaults := make(map[string]LocaleSpec)
+	for _, l := range extraKnownLocales() {
+		defaults[strings.ToLower(strings.ReplaceAll(l.ID, "-", "_"))] = l
+	}
 	for _, l := range DefaultLocales() {
 		defaults[strings.ToLower(strings.ReplaceAll(l.ID, "-", "_"))] = l
 	}
@@ -596,6 +673,12 @@ func PluralFormLabels(localeID, uiLang string, countHint int) []string {
 			labels = []string{"Form 1 — Singular (1)", "Form 2 — Few (2–4)", "Form 3 — Many (0, 5+)"}
 		} else {
 			labels = []string{"形式 1 — 单数 (1)", "形式 2 — 少量复数 (2–4)", "形式 3 — 多数复数 (0, 5+)"}
+		}
+	case "sl":
+		if isEn {
+			labels = []string{"Form 1 — Singular (1, 101…)", "Form 2 — Dual (2, 102…)", "Form 3 — Few (3–4, 103–104…)", "Form 4 — Other (0, 5–100…)"}
+		} else {
+			labels = []string{"形式 1 — 单数 (1, 101…)", "形式 2 — 双数 (2, 102…)", "形式 3 — 少量复数 (3–4, 103–104…)", "形式 4 — 其他 (0, 5–100…)"}
 		}
 	case "ar":
 		if isEn {

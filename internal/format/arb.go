@@ -170,6 +170,18 @@ func (a *arbAdapter) ApplyPatches(doc *DocRecord, patches []PatchOp) ([]byte, in
 }
 
 func (a *arbAdapter) NewLocaleDoc(template *DocRecord, target locale.LocaleSpec, newRelPath string) (*DocRecord, error) {
+	if template == nil || len(template.Raw) == 0 {
+		raw := []byte("{\n  \"@@locale\": " + marshalJSONString(target.ID) + "\n}\n")
+		doc, err := a.ParseDoc(newRelPath, raw, "", []locale.LocaleSpec{target})
+		if err != nil {
+			return nil, err
+		}
+		doc.LocaleID = target.ID
+		doc.IsTemplate = false
+		doc.SourceLang = ""
+		doc.Locales = []string{target.ID}
+		return doc, nil
+	}
 	cst, err := parseJSONCST(template.Raw)
 	if err != nil {
 		return nil, err

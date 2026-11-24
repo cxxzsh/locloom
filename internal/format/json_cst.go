@@ -455,8 +455,22 @@ func applyJSONEdits(raw []byte, edits []jsonEdit) ([]byte, error) {
 		copy(out, raw)
 		return out, nil
 	}
-	sorted := make([]jsonEdit, len(edits))
-	copy(sorted, edits)
+	// Deduplicate identical replacement spans [Start, End) (last wins) so repeated patches
+	// for the same key do not trigger an overlap error.
+	deduped := make([]jsonEdit, 0, len(edits))
+	replaceIdx := make(map[[2]int]int, len(edits))
+	for _, e := range edits {
+		if e.Start < e.End {
+			k := [2]int{e.Start, e.End}
+			if pos, exists := replaceIdx[k]; exists {
+				deduped[pos] = e
+				continue
+			}
+			replaceIdx[k] = len(deduped)
+		}
+		deduped = append(deduped, e)
+	}
+	sorted := deduped
 	sort.SliceStable(sorted, func(i, j int) bool {
 		if sorted[i].Start != sorted[j].Start {
 			return sorted[i].Start < sorted[j].Start

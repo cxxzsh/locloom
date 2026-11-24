@@ -4,9 +4,10 @@ import "sort"
 
 // TranslationEntry holds a candidate translation and its provenance.
 type TranslationEntry struct {
-	Text    string `json:"text"`
-	Origin  string `json:"origin"`
-	Cleared bool   `json:"cleared,omitempty"`
+	Text           string `json:"text"`
+	Origin         string `json:"origin"`
+	Cleared        bool   `json:"cleared,omitempty"`
+	ForceOverwrite bool   `json:"force_overwrite,omitempty"`
 }
 
 // Catalog stores workspace translations per locale keyed by EntryKey.
@@ -58,6 +59,24 @@ func (c *Catalog) Set(localeID string, key EntryKey, text, origin string) {
 		c.byLocale[localeID] = m
 	}
 	m[key] = TranslationEntry{Text: text, Origin: origin}
+}
+
+// SetOverwrite stores a translation that should overwrite an existing finished file entry
+// even when WriteMode is ModeFillUnfinished (e.g. re-translating a cleared cell or explicit force-retranslate).
+func (c *Catalog) SetOverwrite(localeID string, key EntryKey, text, origin string) {
+	if localeID == "" || (key.Source == "" && key.ID == "") {
+		return
+	}
+	if text == "" {
+		c.SetCleared(localeID, key, origin)
+		return
+	}
+	m, ok := c.byLocale[localeID]
+	if !ok {
+		m = make(map[EntryKey]TranslationEntry)
+		c.byLocale[localeID] = m
+	}
+	m[key] = TranslationEntry{Text: text, Origin: origin, ForceOverwrite: true}
 }
 
 // SetCleared marks localeID and key as explicitly cleared to empty, overriding both

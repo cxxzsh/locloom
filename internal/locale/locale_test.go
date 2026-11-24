@@ -214,3 +214,61 @@ func TestResolveEngineCodeByProvider(t *testing.T) {
 		}
 	}
 }
+
+func TestParseHeaderLocaleMultipleParensAndExtraLocales(t *testing.T) {
+	known := DefaultLocales()
+	// LocLoom's own Excel export headers with region tags in parentheses.
+	for _, tc := range []struct {
+		header string
+		wantID string
+	}{
+		{"Português (PT) (pt_PT)", "pt_PT"},
+		{"Português (BR) (pt_BR)", "pt_BR"},
+		{"English (US) (en_US)", "en_US"},
+		{"繁體中文 (香港) (zh_HK)", "zh_HK"},
+		{"Dansk (da_DK)", "da_DK"},
+		{"Greek", "el_GR"},
+		{"挪威语", "nb_NO"},
+	} {
+		id, _, ok := ParseHeaderLocale(tc.header, known)
+		if !ok || id != tc.wantID {
+			t.Errorf("ParseHeaderLocale(%q) = (%q, %v), want (%q, true)", tc.header, id, ok, tc.wantID)
+		}
+	}
+
+	merged, added := MergeDiscovered(known, []string{"da_DK", "el_GR", "hr_HR", "nb_NO", "sl_SI", "sv_SE"})
+	if len(added) != 6 {
+		t.Fatalf("added = %v, want 6 locales", added)
+	}
+	byID := map[string]LocaleSpec{}
+	for _, l := range merged {
+		byID[l.ID] = l
+	}
+	if byID["da_DK"].Name != "Dansk" || byID["da_DK"].EnglishName != "Danish" {
+		t.Fatalf("unexpected da_DK metadata: %+v", byID["da_DK"])
+	}
+	if byID["nb_NO"].EngineCode != "no" {
+		t.Fatalf("expected nb_NO EngineCode 'no', got %q", byID["nb_NO"].EngineCode)
+	}
+	if got := ResolveEngineCode(byID["nb_NO"], "google_web"); got != "no" {
+		t.Fatalf("google_web code for nb_NO = %q, want no", got)
+	}
+	if got := ResolveEngineCode(byID["da_DK"], "baidu_api"); got != "dan" {
+		t.Fatalf("baidu_api code for da_DK = %q, want dan", got)
+	}
+	if got := ResolveEngineCode(byID["nb_NO"], "baidu_api"); got != "nor" {
+		t.Fatalf("baidu_api code for nb_NO = %q, want nor", got)
+	}
+	if got := ResolveEngineCode(byID["sv_SE"], "baidu_api"); got != "swe" {
+		t.Fatalf("baidu_api code for sv_SE = %q, want swe", got)
+	}
+	if got := ResolveEngineCode(byID["sl_SI"], "baidu_api"); got != "slo" {
+		t.Fatalf("baidu_api code for sl_SI = %q, want slo", got)
+	}
+	if got := ResolveEngineCode(byID["hr_HR"], "baidu_api"); got != "hrv" {
+		t.Fatalf("baidu_api code for hr_HR = %q, want hrv", got)
+	}
+	if labels := PluralFormLabels("sl_SI", "en", 0); len(labels) != 4 {
+		t.Fatalf("expected 4 plural forms for sl_SI, got %d", len(labels))
+	}
+}
