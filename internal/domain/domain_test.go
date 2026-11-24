@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCatalogContextDisambiguationAndFallback(t *testing.T) {
 	cat := NewCatalog()
@@ -169,5 +172,35 @@ func TestIDKeyCatalogAndMultiFormatValidation(t *testing.T) {
 	}
 	if w := ValidateTranslationLang("Count: {0:N2}", "Count: 100", false, "en"); len(w) == 0 {
 		t.Fatal("expected warning when {0:N2} is missing")
+	}
+}
+
+// Trailing punctuation parity: engines can drop a source's final colon, which
+// then cascades into "translate from" outputs. ASCII/CJK forms are equivalent.
+func TestValidateTrailingPunctuation(t *testing.T) {
+	cases := []struct {
+		source, target string
+		wantWarn       bool
+	}{
+		{"Patient Views:", "患者查看报告次数", true},   // colon dropped
+		{"Patient Views:", "患者查看报告次数：", false}, // ASCII : -> CJK ：
+		{"Save?", "Save？", false},              // ? -> ？
+		{"Done.", "完成。", false},                // . -> 。
+		{"Hi!", "你好！", false},                  // ! -> ！
+		{"Name", "名前：", true},                  // colon added
+		{"Hello", "こんにちは", false},              // no terminator either side
+	}
+	for _, tc := range cases {
+		w := ValidateTranslationLang(tc.source, tc.target, false, "en")
+		hasPunctWarn := false
+		for _, msg := range w {
+			if strings.HasPrefix(msg, "Trailing punctuation differs") {
+				hasPunctWarn = true
+			}
+		}
+		if hasPunctWarn != tc.wantWarn {
+			t.Fatalf("Validate(%q -> %q) punctWarn=%v, want %v (warnings=%v)",
+				tc.source, tc.target, hasPunctWarn, tc.wantWarn, w)
+		}
 	}
 }

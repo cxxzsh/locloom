@@ -46,6 +46,7 @@ func ExtractPlaceholders(s string) []string {
 	sort.Strings(out)
 	return out
 }
+
 // ValidateTranslation checks Qt placeholder parity, leaked guard tokens, and structural whitespace mismatches
 // using Chinese warning messages. Returns nil when valid.
 func ValidateTranslation(source, target string, numerus bool) []string {
@@ -125,6 +126,24 @@ func ValidateTranslationLang(source, target string, numerus bool, lang string) [
 			warnings = append(warnings, "疑似残留未还原的掩码标记 [[N]]")
 		}
 	}
+	// Trailing sentence punctuation parity: engines sometimes drop a source's
+	// final colon/period, which then cascades into downstream "translate from"
+	// outputs. Warn so the gap surfaces instead of silently propagating.
+	if ws, wt := punctClass(trailingPunct(source)), punctClass(trailingPunct(target)); ws != wt {
+		src := string(trailingPunct(source))
+		tgt := string(trailingPunct(target))
+		if src == "" {
+			src = "∅"
+		}
+		if tgt == "" {
+			tgt = "∅"
+		}
+		if isEn {
+			warnings = append(warnings, fmt.Sprintf("Trailing punctuation differs: source ends %q, target ends %q", src, tgt))
+		} else {
+			warnings = append(warnings, fmt.Sprintf("末尾标点不一致：原文以 %q 结尾，译文以 %q 结尾", src, tgt))
+		}
+	}
 
 	if strings.HasSuffix(source, "\t") != strings.HasSuffix(target, "\t") {
 		if isEn {
@@ -135,4 +154,40 @@ func ValidateTranslationLang(source, target string, numerus bool, lang string) [
 	}
 
 	return warnings
+}
+
+// trailingPunct returns the last rune of s when it is a sentence terminator
+// (./:/?/!/;/, and CJK 。/：/！/？/；/，); it returns 0 otherwise.
+func trailingPunct(s string) rune {
+	s = strings.TrimRight(s, " \t")
+	if s == "" {
+		return 0
+	}
+	runes := []rune(s)
+	last := runes[len(runes)-1]
+	switch last {
+	case '.', ':', '?', '!', ';', ',', '。', '：', '！', '？', '；', '，':
+		return last
+	}
+	return 0
+}
+
+// punctClass maps a trailing punctuation rune to an equivalence class so ASCII
+// and CJK forms (e.g. ? / ？, : / ：, . / 。) count as the same terminator.
+func punctClass(r rune) int {
+	switch r {
+	case '.', '。':
+		return 1
+	case ':', '：':
+		return 2
+	case '?', '？':
+		return 3
+	case '!', '！':
+		return 4
+	case ';', '；':
+		return 5
+	case ',', '，':
+		return 6
+	}
+	return 0
 }
