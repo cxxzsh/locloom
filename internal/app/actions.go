@@ -1093,10 +1093,42 @@ func (a *App) applyLocaleProfile(p locale.Profile) {
 	a.scheduleConfigSave()
 }
 
+// sidebarLocaleScope returns the set of locale IDs shown in the sidebar list:
+// locales present in the loaded bundle plus any still enabled (manually added
+// but not yet scaffolded). It returns nil when the filter would hide nothing —
+// no bundle loaded or every configured locale already matches — so the full
+// list shows for single-template projects where targets must be picked freely.
+func (a *App) sidebarLocaleScope() map[string]bool {
+	if a.bundle == nil || len(a.bundle.Locales) == 0 {
+		return nil
+	}
+	inBundle := make(map[string]bool, len(a.bundle.Locales))
+	for _, id := range a.bundle.Locales {
+		inBundle[id] = true
+	}
+	scope := make(map[string]bool, len(a.cfg.Locales))
+	hidden := 0
+	for _, loc := range a.cfg.Locales {
+		if inBundle[loc.ID] || loc.Enabled {
+			scope[loc.ID] = true
+		} else {
+			hidden++
+		}
+	}
+	if hidden == 0 {
+		return nil
+	}
+	return scope
+}
+
 func (a *App) selectAllLocales(on bool) {
+	scope := a.sidebarLocaleScope()
 	for i := range a.cfg.Locales {
 		if a.cfg.Locales[i].IsRef {
 			a.cfg.Locales[i].Enabled = true
+			continue
+		}
+		if scope != nil && !scope[a.cfg.Locales[i].ID] {
 			continue
 		}
 		a.cfg.Locales[i].Enabled = on

@@ -628,12 +628,25 @@ func (a *App) viewSidebarLocales(c *ui.Context) {
 			ui.Divider(c)
 
 			// Locale search & list
-			ui.Text(c, fmt.Sprintf(tr.SectionLocaleListFmt, len(a.cfg.Locales))).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+			// Locale search & list: with a bundle loaded the list is scoped to
+			// project locales (bundle ∪ enabled); searching bypasses the scope so
+			// hidden presets can still be found and enabled as a manual "add".
+			scope := a.sidebarLocaleScope()
+			visibleCount := 0
+			for _, l := range a.cfg.Locales {
+				if scope == nil || scope[l.ID] {
+					visibleCount++
+				}
+			}
+			ui.Text(c, fmt.Sprintf(tr.SectionLocaleListFmt, visibleCount)).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 			ui.SearchField(c, &a.localeSearchQuery).Placeholder(tr.PlaceholderLocaleSearch).MinWidth(0)
 
 			locQuery := strings.ToLower(strings.TrimSpace(a.localeSearchQuery))
 			for i := range a.cfg.Locales {
 				loc := &a.cfg.Locales[i]
+				if locQuery == "" && scope != nil && !scope[loc.ID] {
+					continue
+				}
 				if locQuery != "" {
 					disp := strings.ToLower(loc.DisplayName(lang))
 					if !strings.Contains(strings.ToLower(loc.ID), locQuery) &&
