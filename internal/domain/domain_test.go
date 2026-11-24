@@ -204,3 +204,28 @@ func TestValidateTrailingPunctuation(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateTrailingPunctuationEllipsis(t *testing.T) {
+	cases := []struct {
+		source, target string
+		wantWarn       bool
+	}{
+		{"Hi...", "你好…", false},   // ... -> … same class
+		{"Hi…", "你好...", false},   // … -> ... same class
+		{"Hi...", "你好", true},     // ellipsis dropped
+		{"Hi", "你好…", true},       // ellipsis added
+		{"Wait。", "等等...", true},  // 。 vs ... are different classes
+	}
+	for _, tc := range cases {
+		w := ValidateTranslationLang(tc.source, tc.target, false, "en")
+		has := false
+		for _, m := range w {
+			if strings.HasPrefix(m, "Trailing punctuation differs") {
+				has = true
+			}
+		}
+		if has != tc.wantWarn {
+			t.Fatalf("(%q,%q) warn=%v want %v (%v)", tc.source, tc.target, has, tc.wantWarn, w)
+		}
+	}
+}

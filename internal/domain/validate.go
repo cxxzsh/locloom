@@ -163,6 +163,11 @@ func trailingPunct(s string) rune {
 	if s == "" {
 		return 0
 	}
+	// Ellipsis sequences ("...", "…", "。。。") collapse to a single class so
+	// Hi... -> 你好… does not false-positive as a dropped period.
+	if strings.HasSuffix(s, "...") || strings.HasSuffix(s, "…") || strings.HasSuffix(s, "。。") {
+		return '…'
+	}
 	runes := []rune(s)
 	last := runes[len(runes)-1]
 	switch last {
@@ -188,6 +193,8 @@ func punctClass(r rune) int {
 		return 5
 	case ',', '，':
 		return 6
+	case '…':
+		return 7
 	}
 	return 0
 }
