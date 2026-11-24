@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.7 - 2026-11-24
+
+### Added
+
+- **Folder-based Save Back & centralized backups**: Save Back now defaults to writing a complete, standalone copy into a sibling `*_updated/` folder (untouched files copied verbatim, originals untouched, and repeated saves reuse the same folder); switching to In Place or overwriting existing files archives timestamped backups cleanly under `.locloom_backup/<timestamp>/` instead of scattering `.bak` files.
+- **Redesigned interactive User Guide**: replaced the raw embedded README dump with a spacious two-column native guide (`980 × 690`) featuring 5 structured chapters (Quick Start, Pipeline & Locales, Save & Formats, Shortcuts & Tips, FAQ & Paths), status badge cards, keyboard shortcut caps, and instant EN/ZH + light/dark switching.
+- **Toggleable Reference locale (`★ Ref`)**: clicking the active `★ Ref` button clears reference lock so locales like `zh_CN` can participate in batch translation when they have gaps.
+- **Expanded European locale metadata & engine codes**: added rich metadata, plural labels (Slovenian 4-form), and Google/Baidu engine mappings for 20 additional locales (`da_DK`, `el_GR`, `hr_HR`, `hu_HU`, `nb_NO`, `sk_SK`, `sl_SI`, `sv_SE`, `fi_FI`, `ro_RO`, `bg_BG`, etc.).
+
+### Fixed
+
+- **Locale preset selection**: project-scoped preset buttons (`Tier-1`, `CJK`, `Europe`, `SEA & MENA`, `All`) no longer inject non-project ghost locales; `All` dynamically includes discovered/custom locales; `Europe` includes Nordic/Eastern/Southern European locales; `Only Project Locales` excludes `SourceLocale` and non-project `IsRef`.
+- **Write-back safety & concurrency**: snapshotted patches synchronously on the UI thread to eliminate data races, guarded against concurrent double-save, preserved Android single-file `values-<lang>` folders and template sources on reload, and pruned fallback-matched Excel catalog entries after write-back.
+- **Retranslate row & cleared cells**: fixed `retranslateRowAtAsync` no-op when retranslating all locales, fixed clearing/retranslating Finished cells reverting in Fill mode via `ForceOverwrite`, fixed sidebar remove-locale slice panic, Excel import missing `rebuildPlan()`, and project-switch catalog leaks.
+- **Validation, formats & providers**: fixed trailing punctuation null-rune (`\x00`) bug and Greek `;`/`;` false positives; fixed multi-parenthesis Excel header parsing (`pt_PT`/`pt_BR`/`en_US`/`zh_HK`); fixed Qt TS high-byte `<byte/>`, duplicate `<context>`, HTML entities, Android XML backslash escaping, JSON multi-namespace isolation, ARB/JSON nil-template guards, and `.xcstrings` plural insertion; preserved partial batch translation results on errors, scoped cache keys by `SourceLocale`, added Google Web 414 splitting/retry, OpenAI JSON retry/split, MyMemory per-item source locale, TS TM fingerprinting, and memoized cache inspector snapshots.
+
 ## 0.1.6 - 2026-11-24
 
 ### Added

@@ -17,7 +17,7 @@ import (
 const configFileName = "config.json"
 
 // AppVersion is the current application semantic version (aligned with mygo.json).
-const AppVersion = "0.1.6"
+const AppVersion = "0.1.7"
 
 // SaveTargetMode controls where "Save Back" writes modified localization files.
 const (
