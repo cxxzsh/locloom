@@ -8,6 +8,10 @@
 - **Warnings as Excel comments**: every cell with validation warnings in an `.xlsx` export now carries the message as a hover comment (yellow fill unchanged).
 - **Relevant-locale export columns**: Gaps / Pending Changes / Warnings exports can drop locale columns with no matching rows ("仅导出相关语种的列", on by default); the reference column is always kept.
 
+### Fixed
+
+- **Cleared cells re-translate**: manually clearing a Finished cell left `Status=Finished` with empty `Effective`, so a later "Fill gaps" run skipped it and the cell stayed empty. The skip now keys on `Effective != ""` only.
+
 ### Packaging
 
 - Arch Linux: per-arch `PKGBUILD` (amd64/arm64) ships in the release and the required resized icon PNGs are now included in the source archive.

@@ -1544,9 +1544,7 @@ func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.Loca
 			if ok && cell.Effective != "" && mode == domain.ModeFillUnfinished {
 				continue
 			}
-			if ok && mode == domain.ModeFillUnfinished && cell.Status == domain.StatusFinished {
-				continue
-			}
+
 			items = append(items, provider.SourceItem{
 				ID:           row.Key.Canonical(),
 				Key:          row.Key,
