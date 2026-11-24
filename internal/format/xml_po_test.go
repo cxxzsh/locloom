@@ -680,4 +680,20 @@ func TestSaveOutputFolderCompleteAndCentralizedBackups(t *testing.T) {
 	if len(reloaded.Docs) != 2 {
 		t.Fatalf("Load(outDir) should skip %s and find 2 docs, got %d", BackupDirName, len(reloaded.Docs))
 	}
+
+	// Single-file Android XML DefaultOutputPath must preserve values-<lang> parent folder
+	// and reuse it without chaining _updated_updated.
+	androidBundle := &Bundle{
+		Format:       FormatAndroidXML,
+		SourcePath:   filepath.Join(dir, "res", "values-ja", "strings.xml"),
+		IsSingleFile: true,
+	}
+	wantAndroidOut := filepath.Join(dir, "res", "values-ja_updated", "values-ja", "strings.xml")
+	if got := DefaultOutputPath(androidBundle); got != wantAndroidOut {
+		t.Fatalf("Android single-file DefaultOutputPath = %q, want %q", got, wantAndroidOut)
+	}
+	androidBundle.SourcePath = wantAndroidOut
+	if got := DefaultOutputPath(androidBundle); got != wantAndroidOut {
+		t.Fatalf("Android single-file repeated DefaultOutputPath = %q, want %q", got, wantAndroidOut)
+	}
 }

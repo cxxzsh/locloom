@@ -743,7 +743,15 @@ func DefaultOutputPath(bundle *Bundle) string {
 	if bundle.IsSingleFile {
 		dir := filepath.Dir(cleanSrc)
 		base := filepath.Base(cleanSrc)
-		if strings.HasSuffix(filepath.Base(dir), "_updated") {
+		parentBase := filepath.Base(dir)
+		if bundle.Format == FormatAndroidXML && strings.HasPrefix(strings.ToLower(parentBase), "values") {
+			grandParent := filepath.Dir(dir)
+			if strings.HasSuffix(filepath.Base(grandParent), "_updated") {
+				return cleanSrc
+			}
+			return filepath.Join(grandParent, parentBase+"_updated", parentBase, base)
+		}
+		if strings.HasSuffix(parentBase, "_updated") {
 			return cleanSrc
 		}
 		ext := filepath.Ext(base)

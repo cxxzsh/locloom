@@ -710,7 +710,7 @@ var zhCatalog = Catalog{
 	OnboardingStep2Title:   "2. 配置引擎并并发翻译",
 	OnboardingStep2Desc:    "在左侧「管线」启用免费在线源（Google / Bing / LibreTranslate / MyMemory）或自有 API，点击顶部「开始并发翻译」。",
 	OnboardingStep3Title:   "3. 精修校对并写回保存",
-	OnboardingStep3Desc:    "在表格或底部精修区检查译文与 [⚠] 占位符告警，确认无误后点击「写回保存」原位无损写入文件。",
+	OnboardingStep3Desc:    "在表格或底部精修区检查译文与 [⚠] 占位符告警，确认无误后点击「写回保存」无损输出到 *_updated/ 文件夹（或原位覆盖）。",
 	BtnOnboardingStart:     "开始使用",
 	TipCopyLogs:            "复制全部运行日志到剪贴板",
 	TipClearLogs:           "清空当前面板日志",
@@ -1065,7 +1065,7 @@ var enCatalog = Catalog{
 	OnboardingStep2Title:   "2. Configure Engines & Translate",
 	OnboardingStep2Desc:    "Enable free web engines (Google / Bing / LibreTranslate / MyMemory) or your own API in Pipeline, then click Start Translate.",
 	OnboardingStep3Title:   "3. Review & Save Back",
-	OnboardingStep3Desc:    "Review translations and [⚠] placeholder warnings in the matrix or inspector, then click Save Back to patch files losslessly.",
+	OnboardingStep3Desc:    "Review translations and [⚠] placeholder warnings in the matrix or inspector, then click Save Back to write a lossless copy into *_updated/ (or save in place).",
 	BtnOnboardingStart:     "Get Started",
 
 	HelpModalTitle:       "LocLoom User Guide",

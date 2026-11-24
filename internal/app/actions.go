@@ -886,8 +886,13 @@ func (a *App) writeBackAsync() {
 		if report.OutputPath != "" {
 			if info, statErr := os.Stat(report.OutputPath); statErr == nil && (bundle.IsZip || info.IsDir() || bundle.IsSingleFile) {
 				reloaded, reloadErr = format.Load(report.OutputPath, filePattern, locales)
-				if reloadErr == nil && reloaded != nil && bundle.IsZip {
-					reloaded.SourcePath = bundle.SourcePath
+				if reloadErr == nil && reloaded != nil {
+					if bundle.IsZip {
+						reloaded.SourcePath = bundle.SourcePath
+					}
+					if bundle.IsSingleFile && opts.OutputPath != "" {
+						preserveSingleFileTemplateSources(bundle, reloaded)
+					}
 				}
 			} else if statErr != nil {
 				reloadErr = statErr
@@ -933,6 +938,48 @@ func (a *App) writeBackAsync() {
 			}
 		})
 	}()
+}
+
+func preserveSingleFileTemplateSources(prev, reloaded *format.Bundle) {
+	if prev == nil || reloaded == nil || len(prev.Docs) == 0 || len(reloaded.Docs) == 0 {
+		return
+	}
+	srcByID := make(map[string]string)
+	cmtByID := make(map[string]string)
+	for _, d := range prev.Docs {
+		for _, e := range d.Entries {
+			if e.Key.ID == "" {
+				continue
+			}
+			if e.Key.Source != "" && e.Key.Source != e.Key.ID {
+				srcByID[e.Key.ID] = e.Key.Source
+			}
+			if e.Key.Comment != "" {
+				cmtByID[e.Key.ID] = e.Key.Comment
+			}
+		}
+	}
+	if len(srcByID) == 0 && len(cmtByID) == 0 {
+		return
+	}
+	for _, d := range reloaded.Docs {
+		for i := range d.Entries {
+			e := &d.Entries[i]
+			if e.Key.ID == "" {
+				continue
+			}
+			if e.Key.Source == "" || e.Key.Source == e.Key.ID {
+				if src, ok := srcByID[e.Key.ID]; ok {
+					e.Key.Source = src
+				}
+			}
+			if e.Key.Comment == "" {
+				if cmt, ok := cmtByID[e.Key.ID]; ok {
+					e.Key.Comment = cmt
+				}
+			}
+		}
+	}
 }
 
 func (a *App) clearMachineTranslations() {
