@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 - 2026-11-24
+
+### Fixed
+
+- **Default "translate from" actually uses the file source**: the default branch fed every locale the reference locale's own translation (`row.RefText`), so an engine-dropped punctuation (e.g. `:` in `Patient Views:`) cascaded into all targets. Default now uses `row.Key.Source`; only locales pinned via "译自" cascade.
+- **Cleared cells re-translate**: manually clearing a Finished cell left `Status=Finished` with empty `Effective`, so "Fill gaps" skipped it forever. Skip now keys on `Effective != ""` only.
+- **Trailing punctuation warning**: new validation flags when a translation's final sentence punctuation diverges from the source (`?`/`？`, `!`/`！`, `.`/`。`, `;`/`；`, `,`/`，` count as equivalent ASCII↔CJK classes), surfacing dropped colons instead of silent propagation.
+
 ## 0.1.3 - 2026-11-24
 
 ### Added
@@ -7,10 +15,6 @@
 - **Project-scoped locale list**: the sidebar Locales tab now shows only languages present in the loaded project (plus enabled-but-unfiled additions); searching still surfaces hidden presets so they can be re-enabled as a manual add, and Select All only affects the visible set.
 - **Warnings as Excel comments**: every cell with validation warnings in an `.xlsx` export now carries the message as a hover comment (yellow fill unchanged).
 - **Relevant-locale export columns**: Gaps / Pending Changes / Warnings exports can drop locale columns with no matching rows ("仅导出相关语种的列", on by default); the reference column is always kept.
-
-### Fixed
-
-- **Cleared cells re-translate**: manually clearing a Finished cell left `Status=Finished` with empty `Effective`, so a later "Fill gaps" run skipped it and the cell stayed empty. The skip now keys on `Effective != ""` only.
 
 ### Packaging
 
