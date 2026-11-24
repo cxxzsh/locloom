@@ -18,6 +18,7 @@ import (
 	"locloom/internal/locale"
 	"locloom/internal/sheet"
 )
+
 func newTestApp() *App {
 	cfg := config.Default()
 	cfg.Locales = []locale.LocaleSpec{
@@ -1066,12 +1067,18 @@ func TestBuildTranslationTasksUsesPinnedSourceLocale(t *testing.T) {
 	targets := []locale.LocaleSpec{{ID: "zh_TW", Name: "繁体中文", Enabled: true, EngineCode: "zh-TW", SourceLocale: "zh_CN"}}
 
 	tasks, total := buildTranslationTasks(a.plan, targets, domain.ModeOverwriteExisting, "")
-	if total != 1 || len(tasks["zh_TW"]) != 1 {
-		t.Fatalf("expected only the row with zh_CN text queued, got total=%d tasks=%+v", total, tasks["zh_TW"])
+	if total != 2 || len(tasks["zh_TW"]) != 2 {
+		t.Fatalf("expected both rows queued, got total=%d tasks=%+v", total, tasks["zh_TW"])
 	}
-	item := tasks["zh_TW"][0]
-	if item.SrcText != "打开" || item.SourceLocale != "zh_CN" {
-		t.Fatalf("expected zh_CN source text, got SrcText=%q SourceLocale=%q", item.SrcText, item.SourceLocale)
+	// Open has zh_CN text, so it feeds from the pinned locale.
+	open := tasks["zh_TW"][0]
+	if open.SrcText != "打开" || open.SourceLocale != "zh_CN" {
+		t.Fatalf("expected zh_CN source text, got SrcText=%q SourceLocale=%q", open.SrcText, open.SourceLocale)
+	}
+	// Close has no zh_CN text, so it falls back to the file source.
+	close := tasks["zh_TW"][1]
+	if close.SrcText != "Close" || close.SourceLocale != "" {
+		t.Fatalf("expected file source fallback, got SrcText=%q SourceLocale=%q", close.SrcText, close.SourceLocale)
 	}
 }
 

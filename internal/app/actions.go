@@ -1516,6 +1516,12 @@ func localeSource(plan *planner.MatrixPlan, row *planner.MatrixRow, loc locale.L
 			return cell.Effective, loc.SourceLocale
 		}
 	}
+	// Default = file source text, not the reference locale's translation:
+	// row.RefText holds the ref locale's own translated text, which may
+	// already diverge (e.g. a dropped trailing colon) from the source.
+	if s := strings.TrimSpace(row.Key.Source); s != "" {
+		return s, ""
+	}
 	return row.RefText, ""
 }
 
