@@ -67,6 +67,7 @@ type App struct {
 	pendingTableOps []func()
 	// Modals & popovers
 	showHelp           bool
+	helpTab            int
 	showSettings       bool
 	settingsTab        int
 	showOnboarding     bool

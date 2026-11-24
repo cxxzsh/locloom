@@ -146,3 +146,42 @@ func TestLocaleProfilesProjectScopingAndRefToggle(t *testing.T) {
 		t.Fatalf("syncBundleLocales unexpectedly enabled source locale 'en': %v", em)
 	}
 }
+
+func TestRedesignedHelpModalNavigationZHAndEN(t *testing.T) {
+	cfg := config.Default()
+	cfg.HasSeenOnboarding = true
+	a := NewWithConfig(cfg)
+	a.SetHelpMarkdowns("# EN README", "# ZH README")
+	a.SetShowHelp(true)
+
+	tt := ui.NewTester(a.View, 1280, 820)
+	if !tt.HasText("LocLoom 使用指南") || !tt.HasText("4 步完成多语种无损本地化") {
+		t.Fatal("expected redesigned Chinese Quick Start page in Help modal")
+	}
+
+	// Click through all 5 navigation chapters.
+	for _, tc := range []struct {
+		nav  string
+		want string
+	}{
+		{"翻译与语种", "十源并发瀑布流推荐层级"},
+		{"保存与格式", "原生支持的 8 大无损格式"},
+		{"快捷键与技巧", "Cmd / Ctrl + S"},
+		{"常见问题与路径", "便携模式"},
+	} {
+		if err := tt.Click(tc.nav); err != nil {
+			t.Fatalf("click help nav %q failed: %v", tc.nav, err)
+		}
+		if !tt.HasText(tc.want) {
+			t.Fatalf("after clicking %q, expected text %q", tc.nav, tc.want)
+		}
+	}
+
+	// Switch to English and verify English chapters render.
+	a.SetUILang("en")
+	a.helpTab = 0
+	tt.Frame()
+	if !tt.HasText("LocLoom User Guide") || !tt.HasText("4-Step Lossless Localization Workflow") {
+		t.Fatal("expected redesigned English Quick Start page in Help modal")
+	}
+}
