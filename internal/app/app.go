@@ -75,6 +75,8 @@ type App struct {
 	updateInfo         *updater.ReleaseInfo
 	pendingUpdate      *mygo.Update // signed update offered by mygo.Updater
 	installingUpd      bool
+	updateReadyVersion string // version already downloaded & staged, awaiting relaunch
+	updateReadyNotes   string
 	updateDL           int64 // install download progress, bytes
 	updateTotal        int64
 	updateErr          string

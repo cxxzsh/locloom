@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"locloom/internal/config"
 	"locloom/internal/locale"
+	"locloom/internal/updater"
 )
 
 // The sidebar locale list is scoped to the project (bundle ∪ enabled);
@@ -183,5 +184,61 @@ func TestRedesignedHelpModalNavigationZHAndEN(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText("LocLoom User Guide") || !tt.HasText("4-Step Lossless Localization Workflow") {
 		t.Fatal("expected redesigned English Quick Start page in Help modal")
+	}
+}
+
+func TestAutoUpdateHeaderPillsAndSettingsUI(t *testing.T) {
+	cfg := config.Default()
+	cfg.HasSeenOnboarding = true
+	if !cfg.AutoDownloadUpdates {
+		t.Fatal("expected AutoDownloadUpdates to default to true")
+	}
+	a := NewWithConfig(cfg)
+	tt := ui.NewTester(a.View, 1280, 820)
+
+	// 1. Update available pill in header opens Settings -> Updates tab.
+	a.updateInfo = &updater.ReleaseInfo{
+		CurrentVersion: "0.1.7",
+		LatestVersion:  "0.1.8",
+		HasUpdate:      true,
+		Notes:          "### Added\n- Auto download",
+	}
+	tt.Frame()
+	if !tt.HasText("⬆ v0.1.8") {
+		t.Fatal("expected header update available pill ⬆ v0.1.8")
+	}
+	if err := tt.Click("⬆ v0.1.8"); err != nil {
+		t.Fatalf("click update pill failed: %v", err)
+	}
+	if !a.showSettings || a.settingsTab != 2 {
+		t.Fatalf("expected settings modal tab 2 open, got show=%v tab=%d", a.showSettings, a.settingsTab)
+	}
+	if !tt.HasText(a.tr().HintSelfUpdateDev) {
+		t.Fatal("expected dev-mode self-update explanation in Settings -> Updates")
+	}
+	a.showSettings = false
+
+	// 2. Downloading state shows progress pill in header.
+	a.installingUpd = true
+	a.updateDL = 512 * 1024
+	a.updateTotal = 1024 * 1024
+	tt.Frame()
+	if !tt.HasText("⬇ 50%") {
+		t.Fatal("expected header download progress pill ⬇ 50%")
+	}
+
+	// 3. Staged ready-to-relaunch update shows green ready pill and Restart button in Settings.
+	a.installingUpd = false
+	a.updateReadyVersion = "0.1.8"
+	a.updateReadyNotes = "### Added\n- Ready to restart"
+	tt.Frame()
+	if !tt.HasText("↻ 更新 v0.1.8") {
+		t.Fatal("expected header ready pill ↻ 更新 v0.1.8")
+	}
+	if err := tt.Click("↻ 更新 v0.1.8"); err != nil {
+		t.Fatalf("click ready pill failed: %v", err)
+	}
+	if !tt.HasText("立即重启更新 v0.1.8") {
+		t.Fatal("expected Restart to Apply button in Settings -> Updates")
 	}
 }

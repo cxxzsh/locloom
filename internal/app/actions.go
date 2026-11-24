@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -1871,12 +1873,99 @@ func buildTranslationTasks(plan *planner.MatrixPlan, targetLocales []locale.Loca
 	return tasks, totalItems
 }
 
+const updateManifestBaseURL = "https://github.com/cxxzsh/locloom/releases/latest/download/"
+
+// proxyUpdateSource routes mygo.Updater manifest & archive downloads through
+// LocLoom's configured HTTP/SOCKS5 proxy pool when ProxyURL is set.
+type proxyUpdateSource struct {
+	client *http.Client
+}
+
+func (s *proxyUpdateSource) Manifest(ctx context.Context, _ bool) (io.ReadCloser, error) {
+	candidates := platformManifestNames()
+	var lastErr error
+	for _, name := range candidates {
+		rc, err := s.Open(ctx, updateManifestBaseURL+name)
+		if err == nil {
+			return rc, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func (s *proxyUpdateSource) Open(ctx context.Context, rawURL string) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "mygo-updater")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
+	}
+	return resp.Body, nil
+}
+
+func platformManifestNames() []string {
+	if runtime.GOOS == "darwin" {
+		return []string{"update-darwin-universal.json", "update-darwin-" + runtime.GOARCH + ".json"}
+	}
+	return []string{fmt.Sprintf("update-%s-%s.json", runtime.GOOS, runtime.GOARCH)}
+}
+
+func currentAppVersion() string {
+	if v := strings.TrimPrefix(strings.TrimSpace(mygo.App.Version()), "v"); v != "" {
+		return v
+	}
+	return strings.TrimPrefix(strings.TrimSpace(config.AppVersion), "v")
+}
+
+func (a *App) syncUpdaterProxySource() {
+	if a.netPool == nil || strings.TrimSpace(a.netPool.Config().ProxyURL) == "" {
+		mygo.Updater.SetSource(nil)
+		return
+	}
+	client, err := a.netPool.Client(true)
+	if err != nil || client == nil {
+		mygo.Updater.SetSource(nil)
+		return
+	}
+	mygo.Updater.SetSource(&proxyUpdateSource{client: client})
+}
+
+func (a *App) availableUpdateVersion() string {
+	if a.pendingUpdate != nil && a.pendingUpdate.Version != "" {
+		return a.pendingUpdate.Version
+	}
+	if a.updateInfo != nil && a.updateInfo.HasUpdate && a.updateInfo.LatestVersion != "" {
+		return a.updateInfo.LatestVersion
+	}
+	return ""
+}
+
+func (a *App) selfUpdateDisabledReason() string {
+	if mygo.Updater.Enabled() {
+		return ""
+	}
+	if mygo.IsDev() {
+		return a.tr().HintSelfUpdateDev
+	}
+	return a.tr().HintSelfUpdateReadOnly
+}
+
 func (a *App) checkUpdatesAsync(silent bool) {
-	if a.checkingUpdate {
+	if a.checkingUpdate || a.installingUpd {
 		return
 	}
 	a.checkingUpdate = true
 	a.updateErr = ""
+	a.syncUpdaterProxySource()
+	curVer := currentAppVersion()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -1894,16 +1983,28 @@ func (a *App) checkUpdatesAsync(silent bool) {
 				a.pendingUpdate = up
 				a.updateInfo = nil
 				if up != nil {
-					a.setStatus(fmt.Sprintf(a.tr().StatusUpdateAvailFmt, up.Version, config.AppVersion), false)
+					if a.updateReadyVersion == up.Version {
+						a.pendingUpdate = nil
+						if !silent {
+							a.setStatus(fmt.Sprintf(a.tr().StatusUpdateReadyFmt, up.Version), false)
+						}
+						return
+					}
+					a.updateReadyVersion = ""
+					a.updateReadyNotes = ""
+					a.setStatus(fmt.Sprintf(a.tr().StatusUpdateAvailFmt, up.Version, curVer), false)
+					if a.cfg.AutoDownloadUpdates {
+						a.downloadUpdateAsync(false)
+					}
 				} else if !silent {
-					a.setStatus(fmt.Sprintf(a.tr().StatusUpToDateFmt, config.AppVersion), false)
+					a.setStatus(fmt.Sprintf(a.tr().StatusUpToDateFmt, curVer), false)
 				}
 			})
 			return
 		}
 		useProxy := strings.TrimSpace(a.netPool.Config().ProxyURL) != ""
 		client, _ := a.netPool.Client(useProxy)
-		info, err := updater.CheckLatest(ctx, client, updater.DefaultLatestReleaseURL, config.AppVersion)
+		info, err := updater.CheckLatest(ctx, client, updater.DefaultLatestReleaseURL, curVer)
 		a.dispatchUI(func() {
 			a.checkingUpdate = false
 			if err != nil {
@@ -1924,15 +2025,19 @@ func (a *App) checkUpdatesAsync(silent bool) {
 	}()
 }
 
-// installUpdate downloads, verifies and swaps in the signed update
-// offered by mygo.Updater, then relaunches. Progress is relayed onto
-// the UI thread for the settings modal's progress bar.
-func (a *App) installUpdate() {
+// downloadUpdateAsync downloads, verifies, and stages the signed update offered
+// by mygo.Updater. When relaunchWhenDone is true it immediately relaunches; when
+// false (background auto-download) it marks updateReadyVersion so the user can
+// restart whenever ready without losing work.
+func (a *App) downloadUpdateAsync(relaunchWhenDone bool) {
 	if a.installingUpd || a.pendingUpdate == nil {
 		return
 	}
+	a.syncUpdaterProxySource()
 	up := a.pendingUpdate
 	a.installingUpd = true
+	a.updateDL = 0
+	a.updateTotal = 0
 	a.updateErr = ""
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -1947,15 +2052,37 @@ func (a *App) installUpdate() {
 			if err != nil {
 				a.updateErr = err.Error()
 				a.setStatus(fmt.Sprintf(a.tr().StatusUpdateErrFmt, err), true)
+				a.appendLog("error", "", "", fmt.Sprintf(a.tr().StatusUpdateErrFmt, err))
 				return
 			}
 			a.pendingUpdate = nil
-			a.setStatus(a.tr().StatusUpdateInstalled, false)
+			a.updateReadyVersion = up.Version
+			a.updateReadyNotes = up.Notes
+			if relaunchWhenDone {
+				a.setStatus(a.tr().StatusUpdateInstalled, false)
+			} else {
+				msg := fmt.Sprintf(a.tr().StatusUpdateReadyFmt, up.Version)
+				a.setStatus(msg, false)
+				a.appendLog("info", "", "", msg)
+			}
 		})
-		if err == nil {
+		if err == nil && relaunchWhenDone {
 			mygo.App.Relaunch()
 		}
 	}()
+}
+
+func (a *App) installUpdate() {
+	if a.updateReadyVersion != "" {
+		a.relaunchForUpdate()
+		return
+	}
+	a.downloadUpdateAsync(true)
+}
+
+func (a *App) relaunchForUpdate() {
+	a.setStatus(a.tr().StatusUpdateInstalled, false)
+	mygo.App.Relaunch()
 }
 
 func (a *App) openReleasePage() {

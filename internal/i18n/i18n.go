@@ -347,17 +347,26 @@ type Catalog struct {
 	LabelUILang            string
 	LabelThemeMode         string
 	LabelCurrentVersionFmt string
-	CheckAutoUpdate        string
-	BtnCheckUpdates        string
-	BtnCheckingUpdates     string
-	StatusUpToDateFmt      string
-	StatusUpdateAvailFmt   string
-	StatusUpdateErrFmt     string
-	BtnInstallUpdate       string
-	BtnInstalling          string
-	StatusUpdateInstalled  string
-	BtnOpenReleasePage     string
-	BtnOpenOnboarding      string
+	CheckAutoUpdate           string
+	CheckAutoDownloadUpdate   string
+	BtnCheckUpdates           string
+	BtnCheckingUpdates        string
+	StatusUpToDateFmt         string
+	StatusUpdateAvailFmt      string
+	StatusUpdateErrFmt        string
+	BtnInstallUpdate          string
+	BtnInstalling             string
+	BtnRelaunchToUpdateFmt    string
+	StatusUpdateReadyFmt      string
+	StatusUpdateInstalled     string
+	BtnOpenReleasePage        string
+	HintSelfUpdateDev         string
+	HintSelfUpdateReadOnly    string
+	HeaderUpdateReadyFmt      string
+	HeaderUpdateAvailFmt      string
+	HeaderUpdateDLFmt         string
+	TipHeaderUpdate           string
+	BtnOpenOnboarding         string
 	PipelineSummaryFmt     string
 	OnboardingTitle        string
 	OnboardingSubtitle     string
@@ -691,17 +700,26 @@ var zhCatalog = Catalog{
 	LabelUILang:            "界面语言",
 	LabelThemeMode:         "外观主题",
 	LabelCurrentVersionFmt: "当前版本：v%s",
-	CheckAutoUpdate:        "启动时自动检查更新",
-	BtnCheckUpdates:        "立即检查更新",
-	BtnCheckingUpdates:     "正在检查...",
-	StatusUpToDateFmt:      "已是最新版本 (v%s)",
-	StatusUpdateAvailFmt:   "发现新版本 v%s（当前 v%s）",
-	StatusUpdateErrFmt:     "检查更新失败：%v",
-	BtnInstallUpdate:       "安装并重启",
-	BtnInstalling:          "正在安装更新...",
-	StatusUpdateInstalled:  "更新已安装，正在重启...",
-	BtnOpenReleasePage:     "前往下载新版本",
-	BtnOpenOnboarding:      "重新查看新手引导",
+	CheckAutoUpdate:         "启动时自动检查更新",
+	CheckAutoDownloadUpdate: "发现新版本时自动在后台下载",
+	BtnCheckUpdates:         "立即检查更新",
+	BtnCheckingUpdates:      "正在检查...",
+	StatusUpToDateFmt:       "已是最新版本 (v%s)",
+	StatusUpdateAvailFmt:    "发现新版本 v%s（当前 v%s）",
+	StatusUpdateErrFmt:      "检查更新失败：%v",
+	BtnInstallUpdate:        "下载并安装重启",
+	BtnInstalling:           "正在下载更新...",
+	BtnRelaunchToUpdateFmt:  "立即重启更新 v%s",
+	StatusUpdateReadyFmt:    "v%s 已下载就绪，重启应用即可生效",
+	StatusUpdateInstalled:   "更新已安装，正在重启...",
+	BtnOpenReleasePage:      "前往下载新版本",
+	HintSelfUpdateDev:       "当前为开发运行态 (go run / go build)，仅正式安装包支持应用内自动下载与原地更新。",
+	HintSelfUpdateReadOnly:  "当前安装目录不可写或由系统包管理器管理（如只读 DMG / Linux deb），已切换为手动下载。",
+	HeaderUpdateReadyFmt:    "↻ 更新 v%s",
+	HeaderUpdateAvailFmt:    "⬆ v%s",
+	HeaderUpdateDLFmt:       "⬇ %.0f%%",
+	TipHeaderUpdate:         "点击查看更新详情并安装新版本",
+	BtnOpenOnboarding:       "重新查看新手引导",
 	PipelineSummaryFmt:     "并发 %d · 缓存 %d 条 · %s",
 	OnboardingTitle:        "欢迎使用 LocLoom",
 	OnboardingSubtitle:     "原位无损本地化工作台 · 3 步快速上手",
@@ -1046,17 +1064,26 @@ var enCatalog = Catalog{
 	LabelUILang:            "Interface Language",
 	LabelThemeMode:         "Theme",
 	LabelCurrentVersionFmt: "Current version: v%s",
-	CheckAutoUpdate:        "Check for updates on startup",
-	BtnCheckUpdates:        "Check for Updates",
-	BtnCheckingUpdates:     "Checking...",
-	StatusUpToDateFmt:      "You're up to date (v%s)",
-	StatusUpdateAvailFmt:   "Update available: v%s (current v%s)",
-	StatusUpdateErrFmt:     "Update check failed: %v",
-	BtnInstallUpdate:       "Install & Relaunch",
-	BtnInstalling:          "Installing update...",
-	StatusUpdateInstalled:  "Update installed, relaunching...",
-	BtnOpenReleasePage:     "Download Latest Release",
-	BtnOpenOnboarding:      "Show Onboarding Guide",
+	CheckAutoUpdate:         "Check for updates on startup",
+	CheckAutoDownloadUpdate: "Automatically download updates in background",
+	BtnCheckUpdates:         "Check for Updates",
+	BtnCheckingUpdates:      "Checking...",
+	StatusUpToDateFmt:       "You're up to date (v%s)",
+	StatusUpdateAvailFmt:    "Update available: v%s (current v%s)",
+	StatusUpdateErrFmt:      "Update check failed: %v",
+	BtnInstallUpdate:        "Download & Restart",
+	BtnInstalling:           "Downloading update...",
+	BtnRelaunchToUpdateFmt:  "Restart to Apply v%s",
+	StatusUpdateReadyFmt:    "v%s downloaded and ready — restart to apply",
+	StatusUpdateInstalled:   "Update installed, relaunching...",
+	BtnOpenReleasePage:      "Download Latest Release",
+	HintSelfUpdateDev:       "Running in dev mode (go run / go build); in-app auto-download is enabled in packaged release builds.",
+	HintSelfUpdateReadOnly:  "Install directory is read-only or managed by a package manager (e.g. mounted DMG / deb); use manual download.",
+	HeaderUpdateReadyFmt:    "↻ Update v%s",
+	HeaderUpdateAvailFmt:    "⬆ v%s",
+	HeaderUpdateDLFmt:       "⬇ %.0f%%",
+	TipHeaderUpdate:         "Click to view update details and install",
+	BtnOpenOnboarding:       "Show Onboarding Guide",
 	PipelineSummaryFmt:     "Workers %d · Cache %d · %s",
 	OnboardingTitle:        "Welcome to LocLoom",
 	OnboardingSubtitle:     "Lossless Localization Workbench · 3-Step Quick Start",

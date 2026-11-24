@@ -9,7 +9,6 @@ import (
 	"github.com/egoist/mygo/ui/markdown"
 	"locloom/internal/provider"
 
-	"locloom/internal/config"
 	"locloom/internal/i18n"
 	"locloom/internal/sheet"
 )
@@ -176,6 +175,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 								Tooltip(tr.TipProxyURL).
 								Changed() {
 								a.netPool.Update(a.cfg.Proxy)
+								a.syncUpdaterProxySource()
 								if prevProxyEmpty && strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" && !a.anyCloudProviderUsesProxy() {
 									a.setCloudProvidersUseProxy(true)
 								}
@@ -183,6 +183,7 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 							}
 							if ui.Checkbox(c, &a.cfg.Proxy.SkipTLSVerify, tr.CheckSkipTLS).AlignSelf(ui.Start).Tooltip(tr.TipSkipTLS).Changed() {
 								a.netPool.Update(a.cfg.Proxy)
+								a.syncUpdaterProxySource()
 								a.scheduleConfigSave()
 							}
 							if strings.TrimSpace(a.cfg.Proxy.ProxyURL) != "" {
@@ -349,8 +350,12 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 
 					case 2: // Updates & Onboarding
 						ui.Column(c).Gap(t.Space(1.5)).Children(func() {
-							ui.Text(c, fmt.Sprintf(tr.LabelCurrentVersionFmt, config.AppVersion)).FontSize(13).FontWeight(600)
+							curVer := currentAppVersion()
+							ui.Text(c, fmt.Sprintf(tr.LabelCurrentVersionFmt, curVer)).FontSize(13).FontWeight(600)
 							if ui.Checkbox(c, &a.cfg.CheckUpdatesOnStartup, tr.CheckAutoUpdate).AlignSelf(ui.Start).Changed() {
+								a.scheduleConfigSave()
+							}
+							if ui.Checkbox(c, &a.cfg.AutoDownloadUpdates, tr.CheckAutoDownloadUpdate).AlignSelf(ui.Start).Changed() {
 								a.scheduleConfigSave()
 							}
 							ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
@@ -358,10 +363,17 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 								if a.checkingUpdate {
 									lbl = tr.BtnCheckingUpdates
 								}
-								if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Disabled(a.checkingUpdate).Clicked() {
+								if ui.Button(c, lbl).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Disabled(a.checkingUpdate || a.installingUpd).Clicked() {
 									a.checkUpdatesAsync(false)
 								}
-								if a.pendingUpdate != nil {
+								if a.updateReadyVersion != "" {
+									if ui.PrimaryButton(c, fmt.Sprintf(tr.BtnRelaunchToUpdateFmt, a.updateReadyVersion)).
+										Padding(t.Space(1), t.Space(2.5)).
+										Radius(pillRadius).
+										Clicked() {
+										a.relaunchForUpdate()
+									}
+								} else if a.pendingUpdate != nil {
 									lbl := tr.BtnInstallUpdate
 									if a.installingUpd {
 										lbl = tr.BtnInstalling
@@ -369,23 +381,41 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 									if ui.PrimaryButton(c, lbl).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Disabled(a.installingUpd).Clicked() {
 										a.installUpdate()
 									}
-								}
-								if a.updateInfo != nil && a.updateInfo.HasUpdate {
-									if ui.Button(c, tr.BtnOpenReleasePage).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
+								} else if a.updateInfo != nil && a.updateInfo.HasUpdate {
+									if ui.PrimaryButton(c, tr.BtnOpenReleasePage).Padding(t.Space(1), t.Space(2.5)).Radius(pillRadius).Clicked() {
 										a.openReleasePage()
 									}
 								}
 							})
-							if a.installingUpd && a.updateTotal > 0 {
-								ui.Progress(c, float64(a.updateDL)/float64(a.updateTotal))
+							if a.installingUpd {
+								frac := 0.0
+								if a.updateTotal > 0 {
+									frac = float64(a.updateDL) / float64(a.updateTotal)
+									ui.Text(c, fmt.Sprintf("%s %.1f / %.1f MB (%.0f%%)",
+										tr.BtnInstalling,
+										float64(a.updateDL)/(1024*1024),
+										float64(a.updateTotal)/(1024*1024),
+										frac*100)).FontSize(11).TextColor(t.TextMuted)
+								} else {
+									ui.Text(c, tr.BtnInstalling).FontSize(11).TextColor(t.TextMuted)
+								}
+								ui.Progress(c, frac)
 							}
 							if a.updateErr != "" {
 								ui.Text(c, fmt.Sprintf(tr.StatusUpdateErrFmt, a.updateErr)).FontSize(12).TextColor(t.Danger)
+							} else if a.updateReadyVersion != "" {
+								ui.Text(c, fmt.Sprintf(tr.StatusUpdateReadyFmt, a.updateReadyVersion)).
+									FontSize(12).FontWeight(600).TextColor(t.Success)
+								if a.updateReadyNotes != "" {
+									ui.Scroll(c).MaxHeight(140).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
+										markdown.View(c, a.updateReadyNotes, &a.mdOpts)
+									})
+								}
 							} else if a.pendingUpdate != nil {
-								ui.Text(c, fmt.Sprintf(tr.StatusUpdateAvailFmt, a.pendingUpdate.Version, config.AppVersion)).
+								ui.Text(c, fmt.Sprintf(tr.StatusUpdateAvailFmt, a.pendingUpdate.Version, curVer)).
 									FontSize(12).FontWeight(600).TextColor(t.Accent)
 								if a.pendingUpdate.Notes != "" {
-									ui.Scroll(c).MaxHeight(120).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
+									ui.Scroll(c).MaxHeight(140).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
 										markdown.View(c, a.pendingUpdate.Notes, &a.mdOpts)
 									})
 								}
@@ -393,10 +423,18 @@ func (a *App) viewSettingsModal(c *ui.Context) {
 								if a.updateInfo.HasUpdate {
 									ui.Text(c, fmt.Sprintf(tr.StatusUpdateAvailFmt, a.updateInfo.LatestVersion, a.updateInfo.CurrentVersion)).
 										FontSize(12).FontWeight(600).TextColor(t.Accent)
+									if a.updateInfo.Notes != "" {
+										ui.Scroll(c).MaxHeight(140).Background(insetBg(t)).Border(1, hairline(t)).Radius(t.Radius).Children(func() {
+											markdown.View(c, a.updateInfo.Notes, &a.mdOpts)
+										})
+									}
 								} else {
 									ui.Text(c, fmt.Sprintf(tr.StatusUpToDateFmt, a.updateInfo.CurrentVersion)).
 										FontSize(12).TextColor(t.Success)
 								}
+							}
+							if reason := a.selfUpdateDisabledReason(); reason != "" {
+								ui.Text(c, reason).FontSize(11).TextColor(t.TextMuted)
 							}
 						})
 

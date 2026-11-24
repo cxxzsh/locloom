@@ -6,7 +6,6 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
-	"locloom/internal/config"
 	"locloom/internal/i18n"
 )
 
@@ -91,7 +90,7 @@ func (a *App) viewHelpModal(c *ui.Context) {
 							Radius(pillRadius).
 							Background(accentTint(t)).
 							Children(func() {
-								ui.Text(c, "v"+config.AppVersion).FontSize(12).FontWeight(600).TextColor(accentInk(t)).SingleLine()
+								ui.Text(c, "v"+currentAppVersion()).FontSize(12).FontWeight(600).TextColor(accentInk(t)).SingleLine()
 							})
 					})
 					ui.Text(c, subtitle).FontSize(12.5).TextColor(t.TextMuted).SingleLine()

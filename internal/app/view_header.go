@@ -154,6 +154,45 @@ func (a *App) viewHeader(c *ui.Context) {
 
 			// Utility Buttons
 			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Shrink(0).Children(func() {
+				if a.updateReadyVersion != "" {
+					if ui.Button(c, fmt.Sprintf(tr.HeaderUpdateReadyFmt, a.updateReadyVersion)).
+						Padding(t.Space(1.5), t.Space(2.5)).
+						Radius(pillRadius).
+						Background(greenTint(t)).
+						TextColor(t.Success).
+						Tooltip(tr.TipHeaderUpdate).
+						Clicked() {
+						a.settingsTab = 2
+						a.showSettings = true
+					}
+				} else if a.installingUpd {
+					pct := 0.0
+					if a.updateTotal > 0 {
+						pct = float64(a.updateDL) / float64(a.updateTotal) * 100
+					}
+					if ui.Button(c, fmt.Sprintf(tr.HeaderUpdateDLFmt, pct)).
+						Padding(t.Space(1.5), t.Space(2)).
+						Radius(pillRadius).
+						Background(accentTint(t)).
+						TextColor(accentInk(t)).
+						Tooltip(tr.TipHeaderUpdate).
+						Clicked() {
+						a.settingsTab = 2
+						a.showSettings = true
+					}
+				} else if availVer := a.availableUpdateVersion(); availVer != "" {
+					if ui.Button(c, fmt.Sprintf(tr.HeaderUpdateAvailFmt, availVer)).
+						Padding(t.Space(1.5), t.Space(2.5)).
+						Radius(pillRadius).
+						Background(accentTint(t)).
+						TextColor(accentInk(t)).
+						Tooltip(tr.TipHeaderUpdate).
+						Clicked() {
+						a.settingsTab = 2
+						a.showSettings = true
+					}
+				}
+
 				themeLabels := []string{tr.ThemeSystem, tr.ThemeLight, tr.ThemeDark}
 				curTheme := a.effectiveThemeMode()
 				lbl := themeLabels[curTheme%3]
